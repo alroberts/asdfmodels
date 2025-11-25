@@ -7,9 +7,8 @@
 
         <title>{{ config('app.name', 'ASDF Models') }}</title>
 
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+        <!-- FontAwesome -->
+        <link rel="stylesheet" href="{{ asset('assets/fontawesome/css/all.min.css') }}">
 
         <!-- Tailwind CSS -->
         <script src="https://cdn.tailwindcss.com"></script>
@@ -24,8 +23,8 @@
         <script src="{{ asset('js/app.js') }}" defer></script>
     </head>
     <body class="font-sans antialiased">
-        <div class="min-h-screen bg-gray-100">
-            @include('layouts.navigation')
+        <div class="min-h-screen bg-white">
+            <x-header />
 
             <!-- Page Heading -->
             @isset($header)

@@ -6,9 +6,17 @@
 **/config/local.php
 **/config/production.php
 
-# Dependencies
+# DirectAdmin specific
+**/.htpasswd/
+**/logs/
+**/stats/
+**/public_ftp/
+**/private_html
+
+# Laravel / PHP Dependencies
 /vendor/
 /composer.lock
+/node_modules/
 
 # IDE and editor files
 .idea/
@@ -44,12 +52,33 @@ logs/
 *.sql
 *.sqlite
 *.db
+**/database/*.sqlite
+
+# Node.js files (not using Node.js but Laravel includes them)
+package.json
+package-lock.json
+postcss.config.js
+tailwind.config.js
+vite.config.js
 
 # Environment and configuration
 .env
 .env.*
 !.env.example
 config/local.php
+
+# Laravel specific
+/storage/*.key
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*
+!/storage/framework/cache/.gitignore
+!/storage/framework/sessions/.gitignore
+!/storage/framework/views/.gitignore
+!/storage/logs/.gitignore
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
 
 # OS files
 .DS_Store

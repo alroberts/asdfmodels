@@ -92,7 +92,12 @@ domains/
 - Git 2.43.0
 
 **Technology Stack:**
+- **Framework:** Laravel 11
 - **Backend:** PHP 8.4.14, MariaDB 11.8.4, Apache 2.4.65
+- **Database:** Eloquent ORM with migrations and seeders
+- **Templates:** Blade templating engine
+- **Editor:** Tiptap (block-based WYSIWYG)
+- **Authentication:** Laravel Breeze + Sanctum (Argon2id password hashing)
 - **Frontend:** Plain JavaScript and CSS (no build tools)
 - **Dependency Management:** Composer for PHP packages only
 

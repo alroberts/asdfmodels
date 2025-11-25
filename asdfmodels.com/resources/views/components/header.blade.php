@@ -1,6 +1,16 @@
 @php
     $user = auth()->user();
-    $userType = $user ? ($user->is_admin ?? false ? 'admin' : ($user->is_photographer ?? false ? 'photographer' : 'model')) : 'guest';
+    if ($user) {
+        // Check for admin first, then photographer, default to model
+        $userType = 'model'; // Default
+        if (isset($user->is_admin) && $user->is_admin) {
+            $userType = 'admin';
+        } elseif (isset($user->is_photographer) && $user->is_photographer) {
+            $userType = 'photographer';
+        }
+    } else {
+        $userType = 'guest';
+    }
 @endphp
 
 <header class="bg-white border-b-2 border-black sticky top-0 z-50 shadow-sm" x-data="{ mobileMenuOpen: false }">

@@ -1,36 +1,9 @@
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-
-    <title>{{ config('app.name', 'ASDF Models') }}</title>
-
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ asset('css/app.css') }}">
-    
-    <!-- FontAwesome -->
-    <link rel="stylesheet" href="{{ asset('assets/fontawesome/css/all.min.css') }}">
-    
-    <!-- Alpine.js -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    
-    <!-- Scripts -->
-    <script src="{{ asset('js/app.js') }}" defer></script>
-</head>
-<body class="font-sans antialiased bg-white">
-    <!-- Header -->
-    <x-header />
-
+<x-app-layout>
     <!-- Hero Slideshow -->
     <x-hero-slideshow />
 
     <!-- Main Content -->
-    <main class="w-full">
+    <div class="w-full">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
             <!-- Main Content Grid -->
             <div class="grid md:grid-cols-2 gap-8 mb-16">
@@ -67,6 +40,60 @@
                 </div>
             </div>
 
+            <!-- Featured Models Section -->
+            @if($featuredModels->count() > 0)
+                <div class="mb-16">
+                    <h2 class="text-4xl font-bold text-black mb-8 text-center">Featured Models</h2>
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        @foreach($featuredModels as $model)
+                            <a href="{{ route('models.show', $model->user_id) }}" class="bg-white border-2 border-black rounded-lg overflow-hidden hover:shadow-xl transition-shadow">
+                                @if($model->profile_photo_path)
+                                    <img src="{{ asset($model->profile_photo_path) }}" alt="{{ $model->user->name }}" class="w-full aspect-square object-cover">
+                                @else
+                                    <div class="w-full aspect-square bg-gray-200 flex items-center justify-center">
+                                        <span class="text-4xl text-gray-600">{{ substr($model->user->name, 0, 1) }}</span>
+                                    </div>
+                                @endif
+                                <div class="p-3 text-center">
+                                    <h3 class="font-semibold text-black">{{ $model->user->name }}</h3>
+                                    @if($model->isVerified())
+                                        <span class="inline-block mt-1 bg-green-500 text-white text-xs px-2 py-1 rounded">
+                                            <i class="fas fa-check"></i> Verified
+                                        </span>
+                                    @endif
+                                </div>
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
+            <!-- Newest Members Section -->
+            @if($newestMembers->count() > 0)
+                <div class="mb-16">
+                    <div class="flex justify-between items-center mb-8">
+                        <h2 class="text-4xl font-bold text-black">Newest Members</h2>
+                        <a href="{{ route('models.browse') }}" class="text-black hover:underline font-semibold">View All →</a>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+                        @foreach($newestMembers as $model)
+                            <a href="{{ route('models.show', $model->user_id) }}" class="bg-white border-2 border-black rounded-lg overflow-hidden hover:shadow-xl transition-shadow">
+                                @if($model->profile_photo_path)
+                                    <img src="{{ asset($model->profile_photo_path) }}" alt="{{ $model->user->name }}" class="w-full aspect-square object-cover">
+                                @else
+                                    <div class="w-full aspect-square bg-gray-200 flex items-center justify-center">
+                                        <span class="text-3xl text-gray-600">{{ substr($model->user->name, 0, 1) }}</span>
+                                    </div>
+                                @endif
+                                <div class="p-2 text-center">
+                                    <h3 class="font-semibold text-sm text-black truncate">{{ $model->user->name }}</h3>
+                                </div>
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
             <!-- Features Section -->
             <div class="text-center mb-16">
                 <h2 class="text-4xl font-bold text-black mb-12">Platform Features</h2>
@@ -89,15 +116,4 @@
                 </div>
             </div>
         </div>
-    </main>
-
-    <!-- Footer -->
-    <footer class="bg-white border-t-2 border-black mt-16">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div class="text-center text-gray-700">
-                <p>&copy; {{ date('Y') }} ASDF Models. All rights reserved.</p>
-            </div>
-        </div>
-    </footer>
-</body>
-</html>
+</x-app-layout>

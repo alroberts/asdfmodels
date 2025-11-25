@@ -23,11 +23,16 @@
         <script src="{{ asset('js/app.js') }}" defer></script>
     </head>
     <body class="font-sans text-gray-900 antialiased">
-        <x-header />
-        <div class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-white">
-            <div class="w-full sm:max-w-md mt-6 px-6 py-4 bg-white border-2 border-black overflow-hidden sm:rounded-lg">
-                {{ $slot }}
+        <div class="min-h-screen bg-white flex flex-col">
+            <x-header />
+            <div class="flex-grow flex flex-col sm:justify-center items-center pt-6 sm:pt-0">
+                <div class="w-full sm:max-w-md mt-6 px-6 py-4 bg-white border-2 border-black overflow-hidden sm:rounded-lg">
+                    {{ $slot }}
+                </div>
             </div>
+            <x-footer />
         </div>
+
+        <x-cookie-consent />
     </body>
 </html>

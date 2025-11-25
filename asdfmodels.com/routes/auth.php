@@ -15,12 +15,14 @@ Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');
 
-    Route::post('register', [RegisteredUserController::class, 'store']);
+    Route::post('register', [RegisteredUserController::class, 'store'])
+        ->middleware('turnstile');
 
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
 
-    Route::post('login', [AuthenticatedSessionController::class, 'store']);
+    Route::post('login', [AuthenticatedSessionController::class, 'store'])
+        ->middleware('turnstile');
 
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');
@@ -33,6 +35,12 @@ Route::middleware('guest')->group(function () {
 
     Route::post('reset-password', [NewPasswordController::class, 'store'])
         ->name('password.store');
+    
+    // Two-Factor Authentication Verification (during login)
+    Route::get('two-factor-challenge', [\App\Http\Controllers\Auth\TwoFactorVerificationController::class, 'create'])
+        ->name('two-factor.login');
+    
+    Route::post('two-factor-challenge', [\App\Http\Controllers\Auth\TwoFactorVerificationController::class, 'store']);
 });
 
 Route::middleware('auth')->group(function () {

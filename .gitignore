@@ -1,0 +1,62 @@
+# Sensitive files
+**/Helper Files/**
+**/.env
+**/.env.local
+**/.env.*.local
+**/config/local.php
+**/config/production.php
+
+# Dependencies
+/vendor/
+/composer.lock
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+**/logs/
+
+# Cache and temporary files
+/cache/
+/tmp/
+/temp/
+*.cache
+*.tmp
+
+# Uploads (user-generated content)
+**/uploads/*
+!**/uploads/.gitkeep
+
+# Build and compiled files
+/dist/
+/build/
+/public/build/
+
+# Database
+*.sql
+*.sqlite
+*.db
+
+# Environment and configuration
+.env
+.env.*
+!.env.example
+config/local.php
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+

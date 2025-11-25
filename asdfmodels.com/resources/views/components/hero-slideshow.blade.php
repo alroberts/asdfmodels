@@ -9,18 +9,19 @@
     ];
 @endphp
 
-<div class="relative h-[600px] md:h-[700px] lg:h-[800px] overflow-hidden" x-data="{
-    currentSlide: 0,
-    images: @json($images),
-    init() {
-        setInterval(() => {
-            this.currentSlide = (this.currentSlide + 1) % this.images.length;
-        }, 5000);
-    },
-    goToSlide(index) {
-        this.currentSlide = index;
-    }
-}">
+<div class="relative h-[600px] md:h-[700px] lg:h-[800px] overflow-hidden" 
+     x-data="{ 
+         currentSlide: 0,
+         images: {{ json_encode($images) }},
+         init() {
+             setInterval(() => {
+                 this.currentSlide = (this.currentSlide + 1) % this.images.length;
+             }, 5000);
+         },
+         goToSlide(index) {
+             this.currentSlide = index;
+         }
+     }">
     <!-- Slides -->
     <div class="relative h-full">
         <template x-for="(image, index) in images" :key="index">
@@ -102,4 +103,3 @@
         </svg>
     </button>
 </div>
-

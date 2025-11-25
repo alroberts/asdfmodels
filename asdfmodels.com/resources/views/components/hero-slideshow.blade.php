@@ -11,7 +11,7 @@
 
 <div class="relative h-[600px] md:h-[700px] lg:h-[800px] overflow-hidden" x-data="{
     currentSlide: 0,
-    images: @js($images),
+    images: @json($images),
     init() {
         setInterval(() => {
             this.currentSlide = (this.currentSlide + 1) % this.images.length;

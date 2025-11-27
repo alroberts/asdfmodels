@@ -45,7 +45,7 @@ class ModelProfileController extends Controller
     /**
      * Show the form for editing the authenticated user's model profile.
      */
-    public function edit(): View
+    public function edit(Request $request): View
     {
         $user = Auth::user();
         
@@ -56,7 +56,11 @@ class ModelProfileController extends Controller
 
         $profile = $user->modelProfile ?? new ModelProfile(['user_id' => $user->id]);
 
-        return view('models.edit', [
+        // Use wizard view for new profiles (no existing profile data) or if wizard parameter is set
+        $hasExistingProfile = $user->modelProfile && $user->modelProfile->exists;
+        $useWizard = $request->has('wizard') || !$hasExistingProfile;
+        
+        return view($useWizard ? 'models.edit-wizard' : 'models.edit', [
             'user' => $user,
             'profile' => $profile,
         ]);
@@ -77,6 +81,8 @@ class ModelProfileController extends Controller
             'bio' => ['nullable', 'string', 'max:2000'],
             'location_city' => ['nullable', 'string', 'max:255'],
             'location_country' => ['nullable', 'string', 'max:255'],
+            'location_geoname_id' => ['nullable', 'integer', 'exists:geonames_locations,geoname_id'],
+            'location_country_code' => ['nullable', 'string', 'size:2'],
             'date_of_birth' => ['nullable', 'date', 'before:today'],
             'gender' => ['nullable', 'in:male,female,other'],
             
@@ -100,6 +106,7 @@ class ModelProfileController extends Controller
             
             // Professional
             'experience_level' => ['nullable', 'string', 'max:50'],
+            'experience_start_year' => ['nullable', 'integer', 'min:1900', 'max:' . date('Y')],
             'specialties' => ['nullable', 'array'],
             'specialties.*' => ['string', 'max:100'],
             
@@ -112,6 +119,16 @@ class ModelProfileController extends Controller
             'is_public' => ['boolean'],
             'contains_nudity' => ['boolean'],
         ]);
+
+        // If geoname_id is provided, fetch and populate city/country from GeoNames
+        if (isset($validated['location_geoname_id']) && $validated['location_geoname_id']) {
+            $location = \App\Models\GeoNameLocation::find($validated['location_geoname_id']);
+            if ($location) {
+                $validated['location_city'] = $location->name;
+                $countries = config('countries', []);
+                $validated['location_country'] = $countries[$location->country_code] ?? $location->country_code;
+            }
+        }
 
         $profile = $user->modelProfile ?? new ModelProfile();
         $profile->user_id = $user->id;

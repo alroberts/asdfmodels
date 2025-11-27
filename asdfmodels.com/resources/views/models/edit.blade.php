@@ -44,17 +44,50 @@
                             <x-input-error :messages="$errors->get('bio')" class="mt-2" />
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4" x-data="locationAutocomplete()" x-init="init('{{ old('location_country_code', $profile->location_country_code) }}', '{{ old('location_city', $profile->location_city) }}', {{ old('location_geoname_id', $profile->location_geoname_id) ?? 'null' }})">
                             <div>
-                                <x-input-label for="location_city" :value="__('City')" />
-                                <x-text-input id="location_city" name="location_city" type="text" class="block mt-1 w-full" :value="old('location_city', $profile->location_city)" />
-                                <x-input-error :messages="$errors->get('location_city')" class="mt-2" />
+                                <x-input-label for="location_country_code" :value="__('Country')" />
+                                <select id="location_country_code" name="location_country_code" x-model="selectedCountry" @change="onCountryChange()" class="block mt-1 w-full border-2 border-black rounded-md shadow-sm focus:border-gray-500 focus:ring focus:ring-gray-200 focus:ring-opacity-50">
+                                    <option value="">Select Country...</option>
+                                    @foreach(config('countries') as $code => $name)
+                                        <option value="{{ $code }}" {{ old('location_country_code', $profile->location_country_code) === $code ? 'selected' : '' }}>{{ $name }}</option>
+                                    @endforeach
+                                </select>
+                                <x-input-error :messages="$errors->get('location_country_code')" class="mt-2" />
                             </div>
 
                             <div>
-                                <x-input-label for="location_country" :value="__('Country')" />
-                                <x-text-input id="location_country" name="location_country" type="text" class="block mt-1 w-full" :value="old('location_country', $profile->location_country)" />
-                                <x-input-error :messages="$errors->get('location_country')" class="mt-2" />
+                                <x-input-label for="location_city" :value="__('City')" />
+                                <div class="relative">
+                                    <x-text-input 
+                                        id="location_city" 
+                                        name="location_city" 
+                                        type="text" 
+                                        x-model="cityInput"
+                                        @input="searchCities()"
+                                        @focus="showSuggestions = true"
+                                        @blur="setTimeout(() => showSuggestions = false, 200)"
+                                        class="block mt-1 w-full" 
+                                        :value="old('location_city', $profile->location_city)" 
+                                        placeholder="Start typing city name..." 
+                                        autocomplete="off" />
+                                    <input type="hidden" name="location_geoname_id" x-model="selectedGeonameId" />
+                                    <input type="hidden" name="location_country" x-model="selectedCountryName" />
+                                    
+                                    <div x-show="showSuggestions && suggestions.length > 0" 
+                                         x-cloak
+                                         class="absolute z-50 w-full mt-1 bg-white border-2 border-black rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                        <template x-for="(suggestion, index) in suggestions" :key="index">
+                                            <div @click="selectCity(suggestion)" 
+                                                 class="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200 last:border-b-0"
+                                                 :class="{ 'bg-gray-100': index === highlightedIndex }">
+                                                <div class="font-medium text-black" x-text="suggestion.city"></div>
+                                                <div class="text-sm text-gray-600" x-text="suggestion.label"></div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                                <x-input-error :messages="$errors->get('location_city')" class="mt-2" />
                             </div>
                         </div>
 
@@ -243,4 +276,73 @@
         </div>
     </div>
 </x-app-layout>
+
+<script>
+    function locationAutocomplete() {
+        return {
+            selectedCountry: '',
+            cityInput: '',
+            selectedGeonameId: null,
+            selectedCountryName: '',
+            suggestions: [],
+            showSuggestions: false,
+            highlightedIndex: -1,
+            searchTimeout: null,
+            
+            init(countryCode, cityName, geonameId) {
+                this.selectedCountry = countryCode || '';
+                this.cityInput = cityName || '';
+                this.selectedGeonameId = geonameId || null;
+                
+                // Set country name from code if we have it
+                if (countryCode) {
+                    const countries = @json(config('countries'));
+                    this.selectedCountryName = countries[countryCode] || '';
+                }
+            },
+            
+            onCountryChange() {
+                this.cityInput = '';
+                this.selectedGeonameId = null;
+                this.selectedCountryName = '';
+                this.suggestions = [];
+                this.showSuggestions = false;
+            },
+            
+            searchCities() {
+                if (this.searchTimeout) {
+                    clearTimeout(this.searchTimeout);
+                }
+                
+                if (!this.selectedCountry || this.cityInput.length < 2) {
+                    this.suggestions = [];
+                    this.showSuggestions = false;
+                    return;
+                }
+                
+                this.searchTimeout = setTimeout(() => {
+                    fetch(`/api/locations?q=${encodeURIComponent(this.cityInput)}&country=${this.selectedCountry}&limit=10`)
+                        .then(response => response.json())
+                        .then(data => {
+                            this.suggestions = data.data || [];
+                            this.showSuggestions = this.suggestions.length > 0;
+                            this.highlightedIndex = -1;
+                        })
+                        .catch(error => {
+                            console.error('Error fetching cities:', error);
+                            this.suggestions = [];
+                        });
+                }, 300);
+            },
+            
+            selectCity(suggestion) {
+                this.cityInput = suggestion.city;
+                this.selectedGeonameId = suggestion.id;
+                this.selectedCountryName = suggestion.country_name;
+                this.suggestions = [];
+                this.showSuggestions = false;
+            }
+        };
+    }
+</script>
 

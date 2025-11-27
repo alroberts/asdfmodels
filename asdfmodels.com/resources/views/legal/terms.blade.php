@@ -153,6 +153,15 @@
                             If you have questions about these Terms, please contact us through the Platform's support system or at the contact information provided on our website.
                         </p>
                     </section>
+
+                    <section>
+                        <h2 class="text-2xl font-bold text-black mt-8 mb-4">15. Data Sources & Attribution</h2>
+                        <p class="text-gray-700 leading-relaxed">
+                            Location information and city suggestions are powered by GeoNames.
+                            &copy; GeoNames. Data available under the Creative Commons Attribution 4.0 License.
+                            Learn more at <a href="https://www.geonames.org" class="underline text-black" target="_blank" rel="noopener">www.geonames.org</a>.
+                        </p>
+                    </section>
                 </div>
             </div>
         </div>

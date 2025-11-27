@@ -85,6 +85,8 @@
                             <a href="{{ route('admin.dashboard') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Dashboard</a>
                             <a href="{{ route('admin.users.index') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Users</a>
                             <a href="{{ route('admin.verification.index') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Verifications</a>
+                            <a href="{{ url('/admin/photographer-options/specialties') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Specialties</a>
+                            <a href="{{ url('/admin/photographer-options/services') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Services</a>
                             <a href="{{ route('admin.settings') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Settings</a>
                             <div class="border-t-2 border-gray-200 my-1"></div>
                             <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Account Settings</a>
@@ -147,6 +149,8 @@
                     <a href="{{ route('admin.dashboard') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Dashboard</a>
                     <a href="{{ route('admin.users.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Users</a>
                     <a href="{{ route('admin.verification.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Verifications</a>
+                    <a href="{{ url('/admin/photographer-options/specialties') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Specialties</a>
+                    <a href="{{ url('/admin/photographer-options/services') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Services</a>
                     <a href="{{ route('admin.settings') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Settings</a>
                     <div class="border-t-2 border-gray-200 my-2"></div>
                     <a href="{{ route('profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Account Settings</a>

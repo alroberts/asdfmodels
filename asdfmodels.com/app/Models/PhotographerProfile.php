@@ -6,59 +6,51 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class ModelProfile extends Model
+class PhotographerProfile extends Model
 {
     protected $fillable = [
         'user_id',
         'bio',
+        'gender',
+        'professional_name',
         'location_city',
         'location_country',
         'location_geoname_id',
         'location_country_code',
-        'date_of_birth',
-        'gender',
-        // Physical Stats - Male
-        'height',
-        'weight',
-        'chest',
-        'waist',
-        'inseam',
-        'shoe_size',
-        'suit_size',
-        'hair_color',
-        'eye_color',
-        // Physical Stats - Female
-        'bust',
-        'hips',
-        'dress_size',
-        // Professional
         'experience_level',
         'experience_start_year',
         'specialties',
+        'equipment',
+        'services_offered',
+        'studio_location',
+        'available_for_travel',
+        'pricing_info',
         'verified_at',
         'verified_by',
-        // Contact
         'public_email',
+        'phone',
         'instagram',
         'portfolio_website',
-        // Media
+        'facebook',
+        'twitter',
         'profile_photo_path',
         'cover_photo_path',
-        // Settings
         'is_public',
         'contains_nudity',
     ];
 
     protected $casts = [
         'specialties' => 'array',
+        'equipment' => 'array',
+        'services_offered' => 'array',
+        'available_for_travel' => 'boolean',
         'verified_at' => 'datetime',
         'is_public' => 'boolean',
         'contains_nudity' => 'boolean',
-        'date_of_birth' => 'date',
     ];
 
     /**
-     * Get the user that owns the model profile.
+     * Get the user that owns the photographer profile.
      */
     public function user(): BelongsTo
     {
@@ -74,20 +66,11 @@ class ModelProfile extends Model
     }
 
     /**
-     * Get all portfolio images for this model.
+     * Get all portfolio images for this photographer.
      */
     public function portfolioImages(): HasMany
     {
-        return $this->hasMany(PortfolioImage::class, 'model_id', 'user_id');
-    }
-
-    /**
-     * Get polaroid images for this model.
-     */
-    public function polaroids(): HasMany
-    {
-        return $this->hasMany(PortfolioImage::class, 'model_id', 'user_id')
-                    ->where('is_polaroid', true);
+        return $this->hasMany(PhotographerPortfolioImage::class, 'photographer_id', 'user_id');
     }
 
     /**
@@ -96,18 +79,6 @@ class ModelProfile extends Model
     public function isVerified(): bool
     {
         return $this->verified_at !== null;
-    }
-
-    /**
-     * Get age from date of birth.
-     */
-    public function getAgeAttribute(): ?int
-    {
-        if (!$this->date_of_birth) {
-            return null;
-        }
-        
-        return $this->date_of_birth->age;
     }
 }
 

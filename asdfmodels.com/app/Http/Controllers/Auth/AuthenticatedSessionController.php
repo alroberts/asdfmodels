@@ -51,6 +51,31 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // After login, check if profile is complete
+        return $this->redirectToProfileCompletion($user);
+    }
+
+    /**
+     * Redirect user to profile completion if needed.
+     */
+    protected function redirectToProfileCompletion($user): RedirectResponse
+    {
+        // Check if user needs to complete profile
+        if ($user->is_photographer) {
+            // Photographer - check if profile exists
+            if (!$user->photographerProfile) {
+                return redirect()->route('photographers.profile.edit')
+                    ->with('status', 'Please complete your photographer profile to continue.');
+            }
+        } else {
+            // Model - check if profile exists
+            if (!$user->modelProfile) {
+                return redirect()->route('profile.model.edit')
+                    ->with('status', 'Please complete your model profile to continue.');
+            }
+        }
+
+        // Profile is complete, go to dashboard
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

@@ -39,6 +39,17 @@
             <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
         </div>
 
+        <!-- User Type -->
+        <div class="mt-4">
+            <x-input-label for="user_type" :value="__('I am a')" />
+            <select id="user_type" name="user_type" class="block mt-1 w-full border-2 border-black rounded-md shadow-sm focus:border-gray-500 focus:ring focus:ring-gray-200 focus:ring-opacity-50" required>
+                <option value="model" {{ old('user_type') === 'model' ? 'selected' : '' }}>Model</option>
+                <option value="photographer" {{ old('user_type') === 'photographer' ? 'selected' : '' }}>Photographer</option>
+            </select>
+            <p class="mt-1 text-sm text-gray-600">Select whether you are a model or photographer.</p>
+            <x-input-error :messages="$errors->get('user_type')" class="mt-2" />
+        </div>
+
         <!-- Cloudflare Turnstile -->
         <div class="mt-4">
             <x-turnstile />

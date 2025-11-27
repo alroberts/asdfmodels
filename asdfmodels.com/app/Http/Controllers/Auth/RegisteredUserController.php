@@ -33,18 +33,23 @@ class RegisteredUserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            'user_type' => ['required', 'in:model,photographer'],
         ]);
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'is_photographer' => $request->user_type === 'photographer',
         ]);
 
         event(new Registered($user));
 
+        // Log user in so they can access verification page
         Auth::login($user);
 
-        return redirect(route('dashboard', absolute: false));
+        // Redirect to email verification notice
+        // They'll be redirected to profile completion after verification
+        return redirect()->route('verification.notice');
     }
 }

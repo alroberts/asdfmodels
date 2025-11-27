@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
@@ -105,5 +105,21 @@ class User extends Authenticatable
     public function photographerImages()
     {
         return $this->hasMany(PortfolioImage::class, 'photographer_id');
+    }
+
+    /**
+     * Get the photographer profile for this user.
+     */
+    public function photographerProfile()
+    {
+        return $this->hasOne(PhotographerProfile::class);
+    }
+
+    /**
+     * Get photographer portfolio images (own portfolio).
+     */
+    public function photographerPortfolioImages()
+    {
+        return $this->hasMany(PhotographerPortfolioImage::class, 'photographer_id');
     }
 }

@@ -158,6 +158,11 @@ class PhotographerProfileController extends Controller
             'facebook' => ['nullable', 'string', 'max:255'],
             'twitter' => ['nullable', 'string', 'max:255'],
             
+            // Images
+            'profile_photo' => ['nullable', 'image', 'mimes:jpeg,jpg,png', 'max:10240'], // 10MB max (handles HEIC conversion)
+            'profile_photo_crop_data' => ['nullable', 'string'],
+            'logo' => ['nullable', 'image', 'mimes:jpeg,jpg,png,svg', 'max:2048'], // 2MB max for logo
+            
             // Settings
             'is_public' => ['boolean'],
             'contains_nudity' => ['boolean'],
@@ -202,6 +207,50 @@ class PhotographerProfileController extends Controller
         $profile = $user->photographerProfile ?? new PhotographerProfile();
         $profile->user_id = $user->id;
         $profile->fill($validated);
+        
+        // Handle profile photo upload with cropping
+        if ($request->hasFile('profile_photo')) {
+            $cropData = $request->input('profile_photo_crop_data');
+            
+            // Delete old profile photo if exists
+            if ($profile->profile_photo_path) {
+                \App\Services\ImageProcessingService::deleteImage($profile->profile_photo_path);
+            }
+            
+            try {
+                $profilePhotoPath = \App\Services\ImageProcessingService::processProfilePhoto(
+                    $request->file('profile_photo'),
+                    $cropData,
+                    $user->id
+                );
+                $profile->profile_photo_path = $profilePhotoPath;
+            } catch (\Exception $e) {
+                return redirect()->back()
+                    ->withErrors(['profile_photo' => 'Failed to process profile photo: ' . $e->getMessage()])
+                    ->withInput();
+            }
+        }
+        
+        // Handle logo upload (only if professional_name is set)
+        if ($request->hasFile('logo') && $profile->professional_name) {
+            // Delete old logo if exists
+            if ($profile->logo_path) {
+                \App\Services\ImageProcessingService::deleteImage($profile->logo_path);
+            }
+            
+            try {
+                $logoPath = \App\Services\ImageProcessingService::processLogo(
+                    $request->file('logo'),
+                    $user->id
+                );
+                $profile->logo_path = $logoPath;
+            } catch (\Exception $e) {
+                return redirect()->back()
+                    ->withErrors(['logo' => 'Failed to process logo: ' . $e->getMessage()])
+                    ->withInput();
+            }
+        }
+        
         $profile->save();
 
         if ($isWizardCompletion) {

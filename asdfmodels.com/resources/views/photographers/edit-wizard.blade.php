@@ -46,7 +46,7 @@
             @endif
 
             <!-- Wizard Form -->
-            <form method="POST" action="{{ route('photographers.profile.update') }}" @submit.prevent="saveProfile()" id="profileForm">
+            <form method="POST" action="{{ route('photographers.profile.update') }}" @submit.prevent="saveProfile()" id="profileForm" enctype="multipart/form-data">
                 @csrf
                 @method('patch')
                 <input type="hidden" name="wizard_completion" value="1">
@@ -745,14 +745,101 @@
                     </div>
                 </div>
 
-                <!-- Step 5: Settings -->
+                <!-- Step 5: Photos & Settings -->
                 <div x-show="currentStep === 4" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-x-4" x-transition:enter-end="opacity-100 transform translate-x-0" class="bg-white shadow-lg sm:rounded-lg p-6 md:p-8 border-2 border-gray-800">
                     <div class="mb-6">
                         <h3 class="text-2xl font-bold text-black mb-2">Almost Done!</h3>
-                        <p class="text-gray-600">Final settings for your profile</p>
+                        <p class="text-gray-600">Add your photos and final settings</p>
                     </div>
 
                     <div class="space-y-6">
+                        <!-- Profile Photo Upload with Crop -->
+                        <div class="p-4 bg-gray-50 rounded-lg border-2 border-gray-200" x-data="imageCropper('profile_photo', formData.professional_name ? null : true)">
+                            <x-input-label for="profile_photo" :value="__('Profile Photo')" />
+                            <p class="mt-1 text-xs text-gray-500 mb-4">Upload a photo of yourself. Image will be cropped to a square (800x800).</p>
+                            
+                            <button type="button" @click="$refs.profilePhotoInput.click()" class="mt-2 bg-black text-white px-4 py-2 rounded hover:bg-gray-800 transition">
+                                <i class="fas fa-upload mr-2"></i>Choose Photo
+                            </button>
+                            <input type="file" x-ref="profilePhotoInput" id="profile_photo" name="profile_photo" @change="handleFileSelect($event)" accept="image/jpeg,image/jpg,image/png,image/heic,image/heif" style="display: none;">
+                            <input type="hidden" name="profile_photo_crop_data" x-model="cropData" />
+                            
+                            <!-- Crop Modal -->
+                            <div x-show="showCropModal" x-cloak class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4" @click.self="showCropModal = false">
+                                <div class="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-auto">
+                                    <h4 class="text-xl font-bold mb-4">Crop Your Photo</h4>
+                                    <p class="text-sm text-gray-600 mb-4">Adjust the crop area to position your photo. The image will be saved as a square (800x800).</p>
+                                    
+                                    <div class="relative" style="max-height: 600px; overflow: auto;">
+                                        <canvas x-ref="cropCanvas" class="max-w-full border-2 border-gray-800"></canvas>
+                                    </div>
+                                    
+                                    <div class="mt-4 flex justify-end gap-4">
+                                        <button type="button" @click="cancelCrop()" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">
+                                            Cancel
+                                        </button>
+                                        <button type="button" @click="applyCrop()" class="px-4 py-2 bg-black text-white rounded hover:bg-gray-800">
+                                            Apply Crop
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Preview -->
+                            <div x-show="previewUrl" class="mt-4">
+                                <p class="text-sm font-medium text-gray-700 mb-2">Preview:</p>
+                                <div class="flex gap-4">
+                                    <div>
+                                        <p class="text-xs text-gray-500 mb-1">Square (800x800)</p>
+                                        <img :src="previewUrl" alt="Preview" class="w-32 h-32 object-cover rounded-lg border-2 border-gray-800">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            @if(isset($profile) && $profile->profile_photo_path)
+                                <div class="mt-4">
+                                    <p class="text-sm font-medium text-gray-700 mb-2">Current photo:</p>
+                                    <img src="{{ asset($profile->profile_photo_path) }}" alt="Current profile photo" class="w-32 h-32 object-cover rounded-lg border-2 border-gray-300">
+                                </div>
+                            @endif
+                            
+                            <x-input-error :messages="$errors->get('profile_photo')" class="mt-2" />
+                        </div>
+
+                        <!-- Logo Upload (conditional) -->
+                        <div x-show="formData.professional_name" 
+                             x-transition
+                             class="p-4 bg-gray-50 rounded-lg border-2 border-gray-200"
+                             x-data="logoUploader()">
+                            <x-input-label for="logo" :value="__('Company Logo')" />
+                            <p class="mt-1 text-xs text-gray-500 mb-2">Since you entered "<span x-text="formData.professional_name"></span>", you can upload your company logo.</p>
+                            
+                            <input 
+                                type="file" 
+                                id="logo" 
+                                name="logo" 
+                                accept="image/jpeg,image/jpg,image/png,image/svg+xml"
+                                @change="handleFileSelect($event)"
+                                class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-2 file:border-gray-800 file:text-sm file:font-semibold file:bg-white file:text-gray-800 hover:file:bg-gray-50"
+                            />
+                            <p class="mt-2 text-sm text-gray-600">Maximum 800px on longest edge. Supports JPG, PNG, and SVG.</p>
+                            
+                            <!-- Preview -->
+                            <div x-show="previewUrl" class="mt-4">
+                                <p class="text-sm font-medium text-gray-700 mb-2">Preview:</p>
+                                <img :src="previewUrl" alt="Logo preview" class="max-w-xs max-h-32 object-contain rounded-lg border-2 border-gray-800">
+                            </div>
+                            
+                            @if(isset($profile) && $profile->logo_path)
+                                <div class="mt-4">
+                                    <p class="text-sm font-medium text-gray-700 mb-2">Current logo:</p>
+                                    <img src="{{ asset($profile->logo_path) }}" alt="Current logo" class="max-w-xs max-h-32 object-contain rounded-lg border-2 border-gray-300">
+                                </div>
+                            @endif
+                            
+                            <x-input-error :messages="$errors->get('logo')" class="mt-2" />
+                        </div>
+
                         <div class="p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
                             <label class="flex items-center cursor-pointer">
                                 <input type="checkbox" name="is_public" value="1" x-model="formData.is_public" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
@@ -1150,6 +1237,251 @@
                 this.selectedCountryName = suggestion.country_name;
                 this.suggestions = [];
                 this.showSuggestions = false;
+            }
+        };
+    }
+    
+    function imageCropper(fieldName, isRequired = false) {
+        return {
+            showCropModal: false,
+            previewUrl: null,
+            cropData: null,
+            originalImage: null,
+            originalFile: null,
+            canvas: null,
+            ctx: null,
+            image: null,
+            cropX: 0,
+            cropY: 0,
+            cropSize: 400,
+            scale: 1,
+            imageX: 0,
+            imageY: 0,
+            isDragging: false,
+            dragStartX: 0,
+            dragStartY: 0,
+            
+            handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                this.originalFile = file;
+                const reader = new FileReader();
+                
+                reader.onload = (e) => {
+                    this.originalImage = new Image();
+                    this.originalImage.onload = () => {
+                        this.showCropModal = true;
+                        this.$nextTick(() => {
+                            this.initCropper();
+                        });
+                    };
+                    this.originalImage.src = e.target.result;
+                };
+                
+                reader.readAsDataURL(file);
+            },
+            
+            initCropper() {
+                this.canvas = this.$refs.cropCanvas;
+                this.ctx = this.canvas.getContext('2d');
+                
+                // Set canvas size (max 800px width/height)
+                const maxSize = 600;
+                const scale = Math.min(maxSize / this.originalImage.width, maxSize / this.originalImage.height);
+                this.canvas.width = this.originalImage.width * scale;
+                this.canvas.height = this.originalImage.height * scale;
+                this.scale = scale;
+                
+                // Initial crop size (80% of smaller dimension)
+                this.cropSize = Math.min(this.canvas.width, this.canvas.height) * 0.8;
+                
+                // Center crop area
+                this.cropX = (this.canvas.width - this.cropSize) / 2;
+                this.cropY = (this.canvas.height - this.cropSize) / 2;
+                
+                this.draw();
+                
+                // Add mouse/touch event listeners
+                this.canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
+                this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
+                this.canvas.addEventListener('mouseup', this.onMouseUp.bind(this));
+                this.canvas.addEventListener('touchstart', this.onTouchStart.bind(this));
+                this.canvas.addEventListener('touchmove', this.onTouchMove.bind(this));
+                this.canvas.addEventListener('touchend', this.onTouchEnd.bind(this));
+            },
+            
+            draw() {
+                if (!this.ctx || !this.originalImage) return;
+                
+                // Clear canvas
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Draw image
+                this.ctx.drawImage(this.originalImage, 0, 0, this.canvas.width, this.canvas.height);
+                
+                // Draw overlay (darken non-crop area)
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Clear crop area
+                this.ctx.save();
+                this.ctx.globalCompositeOperation = 'destination-out';
+                this.ctx.fillRect(this.cropX, this.cropY, this.cropSize, this.cropSize);
+                this.ctx.restore();
+                
+                // Draw crop border
+                this.ctx.strokeStyle = '#fff';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(this.cropX, this.cropY, this.cropSize, this.cropSize);
+                
+                // Draw corner handles
+                const handleSize = 10;
+                this.ctx.fillStyle = '#fff';
+                const corners = [
+                    [this.cropX, this.cropY],
+                    [this.cropX + this.cropSize, this.cropY],
+                    [this.cropX, this.cropY + this.cropSize],
+                    [this.cropX + this.cropSize, this.cropY + this.cropSize]
+                ];
+                corners.forEach(([x, y]) => {
+                    this.ctx.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);
+                });
+            },
+            
+            getMousePos(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                return {
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top
+                };
+            },
+            
+            getTouchPos(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const touch = e.touches[0] || e.changedTouches[0];
+                return {
+                    x: touch.clientX - rect.left,
+                    y: touch.clientY - rect.top
+                };
+            },
+            
+            onMouseDown(e) {
+                const pos = this.getMousePos(e);
+                if (this.isInCropArea(pos.x, pos.y)) {
+                    this.isDragging = true;
+                    this.dragStartX = pos.x - this.cropX;
+                    this.dragStartY = pos.y - this.cropY;
+                }
+            },
+            
+            onMouseMove(e) {
+                if (!this.isDragging) return;
+                const pos = this.getMousePos(e);
+                this.cropX = Math.max(0, Math.min(pos.x - this.dragStartX, this.canvas.width - this.cropSize));
+                this.cropY = Math.max(0, Math.min(pos.y - this.dragStartY, this.canvas.height - this.cropSize));
+                this.draw();
+            },
+            
+            onMouseUp(e) {
+                this.isDragging = false;
+            },
+            
+            onTouchStart(e) {
+                e.preventDefault();
+                const pos = this.getTouchPos(e);
+                if (this.isInCropArea(pos.x, pos.y)) {
+                    this.isDragging = true;
+                    this.dragStartX = pos.x - this.cropX;
+                    this.dragStartY = pos.y - this.cropY;
+                }
+            },
+            
+            onTouchMove(e) {
+                e.preventDefault();
+                if (!this.isDragging) return;
+                const pos = this.getTouchPos(e);
+                this.cropX = Math.max(0, Math.min(pos.x - this.dragStartX, this.canvas.width - this.cropSize));
+                this.cropY = Math.max(0, Math.min(pos.y - this.dragStartY, this.canvas.height - this.cropSize));
+                this.draw();
+            },
+            
+            onTouchEnd(e) {
+                e.preventDefault();
+                this.isDragging = false;
+            },
+            
+            isInCropArea(x, y) {
+                return x >= this.cropX && x <= this.cropX + this.cropSize &&
+                       y >= this.cropY && y <= this.cropY + this.cropSize;
+            },
+            
+            cancelCrop() {
+                this.showCropModal = false;
+                this.originalImage = null;
+                this.originalFile = null;
+            },
+            
+            applyCrop() {
+                // Calculate crop coordinates in original image dimensions
+                const sourceX = this.cropX / this.scale;
+                const sourceY = this.cropY / this.scale;
+                const sourceWidth = this.cropSize / this.scale;
+                const sourceHeight = this.cropSize / this.scale;
+                
+                // Store crop data
+                this.cropData = JSON.stringify({
+                    x: sourceX,
+                    y: sourceY,
+                    width: sourceWidth,
+                    height: sourceHeight,
+                    imageWidth: this.originalImage.width,
+                    imageHeight: this.originalImage.height
+                });
+                
+                // Create preview (800x800)
+                const previewCanvas = document.createElement('canvas');
+                previewCanvas.width = 800;
+                previewCanvas.height = 800;
+                const previewCtx = previewCanvas.getContext('2d');
+                
+                // Draw cropped and resized image
+                previewCtx.drawImage(
+                    this.originalImage,
+                    sourceX, sourceY, sourceWidth, sourceHeight,
+                    0, 0, 800, 800
+                );
+                
+                this.previewUrl = previewCanvas.toDataURL('image/jpeg', 0.9);
+                this.showCropModal = false;
+                
+                // Update file input (create a new File from the cropped canvas)
+                previewCanvas.toBlob((blob) => {
+                    const croppedFile = new File([blob], this.originalFile.name, { type: 'image/jpeg' });
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(croppedFile);
+                    const fileInput = document.getElementById('profile_photo');
+                    if (fileInput) {
+                        fileInput.files = dataTransfer.files;
+                    }
+                }, 'image/jpeg', 0.9);
+            }
+        };
+    }
+    
+    function logoUploader() {
+        return {
+            previewUrl: null,
+            
+            handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    this.previewUrl = e.target.result;
+                };
+                reader.readAsDataURL(file);
             }
         };
     }

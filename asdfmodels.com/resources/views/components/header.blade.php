@@ -63,6 +63,7 @@
                             </svg>
                         </button>
                         <div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-48 bg-white border-2 border-black rounded-md shadow-lg z-50">
+                            <a href="{{ route('photographers.profile.edit') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Edit Profile</a>
                             <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Settings</a>
                             <form method="POST" action="{{ route('logout') }}">
                                 @csrf
@@ -135,6 +136,7 @@
                     <a href="{{ route('models.browse') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Browse Models</a>
                     <a href="#" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">My Portfolio</a>
                     <a href="{{ route('messages.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Messages</a>
+                    <a href="{{ route('photographers.profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Edit Profile</a>
                     <a href="{{ route('profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Settings</a>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf

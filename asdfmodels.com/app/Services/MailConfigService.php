@@ -72,6 +72,22 @@ class MailConfigService
         $password = Setting::getValue('mail_smtp_password', '');
         $encryption = Setting::getValue('mail_smtp_encryption', 'tls');
         $timeout = Setting::getValue('mail_smtp_timeout', 30);
+        $fromAddress = Setting::getValue('mail_from_address', 'noreply@asdfmodels.com');
+        $fromName = Setting::getValue('mail_from_name', 'ASDF Models');
+
+        // For SMTP, many servers (especially Zoho, Gmail, etc.) require the "From" address 
+        // to exactly match the authenticated SMTP username to avoid policy violations.
+        // This prevents "554 5.7.7 Email policy violation detected" errors.
+        $smtpFromAddress = $fromAddress;
+        if ($username && !empty($username) && filter_var($username, FILTER_VALIDATE_EMAIL)) {
+            // Always use the SMTP username as the From address to ensure policy compliance
+            // The envelope sender (Return-Path) will also match, preventing rejections
+            $smtpFromAddress = $username;
+            
+            if ($smtpFromAddress !== $fromAddress) {
+                \Log::info("SMTP From address changed from {$fromAddress} to {$username} to match SMTP authentication and avoid policy violations");
+            }
+        }
 
         Config::set('mail.mailers.smtp', [
             'transport' => 'smtp',
@@ -83,6 +99,11 @@ class MailConfigService
             'timeout' => $timeout,
             'local_domain' => parse_url(config('app.url'), PHP_URL_HOST),
         ]);
+        
+        // Update from address for SMTP to match authenticated user
+        // This ensures both the From header and envelope sender match the SMTP username
+        Config::set('mail.from.address', $smtpFromAddress);
+        Config::set('mail.from.name', $fromName);
     }
 
     /**
@@ -107,18 +128,24 @@ class MailConfigService
 
     /**
      * Test email configuration by sending a test email.
+     * This is the reference implementation that works 100% of the time.
+     * All other emails should follow this exact same pattern.
      */
     public static function testEmail(string $toEmail): bool
     {
         try {
+            // Ensure configuration is up to date (in case settings changed)
             self::configure();
             
+            // Get From address from settings (not from config cache)
+            // This ensures we always use the latest settings
             $fromAddress = Setting::getValue('mail_from_address', 'noreply@asdfmodels.com');
             $fromName = Setting::getValue('mail_from_name', 'ASDF Models');
             
+            // Use Mail::raw() with explicit From address - this pattern works 100% of the time
             \Illuminate\Support\Facades\Mail::raw('This is a test email from ASDF Models. If you receive this, your email configuration is working correctly!', function ($message) use ($toEmail, $fromAddress, $fromName) {
                 $message->to($toEmail)
-                        ->from($fromAddress, $fromName)
+                        ->from($fromAddress, $fromName) // Explicitly set From address from settings
                         ->subject('Test Email from ASDF Models');
             });
 

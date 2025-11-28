@@ -43,10 +43,23 @@ class RegisteredUserController extends Controller
             'is_photographer' => $request->user_type === 'photographer',
         ]);
 
-        event(new Registered($user));
+        // Auto-verify admin emails
+        if ($user->is_admin) {
+            $user->markEmailAsVerified();
+        } else {
+            // Mail configuration is already set in AppServiceProvider boot()
+            // Fire the Registered event - this will trigger the verification email
+            // All emails use the centralized mail configuration (SMTP, sendmail, etc.)
+            event(new Registered($user));
+        }
 
         // Log user in so they can access verification page
         Auth::login($user);
+
+        // If admin, skip verification and go to dashboard
+        if ($user->is_admin) {
+            return redirect()->route('dashboard');
+        }
 
         // Redirect to email verification notice
         // They'll be redirected to profile completion after verification

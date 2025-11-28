@@ -49,6 +49,7 @@
             <form method="POST" action="{{ route('photographers.profile.update') }}" @submit.prevent="saveProfile()" id="profileForm">
                 @csrf
                 @method('patch')
+                <input type="hidden" name="wizard_completion" value="1">
 
                 @php
                     $specialtiesOptions = \App\Helpers\PhotographerOptions::specialties();
@@ -66,7 +67,7 @@
                     <div class="space-y-6">
                         <div>
                             <x-input-label for="bio" :value="__('Bio')" />
-                            <textarea id="bio" name="bio" rows="4" x-model="formData.bio" class="block mt-1 w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-500 focus:ring focus:ring-gray-200 focus:ring-opacity-50" placeholder="Tell us about your photography style, experience, and what makes your work unique..."></textarea>
+                            <textarea id="bio" name="bio" rows="4" x-model="formData.bio" class="block mt-1 w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 text-gray-900 placeholder-gray-400 resize-y" placeholder="Tell us about your photography style, experience, and what makes your work unique..."></textarea>
                             <x-input-error :messages="$errors?->get('bio') ?? []" class="mt-2" />
                         </div>
 
@@ -77,26 +78,12 @@
                             <x-input-error :messages="$errors?->get('professional_name') ?? []" class="mt-2" />
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" x-data="locationAutocomplete()" x-init="init(formData.locationCountryCode || '', formData.locationCity || '', formData.locationGeonameId || null)">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" x-data="locationAutocomplete()" x-init="init(formData.locationCountryCode || '', formData.locationCity || '', formData.locationGeonameId || null); $watch('formData.locationCountryCode', value => { if (value) { selectedCountry = value; onCountryChange(); } })" @location-updated.window="if ($event.detail && $event.detail.country) { selectedCountry = $event.detail.country; formData.locationCountryCode = $event.detail.country; onCountryChange(); }">
                             <div>
                                 <x-input-label for="location_country_code" :value="__('Country')" />
-                                @php
-                                    $countriesJson = json_encode($countriesData, JSON_HEX_APOS | JSON_HEX_QUOT);
-                                @endphp
-                                <div class="relative" 
+                                <div class="relative mt-1" 
                                      x-data="searchableDropdown()" 
-                                     data-countries="{{ $countriesJson }}"
-                                     x-init="
-                                        const countriesJson = $el.getAttribute('data-countries');
-                                        if (countriesJson) {
-                                            try {
-                                                const countriesData = JSON.parse(countriesJson);
-                                                initCountries(countriesData, formData.locationCountryCode || '');
-                                            } catch(e) {
-                                                console.error('Error parsing countries:', e);
-                                            }
-                                        }
-                                     ">
+                                     x-init="initCountries(@js($countriesData), formData.locationCountryCode || '')">
                                     <div class="relative">
                                         <x-text-input 
                                             id="location_country_code" 
@@ -109,30 +96,57 @@
                                             @keydown.arrow-up.prevent="highlightPrevious()"
                                             @keydown.enter.prevent="selectHighlighted()"
                                             @keydown.escape="showDropdown = false"
-                                            class="block mt-1 w-full pr-10" 
+                                            class="block w-full pr-10" 
                                             placeholder="Type to search countries..." 
                                             autocomplete="off" />
-                                        <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                            <i class="fas fa-chevron-down text-gray-400"></i>
+                                        <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
+                                            <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
                                         </div>
                                     </div>
-                                    <input type="hidden" name="location_country_code" x-model="selectedValue" />
+                                    <input type="hidden" name="location_country_code" x-model="selectedValue" @change="formData.locationCountryCode = selectedValue" />
                                     <div x-show="showDropdown && filteredCountries.length > 0" 
                                          x-cloak
                                          x-transition
-                                         class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                         x-init="
+                                            $watch('showDropdown', value => {
+                                                if (value) {
+                                                    setTimeout(() => {
+                                                        const dropdown = $el;
+                                                        const input = document.getElementById('location_country_code');
+                                                        if (!input) return;
+                                                        const rect = input.getBoundingClientRect();
+                                                        const viewportHeight = window.innerHeight;
+                                                        const spaceBelow = viewportHeight - rect.bottom;
+                                                        const spaceAbove = rect.top;
+                                                        
+                                                        if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+                                                            dropdown.classList.add('bottom-full');
+                                                            dropdown.classList.remove('mt-1');
+                                                            dropdown.classList.add('mb-1');
+                                                            dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
+                                                        } else {
+                                                            dropdown.classList.remove('bottom-full', 'mb-1');
+                                                            dropdown.classList.add('mt-1');
+                                                            dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
+                                                        }
+                                                    }, 10);
+                                                }
+                                            });
+                                         "
+                                         class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                         style="max-height: 240px;">
                                         <template x-for="(country, index) in filteredCountries" :key="country.code">
                                             <div @click="selectCountry(country); $dispatch('location-updated', {country: country.code})" 
                                                  @mouseenter="highlightedIndex = index"
-                                                 :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === country.code, 'bg-white text-gray-900': index !== highlightedIndex && selectedValue !== country.code }"
-                                                 class="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors">
+                                                 :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === country.code, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== country.code }"
+                                                 class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
                                                 <div class="font-medium" x-text="country.name"></div>
                                             </div>
                                         </template>
                                     </div>
                                     <div x-show="showDropdown && filteredCountries.length === 0" 
                                          x-cloak
-                                         class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-lg p-4 text-center text-gray-500">
+                                         class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl p-4 text-center text-gray-500">
                                         No countries found
                                     </div>
                                 </div>
@@ -158,10 +172,37 @@
                                     
                                     <div x-show="showSuggestions && suggestions.length > 0" 
                                          x-cloak
-                                         class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                         x-init="
+                                            $watch('showSuggestions', value => {
+                                                if (value) {
+                                                    setTimeout(() => {
+                                                        const dropdown = $el;
+                                                        const input = document.getElementById('location_city');
+                                                        if (!input) return;
+                                                        const rect = input.getBoundingClientRect();
+                                                        const viewportHeight = window.innerHeight;
+                                                        const spaceBelow = viewportHeight - rect.bottom;
+                                                        const spaceAbove = rect.top;
+                                                        
+                                                        if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+                                                            dropdown.classList.add('bottom-full');
+                                                            dropdown.classList.remove('mt-1');
+                                                            dropdown.classList.add('mb-1');
+                                                            dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
+                                                        } else {
+                                                            dropdown.classList.remove('bottom-full', 'mb-1');
+                                                            dropdown.classList.add('mt-1');
+                                                            dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
+                                                        }
+                                                    }, 10);
+                                                }
+                                            });
+                                         "
+                                         class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                         style="max-height: 240px;">
                                         <template x-for="(suggestion, index) in suggestions" :key="index">
                                             <div @click="selectCity(suggestion); $dispatch('location-updated', {city: suggestion.city, geonameId: suggestion.id})" 
-                                                 class="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200 last:border-b-0">
+                                                 class="px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
                                                 <div class="font-medium text-black" x-text="suggestion.city"></div>
                                                 <div class="text-sm text-gray-600" x-text="suggestion.label"></div>
                                             </div>
@@ -175,12 +216,66 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <x-input-label for="gender" :value="__('Gender')" />
-                                <select id="gender" name="gender" x-model="formData.gender" class="block mt-1 w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-500 focus:ring focus:ring-gray-200 focus:ring-opacity-50">
-                                    <option value="">Select...</option>
-                                    <option value="male">Male</option>
-                                    <option value="female">Female</option>
-                                    <option value="other">Other</option>
-                                </select>
+                                <div class="relative mt-1" x-data="customSelect({
+                                    options: [
+                                        { value: '', label: 'Select...' },
+                                        { value: 'male', label: 'Male' },
+                                        { value: 'female', label: 'Female' },
+                                        { value: 'other', label: 'Other' }
+                                    ],
+                                    selectedValue: formData.gender || '',
+                                    onSelect: (value) => { formData.gender = value; }
+                                })">
+                                    <input type="hidden" name="gender" x-model="selectedValue" />
+                                    <div @click="showDropdown = !showDropdown" 
+                                         @click.outside="showDropdown = false"
+                                         class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
+                                        <span x-text="selectedLabel || 'Select...'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                    </div>
+                                    <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
+                                        <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                    </div>
+                                    <div x-show="showDropdown" 
+                                         x-cloak
+                                         x-transition
+                                         x-init="
+                                            $watch('showDropdown', value => {
+                                                if (value) {
+                                                    setTimeout(() => {
+                                                        const dropdown = $el;
+                                                        const clickableDiv = dropdown.previousElementSibling?.previousElementSibling;
+                                                        if (!clickableDiv) return;
+                                                        const rect = clickableDiv.getBoundingClientRect();
+                                                        const viewportHeight = window.innerHeight;
+                                                        const spaceBelow = viewportHeight - rect.bottom;
+                                                        const spaceAbove = rect.top;
+                                                        
+                                                        if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+                                                            dropdown.classList.add('bottom-full');
+                                                            dropdown.classList.remove('mt-1');
+                                                            dropdown.classList.add('mb-1');
+                                                            dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
+                                                        } else {
+                                                            dropdown.classList.remove('bottom-full', 'mb-1');
+                                                            dropdown.classList.add('mt-1');
+                                                            dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
+                                                        }
+                                                    }, 10);
+                                                }
+                                            });
+                                         "
+                                         class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                         style="max-height: 240px;">
+                                        <template x-for="(option, index) in options" :key="index">
+                                            <div @click="selectOption(option.value)" 
+                                                 @mouseenter="highlightedIndex = index"
+                                                 :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === option.value, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== option.value }"
+                                                 class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                <div class="font-medium" x-text="option.label"></div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
                                 <x-input-error :messages="$errors?->get('gender') ?? []" class="mt-2" />
                             </div>
 
@@ -204,12 +299,65 @@
                     <div class="space-y-6">
                         <div>
                             <x-input-label for="experience_level" :value="__('Experience Level')" />
-                            <select id="experience_level" name="experience_level" x-model="formData.experience_level" class="block mt-1 w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-500 focus:ring focus:ring-gray-200 focus:ring-opacity-50">
-                                <option value="">Select...</option>
-                                <option value="beginner">Beginner</option>
-                                <option value="intermediate">Intermediate</option>
-                                <option value="professional">Professional</option>
-                            </select>
+                            <div class="relative mt-1" x-data="customSelect({
+                                options: [
+                                    { value: '', label: 'Select...' },
+                                    { value: 'beginner', label: 'Beginner' },
+                                    { value: 'intermediate', label: 'Intermediate' },
+                                    { value: 'professional', label: 'Professional' }
+                                ],
+                                selectedValue: formData.experience_level || '',
+                                onSelect: (value) => { formData.experience_level = value; }
+                            })" x-init="init()">
+                                <input type="hidden" name="experience_level" x-model="selectedValue" />
+                                <div @click="showDropdown = !showDropdown" 
+                                     @click.outside="showDropdown = false"
+                                     class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
+                                    <span x-text="selectedLabel || 'Select...'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                </div>
+                                <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
+                                    <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                </div>
+                                <div x-show="showDropdown" 
+                                     x-cloak
+                                     x-transition
+                                     x-init="
+                                        $watch('showDropdown', value => {
+                                            if (value) {
+                                                setTimeout(() => {
+                                                    const dropdown = $el;
+                                                    const input = dropdown.previousElementSibling.previousElementSibling;
+                                                    const rect = input.getBoundingClientRect();
+                                                    const viewportHeight = window.innerHeight;
+                                                    const spaceBelow = viewportHeight - rect.bottom;
+                                                    const spaceAbove = rect.top;
+                                                    
+                                                    if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+                                                        dropdown.classList.add('bottom-full');
+                                                        dropdown.classList.remove('mt-1');
+                                                        dropdown.classList.add('mb-1');
+                                                        dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
+                                                    } else {
+                                                        dropdown.classList.remove('bottom-full', 'mb-1');
+                                                        dropdown.classList.add('mt-1');
+                                                        dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
+                                                    }
+                                                }, 10);
+                                            }
+                                        });
+                                     "
+                                     class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                     style="max-height: 240px;">
+                                    <template x-for="(option, index) in options" :key="index">
+                                        <div @click="selectOption(option.value)" 
+                                             @mouseenter="highlightedIndex = index"
+                                             :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === option.value, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== option.value }"
+                                             class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                            <div class="font-medium" x-text="option.label"></div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
                             <x-input-error :messages="$errors?->get('experience_level') ?? []" class="mt-2" />
                         </div>
 
@@ -253,6 +401,203 @@
                                 @endforeach
                             </div>
                             <x-input-error :messages="$errors?->get('services_offered') ?? []" class="mt-2" />
+                        </div>
+
+                        <!-- Studio Location (conditional) -->
+                        <div x-show="formData.services.includes('studio-photo-sessions') || formData.services.includes('studio-rental')" 
+                             x-transition:enter="transition ease-out duration-300" 
+                             x-transition:enter-start="opacity-0 transform translate-y-2" 
+                             x-transition:enter-end="opacity-100 transform translate-y-0">
+                            <x-input-label for="studio_location" :value="__('Studio Location')" />
+                            <div x-data="{ 
+                                showStudioLocationEditor: false,
+                                updateStudioLocation(data) {
+                                    if (data.city) formData.studioLocationCity = data.city;
+                                    if (data.country) formData.studioLocationCountry = data.country;
+                                }
+                            }" @studio-location-updated.window="updateStudioLocation($event.detail)">
+                                <!-- Display current location -->
+                                <div x-show="!showStudioLocationEditor" class="mt-1">
+                                    <div class="flex items-center justify-between p-3 border-2 border-gray-800 rounded-md bg-white">
+                                        <div>
+                                            <span x-show="formData.studioLocationCity || formData.studioLocationCountry" class="text-gray-900 font-medium">
+                                                <span x-text="formData.studioLocationCity || ''"></span><span x-show="formData.studioLocationCity && formData.studioLocationCountry">, </span><span x-text="formData.studioLocationCountry || ''"></span>
+                                            </span>
+                                            <span x-show="!formData.studioLocationCity && !formData.studioLocationCountry" class="text-gray-400 italic">
+                                                <span x-show="formData.locationCity || formData.locationCountry">
+                                                    <span x-text="formData.locationCity || ''"></span><span x-show="formData.locationCity && formData.locationCountry">, </span><span x-text="formData.locationCountry || ''"></span>
+                                                    <span class="text-xs ml-2">(using main location)</span>
+                                                </span>
+                                                <span x-show="!formData.locationCity && !formData.locationCountry">No location set</span>
+                                            </span>
+                                        </div>
+                                        <button type="button" @click="showStudioLocationEditor = true" class="text-sm text-gray-600 hover:text-black underline">
+                                            Change Studio Location
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Studio location editor -->
+                                <div x-show="showStudioLocationEditor" 
+                                     x-transition
+                                     class="mt-1"
+                                     x-data="locationAutocomplete()" 
+                                     x-init="init(formData.studioLocationCountryCode || formData.locationCountryCode || '', formData.studioLocationCity || formData.locationCity || '', formData.studioLocationGeonameId || formData.locationGeonameId || null); $watch('formData.studioLocationCountryCode', value => { if (value) { selectedCountry = value; onCountryChange(); } })"
+                                     @studio-location-updated.window="if ($event.detail && $event.detail.countryCode) { selectedCountry = $event.detail.countryCode; onCountryChange(); }">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <x-input-label for="studio_location_country_code" :value="__('Country')" />
+                                            <div class="relative mt-1" 
+                                                 x-data="searchableDropdown()" 
+                                                 x-init="initCountries(@js($countriesData), formData.studioLocationCountryCode || formData.locationCountryCode || '')">
+                                                <div class="relative">
+                                                    <x-text-input 
+                                                        id="studio_location_country_code" 
+                                                        type="text" 
+                                                        x-model="searchInput"
+                                                        @input="filterCountries()"
+                                                        @focus="showDropdown = true; if(filteredCountries.length === 0 && countries.length > 0) { filteredCountries = countries.slice(0, 50); }"
+                                                        @blur="setTimeout(() => showDropdown = false, 200)"
+                                                        @keydown.arrow-down.prevent="highlightNext()"
+                                                        @keydown.arrow-up.prevent="highlightPrevious()"
+                                                        @keydown.enter.prevent="selectHighlighted()"
+                                                        @keydown.escape="showDropdown = false"
+                                                        class="block w-full pr-10" 
+                                                        placeholder="Type to search countries..." 
+                                                        autocomplete="off" />
+                                                    <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
+                                                        <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                                    </div>
+                                                </div>
+                                                <input type="hidden" name="studio_location_country_code" x-model="selectedValue" @change="formData.studioLocationCountryCode = selectedValue; const selectedCountryObj = countries.find(c => c.code === selectedValue); $dispatch('studio-location-updated', {country: selectedCountryObj ? selectedCountryObj.name : selectedValue, countryCode: selectedValue})" />
+                                                <div x-show="showDropdown && filteredCountries.length > 0" 
+                                                     x-cloak
+                                                     x-transition
+                                                     x-init="
+                                                        $watch('showDropdown', value => {
+                                                            if (value) {
+                                                                setTimeout(() => {
+                                                                    const dropdown = $el;
+                                                                    const input = document.getElementById('studio_location_country_code');
+                                                                    if (!input) return;
+                                                                    const rect = input.getBoundingClientRect();
+                                                                    const viewportHeight = window.innerHeight;
+                                                                    const spaceBelow = viewportHeight - rect.bottom;
+                                                                    const spaceAbove = rect.top;
+                                                                    
+                                                                    if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+                                                                        dropdown.classList.add('bottom-full');
+                                                                        dropdown.classList.remove('mt-1');
+                                                                        dropdown.classList.add('mb-1');
+                                                                        dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
+                                                                    } else {
+                                                                        dropdown.classList.remove('bottom-full', 'mb-1');
+                                                                        dropdown.classList.add('mt-1');
+                                                                        dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
+                                                                    }
+                                                                }, 10);
+                                                            }
+                                                        });
+                                                     "
+                                                     class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                                     style="max-height: 240px;">
+                                                    <template x-for="(country, index) in filteredCountries" :key="country.code">
+                                                        <div @click="selectCountry(country); formData.studioLocationCountryCode = country.code; $dispatch('studio-location-updated', {country: country.name, countryCode: country.code})" 
+                                                             @mouseenter="highlightedIndex = index"
+                                                             :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === country.code, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== country.code }"
+                                                             class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                            <div class="font-medium" x-text="country.name"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                                <div x-show="showDropdown && filteredCountries.length === 0" 
+                                                     x-cloak
+                                                     class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl p-4 text-center text-gray-500">
+                                                    No countries found
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <x-input-label for="studio_location_city" :value="__('City')" />
+                                            <div class="relative mt-1">
+                                                <x-text-input 
+                                                    id="studio_location_city" 
+                                                    name="studio_location_city" 
+                                                    type="text" 
+                                                    x-model="cityInput"
+                                                    @input="searchCities()"
+                                                    @focus="showSuggestions = true"
+                                                    @blur="setTimeout(() => showSuggestions = false, 200)"
+                                                    class="block w-full" 
+                                                    placeholder="Start typing city name..." 
+                                                    autocomplete="off" />
+                                                <input type="hidden" name="studio_location_geoname_id" x-model="selectedGeonameId" @change="formData.studioLocationGeonameId = selectedGeonameId" />
+                                                <input type="hidden" name="studio_location_country" x-model="selectedCountryName" @change="formData.studioLocationCountry = selectedCountryName" />
+                                                
+                                                <div x-show="showSuggestions && suggestions.length > 0" 
+                                                     x-cloak
+                                                     x-init="
+                                                        $watch('showSuggestions', value => {
+                                                            if (value) {
+                                                                setTimeout(() => {
+                                                                    const dropdown = $el;
+                                                                    const input = document.getElementById('studio_location_city');
+                                                                    if (!input) return;
+                                                                    const rect = input.getBoundingClientRect();
+                                                                    const viewportHeight = window.innerHeight;
+                                                                    const spaceBelow = viewportHeight - rect.bottom;
+                                                                    const spaceAbove = rect.top;
+                                                                    
+                                                                    if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+                                                                        dropdown.classList.add('bottom-full');
+                                                                        dropdown.classList.remove('mt-1');
+                                                                        dropdown.classList.add('mb-1');
+                                                                        dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
+                                                                    } else {
+                                                                        dropdown.classList.remove('bottom-full', 'mb-1');
+                                                                        dropdown.classList.add('mt-1');
+                                                                        dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
+                                                                    }
+                                                                }, 10);
+                                                            }
+                                                        });
+                                                     "
+                                                     class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                                     style="max-height: 240px;">
+                                                    <template x-for="(suggestion, index) in suggestions" :key="index">
+                                                        <div @click="selectCity(suggestion); formData.studioLocationGeonameId = suggestion.id; const countryParts = suggestion.label.split(', '); $dispatch('studio-location-updated', {city: suggestion.city, country: countryParts.length > 1 ? countryParts[1] : ''})" 
+                                                             class="px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                            <div class="font-medium text-black" x-text="suggestion.city"></div>
+                                                            <div class="text-sm text-gray-600" x-text="suggestion.label"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 flex items-center gap-4">
+                                        <button type="button" @click="showStudioLocationEditor = false" class="text-sm text-gray-600 hover:text-black underline">
+                                            Cancel
+                                        </button>
+                                        <button type="button" @click="showStudioLocationEditor = false" class="text-sm bg-black text-white px-4 py-2 rounded hover:bg-gray-800">
+                                            Save Location
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Optional - Where is your studio located? If not set, your main location will be used.</p>
+                            <input type="hidden" name="studio_location" :value="(formData.studioLocationCity && formData.studioLocationCountry) ? formData.studioLocationCity + ', ' + formData.studioLocationCountry : (formData.locationCity && formData.locationCountry) ? formData.locationCity + ', ' + formData.locationCountry : ''" />
+                            <x-input-error :messages="$errors?->get('studio_location') ?? []" class="mt-2" />
+                        </div>
+
+                        <!-- Available for Travel -->
+                        <div class="p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+                            <label class="flex items-center cursor-pointer">
+                                <input type="checkbox" name="available_for_travel" value="1" x-model="formData.available_for_travel" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                                <span class="ml-3 text-sm font-medium text-gray-700">Available for travel</span>
+                            </label>
+                            <p class="mt-2 ml-8 text-xs text-gray-500">Check this if you're willing to travel for photo shoots</p>
                         </div>
                     </div>
                 </div>
@@ -351,40 +696,8 @@
                     </div>
                 </div>
 
-                <!-- Step 4: Business Info -->
+                <!-- Step 4: Contact & Social -->
                 <div x-show="currentStep === 3" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-x-4" x-transition:enter-end="opacity-100 transform translate-x-0" class="bg-white shadow-lg sm:rounded-lg p-6 md:p-8 border-2 border-gray-800">
-                    <div class="mb-6">
-                        <h3 class="text-2xl font-bold text-black mb-2">Business Information</h3>
-                        <p class="text-gray-600">Tell clients about your services and availability</p>
-                    </div>
-
-                    <div class="space-y-6">
-                        <div>
-                            <x-input-label for="studio_location" :value="__('Studio Location')" />
-                            <x-text-input id="studio_location" name="studio_location" type="text" x-model="formData.studio_location" class="block mt-1 w-full" placeholder="City, Country or Address" />
-                            <p class="mt-1 text-xs text-gray-500">Optional - Where is your studio located?</p>
-                            <x-input-error :messages="$errors?->get('studio_location') ?? []" class="mt-2" />
-                        </div>
-
-                        <div class="p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
-                            <label class="flex items-center cursor-pointer">
-                                <input type="checkbox" name="available_for_travel" value="1" x-model="formData.available_for_travel" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
-                                <span class="ml-3 text-sm font-medium text-gray-700">Available for travel</span>
-                            </label>
-                            <p class="mt-2 ml-8 text-xs text-gray-500">Check this if you're willing to travel for photo shoots</p>
-                        </div>
-
-                        <div>
-                            <x-input-label for="pricing_info" :value="__('Pricing Information')" />
-                            <textarea id="pricing_info" name="pricing_info" rows="3" x-model="formData.pricing_info" class="block mt-1 w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-500 focus:ring focus:ring-gray-200 focus:ring-opacity-50" placeholder="e.g., Starting at €500 for headshots, €1500 for full-day sessions"></textarea>
-                            <p class="mt-1 text-xs text-gray-500">Optional - Give clients an idea of your pricing</p>
-                            <x-input-error :messages="$errors?->get('pricing_info') ?? []" class="mt-2" />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Step 5: Contact & Social -->
-                <div x-show="currentStep === 4" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-x-4" x-transition:enter-end="opacity-100 transform translate-x-0" class="bg-white shadow-lg sm:rounded-lg p-6 md:p-8 border-2 border-gray-800">
                     <div class="mb-6">
                         <h3 class="text-2xl font-bold text-black mb-2">Contact & Social Links</h3>
                         <p class="text-gray-600">How can people reach you?</p>
@@ -432,8 +745,8 @@
                     </div>
                 </div>
 
-                <!-- Step 6: Settings -->
-                <div x-show="currentStep === 5" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-x-4" x-transition:enter-end="opacity-100 transform translate-x-0" class="bg-white shadow-lg sm:rounded-lg p-6 md:p-8 border-2 border-gray-800">
+                <!-- Step 5: Settings -->
+                <div x-show="currentStep === 4" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-x-4" x-transition:enter-end="opacity-100 transform translate-x-0" class="bg-white shadow-lg sm:rounded-lg p-6 md:p-8 border-2 border-gray-800">
                     <div class="mb-6">
                         <h3 class="text-2xl font-bold text-black mb-2">Almost Done!</h3>
                         <p class="text-gray-600">Final settings for your profile</p>
@@ -473,7 +786,6 @@
                 <input type="hidden" name="equipment" :value="JSON.stringify(formData.equipment)" />
                 <input type="hidden" name="studio_location" x-model="formData.studio_location" />
                 <input type="hidden" name="available_for_travel" :value="formData.available_for_travel ? 1 : 0" />
-                <input type="hidden" name="pricing_info" x-model="formData.pricing_info" />
                 <input type="hidden" name="public_email" x-model="formData.public_email" />
                 <input type="hidden" name="phone" x-model="formData.phone" />
                 <input type="hidden" name="instagram" x-model="formData.instagram" />
@@ -518,7 +830,6 @@
                 { title: 'Basic Info', icon: 'user' },
                 { title: 'Professional', icon: 'briefcase' },
                 { title: 'Equipment', icon: 'camera' },
-                { title: 'Business', icon: 'store' },
                 { title: 'Contact', icon: 'envelope' },
                 { title: 'Settings', icon: 'cog' }
             ],
@@ -540,8 +851,11 @@
                     other: []
                 },
                 studio_location: '',
+                studioLocationCity: '',
+                studioLocationCountry: '',
+                studioLocationCountryCode: '',
+                studioLocationGeonameId: null,
                 available_for_travel: false,
-                pricing_info: '',
                 public_email: '',
                 phone: '',
                 instagram: '',
@@ -565,11 +879,20 @@
                         if (!is_array($equipment) || !isset($equipment['cameras'])) {
                             $equipment = ['cameras' => [], 'lenses' => [], 'lighting' => [], 'other' => []];
                         }
+                        $locationCountry = '';
+                        if ($profile->location_country_code) {
+                            $countries = config('countries', []);
+                            $locationCountry = $countries[$profile->location_country_code] ?? $profile->location_country ?? '';
+                        } else {
+                            $locationCountry = $profile->location_country ?? '';
+                        }
+                        
                         $wizardData = [
                             'bio' => $profile->bio ?? '',
                             'professional_name' => $profile->professional_name ?? '',
                             'locationCountryCode' => $profile->location_country_code ?? '',
                             'locationCity' => $profile->location_city ?? '',
+                            'locationCountry' => $locationCountry,
                             'locationGeonameId' => $profile->location_geoname_id ?? null,
                             'gender' => $profile->gender ?? '',
                             'experience_start_year' => $profile->experience_start_year ?? '',
@@ -578,8 +901,11 @@
                             'services' => $profile->services_offered ?? [],
                             'equipment' => $equipment,
                             'studio_location' => $profile->studio_location ?? '',
+                            'studioLocationCity' => ($profile->studio_location && strpos($profile->studio_location, ', ') !== false) ? explode(', ', $profile->studio_location)[0] : '',
+                            'studioLocationCountry' => ($profile->studio_location && strpos($profile->studio_location, ', ') !== false) ? explode(', ', $profile->studio_location)[1] : '',
+                            'studioLocationCountryCode' => '',
+                            'studioLocationGeonameId' => null,
                             'available_for_travel' => (bool)($profile->available_for_travel ?? false),
-                            'pricing_info' => $profile->pricing_info ?? '',
                             'public_email' => $profile->public_email ?? '',
                             'phone' => $profile->phone ?? '',
                             'instagram' => $profile->instagram ?? '',
@@ -635,6 +961,34 @@
             },
             saveProfile() {
                 document.getElementById('profileForm').submit();
+            }
+        };
+    }
+    
+    function customSelect(config) {
+        return {
+            options: config.options || [],
+            selectedValue: config.selectedValue || '',
+            selectedLabel: '',
+            showDropdown: false,
+            highlightedIndex: -1,
+            
+            init() {
+                // Find selected option and set label
+                const selected = this.options.find(opt => opt.value === this.selectedValue);
+                if (selected) {
+                    this.selectedLabel = selected.label;
+                }
+            },
+            
+            selectOption(value) {
+                this.selectedValue = value;
+                const selected = this.options.find(opt => opt.value === value);
+                this.selectedLabel = selected ? selected.label : '';
+                this.showDropdown = false;
+                if (config.onSelect) {
+                    config.onSelect(value);
+                }
             }
         };
     }
@@ -757,6 +1111,11 @@
                 this.selectedCountryName = '';
                 this.suggestions = [];
                 this.showSuggestions = false;
+                // Update selectedCountryName from countries config
+                if (this.selectedCountry) {
+                    const countries = @json(config('countries'));
+                    this.selectedCountryName = countries[this.selectedCountry] || '';
+                }
             },
             
             searchCities() {

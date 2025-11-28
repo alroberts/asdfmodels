@@ -59,6 +59,8 @@ Route::middleware('auth')->group(function () {
     // Photographer Profile Management (accessible without profile completion)
     Route::get('/profile/photographer', [\App\Http\Controllers\PhotographerProfileController::class, 'edit'])->name('photographers.profile.edit');
     Route::patch('/profile/photographer', [\App\Http\Controllers\PhotographerProfileController::class, 'update'])->name('photographers.profile.update');
+    Route::get('/profile/photographer/photos', [\App\Http\Controllers\PhotographerProfileController::class, 'photos'])->name('photographers.profile.photos');
+    Route::post('/profile/photographer/photos', [\App\Http\Controllers\PhotographerProfileController::class, 'uploadPhotos'])->name('photographers.profile.upload-photos');
     
     // Verification (accessible without profile completion)
     Route::get('/verification', [\App\Http\Controllers\VerificationController::class, 'create'])->name('verification.create');

@@ -60,6 +60,16 @@ class AuthenticatedSessionController extends Controller
      */
     protected function redirectToProfileCompletion($user): RedirectResponse
     {
+        // Admins skip profile completion and email verification
+        if ($user->is_admin) {
+            return redirect()->intended(route('dashboard', absolute: false));
+        }
+
+        // Check if email is verified
+        if (!$user->hasVerifiedEmail()) {
+            return redirect()->route('verification.notice');
+        }
+
         // Check if user needs to complete profile
         if ($user->is_photographer) {
             // Photographer - check if profile exists

@@ -35,6 +35,7 @@ class PhotographerProfile extends Model
         'twitter',
         'profile_photo_path',
         'cover_photo_path',
+        'logo_path',
         'is_public',
         'contains_nudity',
     ];

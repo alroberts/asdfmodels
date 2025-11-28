@@ -22,7 +22,17 @@ class PhpMailTransport extends AbstractTransport
         
         // Get headers
         $headers = [];
-        $headers[] = 'From: ' . $this->formatAddress($email->getFrom()[0] ?? null);
+        $fromAddress = $email->getFrom()[0] ?? null;
+        $fromEmail = $fromAddress ? $fromAddress->getAddress() : null;
+        
+        // Set From header
+        $headers[] = 'From: ' . $this->formatAddress($fromAddress);
+        
+        // Set Return-Path to match From address to avoid policy violations
+        // This ensures the envelope sender matches the From header
+        if ($fromEmail) {
+            $headers[] = 'Return-Path: <' . $fromEmail . '>';
+        }
         
         if ($email->getReplyTo()) {
             $headers[] = 'Reply-To: ' . $this->formatAddress($email->getReplyTo()[0]);
@@ -37,8 +47,8 @@ class PhpMailTransport extends AbstractTransport
         }
         
         $headers[] = 'MIME-Version: 1.0';
-        $headers[] = 'Content-Type: text/plain; charset=UTF-8';
         
+        // Set Content-Type header only once, based on whether HTML content exists
         if ($email->getHtmlBody()) {
             $boundary = uniqid('boundary_');
             $headers[] = 'Content-Type: multipart/alternative; boundary="' . $boundary . '"';
@@ -50,12 +60,24 @@ class PhpMailTransport extends AbstractTransport
             $body .= "Content-Type: text/html; charset=UTF-8\r\n\r\n";
             $body .= $email->getHtmlBody();
             $body .= "\r\n\r\n--{$boundary}--";
+        } else {
+            // Plain text only
+            $headers[] = 'Content-Type: text/plain; charset=UTF-8';
         }
         
         $headerString = implode("\r\n", $headers);
         
         // Use PHP's native mail() function
-        $result = @mail($to, $subject, $body, $headerString);
+        // The -f parameter sets the envelope sender (Return-Path) to match the From address
+        // This prevents policy violations when the email is relayed through external SMTP servers
+        // Format: "-f email@address.com" (space after -f is required)
+        $additionalParams = '';
+        if ($fromEmail) {
+            // Escape the email address for shell safety, but keep the -f format correct
+            $additionalParams = '-f ' . escapeshellarg($fromEmail);
+        }
+        
+        $result = @mail($to, $subject, $body, $headerString, $additionalParams);
         
         if (!$result) {
             throw new \RuntimeException('Failed to send email using PHP mail() function');

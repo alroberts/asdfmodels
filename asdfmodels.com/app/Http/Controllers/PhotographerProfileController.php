@@ -143,6 +143,10 @@ class PhotographerProfileController extends Controller
             'services_offered' => ['nullable', 'array'],
             'services_offered.*' => ['string', 'max:100'], // Lenient - we filter invalid ones below
             'studio_location' => ['nullable', 'string', 'max:255'],
+            'studio_location_city' => ['nullable', 'string', 'max:255'],
+            'studio_location_country' => ['nullable', 'string', 'max:255'],
+            'studio_location_geoname_id' => ['nullable', 'integer', 'exists:geonames_locations,geoname_id'],
+            'studio_location_country_code' => ['nullable', 'string', 'size:2'],
             'available_for_travel' => ['boolean'],
             'pricing_info' => ['nullable', 'string', 'max:1000'],
             
@@ -174,12 +178,128 @@ class PhotographerProfileController extends Controller
             }
         }
 
+        // Handle studio location - build from city and country if provided
+        if (isset($validated['studio_location_geoname_id']) && $validated['studio_location_geoname_id']) {
+            $studioLocation = \App\Models\GeoNameLocation::find($validated['studio_location_geoname_id']);
+            if ($studioLocation) {
+                $validated['studio_location_city'] = $studioLocation->name;
+                $countries = config('countries', []);
+                $validated['studio_location_country'] = $countries[$studioLocation->country_code] ?? $studioLocation->country_code;
+            }
+        }
+        
+        // Build studio_location string from city and country
+        if (isset($validated['studio_location_city']) && isset($validated['studio_location_country'])) {
+            $validated['studio_location'] = $validated['studio_location_city'] . ', ' . $validated['studio_location_country'];
+        } elseif (isset($validated['studio_location_city']) || isset($validated['studio_location_country'])) {
+            $validated['studio_location'] = trim(($validated['studio_location_city'] ?? '') . ', ' . ($validated['studio_location_country'] ?? ''));
+        }
+
+        // Check if this is a new profile (wizard completion)
+        $isNewProfile = !$user->photographerProfile || !$user->photographerProfile->exists;
+        $isWizardCompletion = $request->has('wizard_completion') && $isNewProfile;
+
         $profile = $user->photographerProfile ?? new PhotographerProfile();
         $profile->user_id = $user->id;
         $profile->fill($validated);
         $profile->save();
 
+        if ($isWizardCompletion) {
+            return redirect()->route('photographers.profile.photos')
+                ->with('status', 'Profile created successfully! Now add your photos.');
+        }
+
         return redirect()->route('photographers.profile.edit')
             ->with('status', 'Profile updated successfully.');
+    }
+
+    /**
+     * Show the photo/logo upload page after wizard completion.
+     */
+    public function photos(): View
+    {
+        $user = Auth::user();
+        
+        if (!$user->is_photographer) {
+            abort(403, 'Only photographers can access this page.');
+        }
+
+        $profile = $user->photographerProfile;
+        
+        if (!$profile) {
+            return redirect()->route('photographers.profile.edit', ['wizard' => true])
+                ->with('error', 'Please complete your profile first.');
+        }
+
+        return view('photographers.photos', [
+            'user' => $user,
+            'profile' => $profile,
+        ]);
+    }
+
+    /**
+     * Handle photo and logo uploads.
+     */
+    public function uploadPhotos(Request $request): RedirectResponse
+    {
+        $user = Auth::user();
+
+        if (!$user->is_photographer) {
+            abort(403, 'Only photographers can upload photos.');
+        }
+
+        $profile = $user->photographerProfile;
+        
+        if (!$profile) {
+            return redirect()->route('photographers.profile.edit', ['wizard' => true])
+                ->with('error', 'Please complete your profile first.');
+        }
+
+        $validated = $request->validate([
+            'profile_photo' => ['nullable', 'image', 'mimes:jpeg,jpg,png', 'max:5120'], // 5MB max
+            'logo' => ['nullable', 'image', 'mimes:jpeg,jpg,png,svg', 'max:2048'], // 2MB max for logo
+        ]);
+
+        $userFolder = public_path("uploads/photographers/{$user->id}");
+
+        // Create directories if they don't exist
+        if (!file_exists($userFolder)) {
+            mkdir($userFolder, 0755, true);
+        }
+
+        // Handle profile photo upload
+        if ($request->hasFile('profile_photo')) {
+            $file = $request->file('profile_photo');
+            $filename = 'profile_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $path = "uploads/photographers/{$user->id}/{$filename}";
+            
+            // Delete old profile photo if exists
+            if ($profile->profile_photo_path && file_exists(public_path($profile->profile_photo_path))) {
+                unlink(public_path($profile->profile_photo_path));
+            }
+            
+            $file->move($userFolder, $filename);
+            $profile->profile_photo_path = $path;
+        }
+
+        // Handle logo upload (only if professional_name is set)
+        if ($request->hasFile('logo') && $profile->professional_name) {
+            $file = $request->file('logo');
+            $filename = 'logo_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $path = "uploads/photographers/{$user->id}/{$filename}";
+            
+            // Delete old logo if exists
+            if ($profile->logo_path && file_exists(public_path($profile->logo_path))) {
+                unlink(public_path($profile->logo_path));
+            }
+            
+            $file->move($userFolder, $filename);
+            $profile->logo_path = $path;
+        }
+
+        $profile->save();
+
+        return redirect()->route('photographers.portfolio.create')
+            ->with('status', 'Photos uploaded successfully! Now create your portfolio.');
     }
 }

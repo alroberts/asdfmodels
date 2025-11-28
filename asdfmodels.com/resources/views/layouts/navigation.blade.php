@@ -15,6 +15,17 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         {{ __('Dashboard') }}
                     </x-nav-link>
+                    @auth
+                        @if(Auth::user()->is_photographer)
+                            <x-nav-link :href="route('photographers.profile.edit')" :active="request()->routeIs('photographers.profile.*')">
+                                {{ __('Edit Profile') }}
+                            </x-nav-link>
+                        @else
+                            <x-nav-link :href="route('profile.model.edit')" :active="request()->routeIs('profile.model.*')">
+                                {{ __('Edit Profile') }}
+                            </x-nav-link>
+                        @endif
+                    @endauth
                 </div>
             </div>
 
@@ -70,6 +81,17 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+            @auth
+                @if(Auth::user()->is_photographer)
+                    <x-responsive-nav-link :href="route('photographers.profile.edit')" :active="request()->routeIs('photographers.profile.*')">
+                        {{ __('Edit Profile') }}
+                    </x-responsive-nav-link>
+                @else
+                    <x-responsive-nav-link :href="route('profile.model.edit')" :active="request()->routeIs('profile.model.*')">
+                        {{ __('Edit Profile') }}
+                    </x-responsive-nav-link>
+                @endif
+            @endauth
         </div>
 
         <!-- Responsive Settings Options -->

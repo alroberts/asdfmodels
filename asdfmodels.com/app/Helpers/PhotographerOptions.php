@@ -21,33 +21,22 @@ class PhotographerOptions
             // Table might not exist yet, fall back to hardcoded
         }
 
-        // Fallback to hardcoded values
+        // Fallback to hardcoded values (focused on modeling/photographer networking)
         return [
             'fashion' => 'Fashion',
             'portrait' => 'Portrait',
-            'wedding' => 'Wedding',
             'commercial' => 'Commercial',
             'editorial' => 'Editorial',
             'beauty' => 'Beauty',
             'boudoir' => 'Boudoir',
+            'nude' => 'Nude',
             'fine-art' => 'Fine Art',
-            'landscape' => 'Landscape',
-            'street' => 'Street',
-            'sports' => 'Sports',
-            'wildlife' => 'Wildlife',
-            'architecture' => 'Architecture',
             'product' => 'Product',
-            'food' => 'Food',
             'event' => 'Event',
-            'corporate' => 'Corporate',
             'headshot' => 'Headshot',
             'maternity' => 'Maternity',
-            'newborn' => 'Newborn',
-            'family' => 'Family',
             'lifestyle' => 'Lifestyle',
-            'travel' => 'Travel',
             'underwater' => 'Underwater',
-            'aerial' => 'Aerial',
         ];
     }
 
@@ -65,28 +54,16 @@ class PhotographerOptions
             // Table might not exist yet, fall back to hardcoded
         }
 
-        // Fallback to hardcoded values
+        // Fallback to hardcoded values (services offered by photographers)
         return [
-            'headshots' => 'Headshots',
-            'portraits' => 'Portraits',
-            'wedding-photography' => 'Wedding Photography',
-            'event-photography' => 'Event Photography',
-            'commercial-photography' => 'Commercial Photography',
-            'fashion-photography' => 'Fashion Photography',
-            'editorial-photography' => 'Editorial Photography',
-            'product-photography' => 'Product Photography',
-            'real-estate-photography' => 'Real Estate Photography',
-            'food-photography' => 'Food Photography',
-            'boudoir-photography' => 'Boudoir Photography',
-            'maternity-photography' => 'Maternity Photography',
-            'newborn-photography' => 'Newborn Photography',
-            'family-photography' => 'Family Photography',
-            'corporate-headshots' => 'Corporate Headshots',
+            'studio-photo-sessions' => 'Studio Photo Sessions',
+            'on-location-photo-sessions' => 'On-Location Photo Sessions',
             'studio-rental' => 'Studio Rental',
             'photo-editing' => 'Photo Editing',
             'retouching' => 'Retouching',
             'video-production' => 'Video Production',
-            'drone-photography' => 'Drone Photography',
+            'consultation' => 'Consultation',
+            'workshop' => 'Workshop',
         ];
     }
 

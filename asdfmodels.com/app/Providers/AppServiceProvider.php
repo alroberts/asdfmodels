@@ -24,13 +24,16 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Configure mail dynamically from settings
-        if (!app()->runningInConsole() || app()->runningUnitTests()) {
-            try {
-                \App\Services\MailConfigService::configure();
-            } catch (\Exception $e) {
-                // If settings table doesn't exist yet, use defaults
-            }
+        // Configure mail dynamically from database settings
+        // This is the SINGLE POINT of configuration for ALL emails in the application
+        // When SMTP is selected, ALL emails (verification, 2FA, test, etc.) will use SMTP
+        // When sendmail is selected, ALL emails will use sendmail
+        // The From address is set globally here and used by all emails
+        try {
+            \App\Services\MailConfigService::configure();
+        } catch (\Exception $e) {
+            // If settings table doesn't exist yet, use defaults
+            \Log::warning('Mail configuration failed in AppServiceProvider: ' . $e->getMessage());
         }
     }
 }

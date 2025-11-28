@@ -122,4 +122,61 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->hasMany(PhotographerPortfolioImage::class, 'photographer_id');
     }
+
+    /**
+     * Send the email verification notification.
+     * Mail configuration is handled centrally in AppServiceProvider.
+     */
+    public function sendEmailVerificationNotification()
+    {
+        // Don't send verification emails to admins - they're auto-verified
+        if ($this->is_admin) {
+            return;
+        }
+
+        // Mail configuration is already set in AppServiceProvider boot()
+        // All emails will use the configured mailer (SMTP, sendmail, etc.)
+        try {
+            $this->notify(new \App\Notifications\VerifyEmail);
+        } catch (\Exception $e) {
+            \Log::error('Failed to send email verification notification: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            throw $e;
+        }
+    }
+
+    /**
+     * Send the password reset notification.
+     * Uses unified mail configuration from database settings.
+     */
+    public function sendPasswordResetNotification($token)
+    {
+        // Mail configuration is already set in AppServiceProvider boot()
+        // All emails will use the configured mailer (SMTP, sendmail, etc.)
+        $this->notify(new \App\Notifications\ResetPassword($token));
+    }
+
+    /**
+     * Determine if the user has verified their email address.
+     * Admins are considered verified automatically.
+     */
+    public function hasVerifiedEmail(): bool
+    {
+        // Admins are always considered verified
+        if ($this->is_admin) {
+            return true;
+        }
+
+        return ! is_null($this->email_verified_at);
+    }
+
+    /**
+     * Mark the email address as verified.
+     */
+    public function markEmailAsVerified(): bool
+    {
+        return $this->forceFill([
+            'email_verified_at' => $this->freshTimestamp(),
+        ])->save();
+    }
 }

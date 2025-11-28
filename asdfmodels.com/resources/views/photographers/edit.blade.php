@@ -4,6 +4,16 @@
             {{ __('Photographer Profile') }}
         </h2>
     </x-slot>
+    
+    @push('styles')
+    <!-- Cropper.js CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
+    @endpush
+    
+    @push('scripts')
+    <!-- Cropper.js JS -->
+    <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+    @endpush
 
     <div class="py-12">
         <div class="max-w-6xl mx-auto sm:px-6 lg:px-8">
@@ -146,177 +156,301 @@
                             <div>
                                 <h3 class="text-xl font-bold text-black mb-4">Basic Information</h3>
                                 
-                                <div class="mb-6">
-                                    <x-input-label for="bio" :value="__('Bio')" />
-                                    <textarea id="bio" name="bio" rows="5" class="block mt-1 w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 text-gray-900 placeholder-gray-400" placeholder="Tell us about yourself and your photography style...">{{ old('bio', $profile->bio) }}</textarea>
-                                    <x-input-error :messages="$errors->get('bio')" class="mt-2" />
-                                </div>
-
                                 @php
                                     $countriesData = config('countries');
                                     $hasLocation = ($profile->location_country_code || $profile->location_city);
                                     $displayCountry = $profile->location_country_code ? ($countriesData[$profile->location_country_code] ?? $profile->location_country ?? '') : '';
                                     $displayCity = $profile->location_city ?? '';
+                                    $displayLocation = trim(($displayCity ? $displayCity . ', ' : '') . ($displayCountry ?: ''));
                                 @endphp
 
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6" 
-                                     x-data="{ 
-                                         editingLocation: false,
-                                         init() {
-                                             this.editingLocation = !@js($hasLocation);
-                                         }
-                                     }">
-                                    <div>
-                                        <x-input-label for="location_country_code" :value="__('Country')" />
-                                        <div x-show="!editingLocation && @js($hasLocation)" class="mt-1">
-                                            <div class="flex items-center justify-between p-3 border-2 border-gray-300 rounded-md bg-gray-50">
-                                                <span class="text-gray-900 font-medium">@js($displayCountry ?: 'Not set')</span>
-                                                <button type="button" @click="editingLocation = true" class="text-sm text-gray-600 hover:text-black underline">
-                                                    <i class="fas fa-edit mr-1"></i>Edit
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div x-show="editingLocation || !@js($hasLocation)" 
-                                             x-transition
-                                             class="relative mt-1" 
-                                             x-data="searchableDropdown()" 
-                                             x-init="initCountries(@js($countriesData), '{{ old('location_country_code', $profile->location_country_code) }}')">
-                                            <div class="relative">
-                                                <x-text-input 
-                                                    id="location_country_code" 
-                                                    type="text" 
-                                                    x-model="searchInput"
-                                                    @input="filterCountries()"
-                                                    @focus="showDropdown = true; if(filteredCountries.length === 0 && countries.length > 0) { filteredCountries = countries.slice(0, 50); }"
-                                                    @blur="setTimeout(() => showDropdown = false, 200)"
-                                                    @keydown.arrow-down.prevent="highlightNext()"
-                                                    @keydown.arrow-up.prevent="highlightPrevious()"
-                                                    @keydown.enter.prevent="selectHighlighted()"
-                                                    @keydown.escape="showDropdown = false"
-                                                    class="block w-full pr-10" 
-                                                    placeholder="Type to search countries..." 
-                                                    autocomplete="off" />
-                                                <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
-                                                    <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                <!-- Contact Card Layout -->
+                                <div class="bg-white border-2 border-gray-800 rounded-lg p-6 md:p-8">
+                                    <div class="flex flex-col md:flex-row gap-6 md:gap-8">
+                                        <!-- Left: Profile Photo and Logo -->
+                                        <div class="flex-shrink-0 flex flex-col items-center gap-4">
+                                            <div x-data="imageCropper('profile_photo', false)">
+                                                <div class="relative group cursor-pointer" @click="$refs.profilePhotoInput.click()">
+                                                    <div class="relative w-32 h-32 md:w-40 md:h-40 rounded-lg border-2 border-gray-800 overflow-hidden bg-gray-100">
+                                                        @if($profile->profile_photo_path)
+                                                            <img src="{{ asset($profile->profile_photo_path) }}" alt="Profile photo" class="w-full h-full object-cover" x-show="!previewUrl">
+                                                        @else
+                                                            <div class="w-full h-full flex items-center justify-center bg-gray-200">
+                                                                <i class="fas fa-user text-4xl text-gray-400"></i>
+                                                            </div>
+                                                        @endif
+                                                        <img x-show="previewUrl" :src="previewUrl" alt="Preview" class="w-full h-full object-cover absolute inset-0">
+                                                        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex items-center justify-center">
+                                                            <span class="text-white opacity-0 group-hover:opacity-100 transition-opacity text-sm font-medium">
+                                                                <i class="fas fa-camera mr-1"></i>Change Photo
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <input type="file" x-ref="profilePhotoInput" id="profile_photo" name="profile_photo" @change="handleFileSelect($event)" accept="image/jpeg,image/jpg,image/png,image/heic,image/heif" style="display: none;">
+                                                    <input type="hidden" name="profile_photo_crop_data" x-model="cropData" />
+                                                    
+                                                    <!-- Crop Modal -->
+                                                    <div x-show="showCropModal" x-cloak class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+                                                        <div class="bg-white rounded-lg p-6 w-full max-w-5xl max-h-[95vh] flex flex-col" @click.stop>
+                                                            <h4 class="text-xl font-bold mb-2">Crop Your Photo</h4>
+                                                            <p class="text-sm text-gray-600 mb-4">Drag the crop area to position your photo. Drag the handles to resize.</p>
+                                                            <div class="flex-1 overflow-auto flex items-center justify-center" style="min-height: 500px; max-height: calc(95vh - 200px);">
+                                                                <div class="w-full" style="max-width: 800px;">
+                                                                    <img x-ref="cropImage" style="display: block; max-width: 100%; max-height: 70vh;" @load="initCropper()">
+                                                                </div>
+                                                            </div>
+                                                            <div class="mt-4 flex justify-end gap-4">
+                                                                <button type="button" @click="cancelCrop()" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">Cancel</button>
+                                                                <button type="button" @click="applyCrop()" class="px-4 py-2 bg-black text-white rounded hover:bg-gray-800">Apply Crop</button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <input type="hidden" name="location_country_code" x-model="selectedValue" />
-                                            <div x-show="showDropdown && filteredCountries.length > 0" 
-                                                 x-cloak
-                                                 x-transition
-                                                 x-init="
-                                                    $watch('showDropdown', value => {
-                                                        if (value) {
-                                                            setTimeout(() => {
-                                                                const dropdown = $el;
-                                                                const input = dropdown.previousElementSibling.querySelector('input');
-                                                                const rect = input.getBoundingClientRect();
-                                                                const viewportHeight = window.innerHeight;
-                                                                const spaceBelow = viewportHeight - rect.bottom;
-                                                                const spaceAbove = rect.top;
-                                                                
-                                                                if (spaceBelow < 200 && spaceAbove > spaceBelow) {
-                                                                    dropdown.classList.add('bottom-full');
-                                                                    dropdown.classList.remove('mt-1');
-                                                                    dropdown.classList.add('mb-1');
-                                                                    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
-                                                                } else {
-                                                                    dropdown.classList.remove('bottom-full', 'mb-1');
-                                                                    dropdown.classList.add('mt-1');
-                                                                    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
-                                                                }
-                                                            }, 10);
-                                                        }
-                                                    });
-                                                 "
-                                                 class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
-                                                 style="max-height: 240px;">
-                                                <template x-for="(country, index) in filteredCountries" :key="country.code">
-                                                    <div @click="selectCountry(country); $dispatch('location-updated', {country: country.code})" 
-                                                         @mouseenter="highlightedIndex = index"
-                                                         :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === country.code, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== country.code }"
-                                                         class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
-                                                        <div class="font-medium" x-text="country.name"></div>
-                                                    </div>
-                                                </template>
-                                            </div>
-                                            <div x-show="showDropdown && filteredCountries.length === 0" 
-                                                 x-cloak
-                                                 class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl p-4 text-center text-gray-500">
-                                                No countries found
-                                            </div>
-                                        </div>
-                                        <x-input-error :messages="$errors->get('location_country_code')" class="mt-2" />
-                                    </div>
-
-                                    <div>
-                                        <x-input-label for="location_city" :value="__('City')" />
-                                        <div x-show="!editingLocation && @js($hasLocation)" class="mt-1">
-                                            <div class="flex items-center justify-between p-3 border-2 border-gray-300 rounded-md bg-gray-50">
-                                                <span class="text-gray-900 font-medium">@js($displayCity ?: 'Not set')</span>
-                                                <button type="button" @click="editingLocation = true" class="text-sm text-gray-600 hover:text-black underline">
-                                                    <i class="fas fa-edit mr-1"></i>Edit
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div x-show="editingLocation || !@js($hasLocation)" 
-                                             x-transition
-                                             class="relative mt-1"
-                                             x-data="locationAutocomplete()" 
-                                             x-init="init('{{ old('location_country_code', $profile->location_country_code) }}', '{{ old('location_city', $profile->location_city) }}', {{ old('location_geoname_id', $profile->location_geoname_id ?? 'null') }})">
-                                            <x-text-input 
-                                                id="location_city" 
-                                                name="location_city" 
-                                                type="text" 
-                                                x-model="cityInput"
-                                                @input="searchCities()"
-                                                @focus="showSuggestions = true"
-                                                @blur="setTimeout(() => showSuggestions = false, 200)"
-                                                class="block w-full" 
-                                                placeholder="Start typing city name..." 
-                                                autocomplete="off" />
-                                            <input type="hidden" name="location_geoname_id" x-model="selectedGeonameId" />
-                                            <input type="hidden" name="location_country" x-model="selectedCountryName" />
                                             
-                                            <div x-show="showSuggestions && suggestions.length > 0" 
-                                                 x-cloak
-                                                 x-init="
-                                                    $watch('showSuggestions', value => {
-                                                        if (value) {
-                                                            setTimeout(() => {
-                                                                const dropdown = $el;
-                                                                const input = dropdown.previousElementSibling.previousElementSibling;
-                                                                const rect = input.getBoundingClientRect();
-                                                                const viewportHeight = window.innerHeight;
-                                                                const spaceBelow = viewportHeight - rect.bottom;
-                                                                const spaceAbove = rect.top;
-                                                                
-                                                                if (spaceBelow < 200 && spaceAbove > spaceBelow) {
-                                                                    dropdown.classList.add('bottom-full');
-                                                                    dropdown.classList.remove('mt-1');
-                                                                    dropdown.classList.add('mb-1');
-                                                                    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
-                                                                } else {
-                                                                    dropdown.classList.remove('bottom-full', 'mb-1');
-                                                                    dropdown.classList.add('mt-1');
-                                                                    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
-                                                                }
-                                                            }, 10);
-                                                        }
-                                                    });
-                                                 "
-                                                 class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
-                                                 style="max-height: 240px;">
-                                                <template x-for="(suggestion, index) in suggestions" :key="index">
-                                                    <div @click="selectCity(suggestion); $dispatch('location-updated', {city: suggestion.city, geonameId: suggestion.id})" 
-                                                         class="px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
-                                                        <div class="font-medium text-black" x-text="suggestion.city"></div>
-                                                        <div class="text-sm text-gray-600" x-text="suggestion.label"></div>
+                                            <!-- Company Logo -->
+                                            @if($profile->logo_path)
+                                            <div x-data="logoUploader()" class="w-32 h-32 md:w-40 md:h-40">
+                                                <img src="{{ asset($profile->logo_path) }}" alt="Company logo" class="w-full h-full object-contain cursor-pointer hover:opacity-75 transition-opacity" @click="$refs.logoInput.click()">
+                                                <input type="file" x-ref="logoInput" id="logo" name="logo" accept="image/jpeg,image/jpg,image/png" style="display: none;" @change="handleFileSelect($event)">
+                                            </div>
+                                            @else
+                                            <div x-data="logoUploader()" class="w-32 h-32 md:w-40 md:h-40">
+                                                <div class="w-full h-full border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-gray-500 transition-colors bg-gray-50" @click="$refs.logoInput.click()" title="Add company logo">
+                                                    <i class="fas fa-image text-gray-400 text-2xl"></i>
+                                                </div>
+                                                <input type="file" x-ref="logoInput" id="logo" name="logo" accept="image/jpeg,image/jpg,image/png" style="display: none;" @change="handleFileSelect($event)">
+                                            </div>
+                                            @endif
+                                        </div>
+
+                                        <!-- Right: Contact Info -->
+                                        <div class="flex-1 space-y-4">
+                                            <!-- Name -->
+                                            <div class="group relative" 
+                                                 x-data="{ editing: false, value: '{{ old('name', $user->name) }}' }">
+                                                <div class="flex items-center justify-between">
+                                                    <div class="flex-1">
+                                                        <div x-show="!editing" 
+                                                             @click="editing = true"
+                                                             class="cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
+                                                            <div class="text-xs text-gray-500 mb-1">Name</div>
+                                                            <div class="text-xl font-bold text-black" x-text="value || 'Click to add name'"></div>
+                                                        </div>
+                                                        <div x-show="editing" x-transition class="relative">
+                                                            <x-text-input 
+                                                                type="text" 
+                                                                x-model="value"
+                                                                @blur="editing = false"
+                                                                @keydown.enter="editing = false"
+                                                                @keydown.escape="editing = false; value = '{{ old('name', $user->name) }}'"
+                                                                class="block w-full text-xl font-bold" 
+                                                                placeholder="Your name"
+                                                                autofocus />
+                                                            <input type="hidden" name="name" x-model="value" />
+                                                        </div>
                                                     </div>
-                                                </template>
+                                                </div>
+                                            </div>
+
+                                            <!-- Company Name -->
+                                            <div class="group relative" 
+                                                 x-data="{ editing: false, value: '{{ old('professional_name', $profile->professional_name ?? '') }}' }">
+                                                <div x-show="!editing" 
+                                                     @click="editing = true"
+                                                     class="cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
+                                                    <div class="text-xs text-gray-500 mb-1">Company</div>
+                                                    <div class="text-lg font-semibold text-gray-700" x-text="value || 'Click to add company name'"></div>
+                                                </div>
+                                                <div x-show="editing" x-transition class="relative">
+                                                    <x-text-input 
+                                                        type="text" 
+                                                        x-model="value"
+                                                        @blur="editing = false"
+                                                        @keydown.enter="editing = false"
+                                                        @keydown.escape="editing = false; value = '{{ old('professional_name', $profile->professional_name ?? '') }}'"
+                                                        class="block w-full text-lg font-semibold" 
+                                                        placeholder="Company name"
+                                                        autofocus />
+                                                    <input type="hidden" name="professional_name" x-model="value" />
+                                                </div>
+                                            </div>
+
+                                            <!-- Location -->
+                                            <div class="group relative" 
+                                                 x-data="{ 
+                                                     editing: false,
+                                                     init() {
+                                                         this.editing = !@js($hasLocation);
+                                                     }
+                                                 }">
+                                                <div x-show="!editing && @js($hasLocation)" 
+                                                     @click="editing = true"
+                                                     class="cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
+                                                    <div class="text-xs text-gray-500 mb-1">Location</div>
+                                                    <div class="text-base text-gray-700">{{ $displayLocation ?: 'Not set' }}</div>
+                                                </div>
+                                                <div x-show="editing || !@js($hasLocation)" 
+                                                     x-transition
+                                                     class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <div class="text-xs text-gray-500 mb-1">Country</div>
+                                                        <div class="relative" 
+                                                             x-data="searchableDropdown()" 
+                                                             x-init="initCountries(@js($countriesData), '{{ old('location_country_code', $profile->location_country_code) }}')">
+                                                            <div class="relative">
+                                                                <x-text-input 
+                                                                    id="location_country_code" 
+                                                                    type="text" 
+                                                                    x-model="searchInput"
+                                                                    @input="filterCountries()"
+                                                                    @focus="showDropdown = true; if(filteredCountries.length === 0 && countries.length > 0) { filteredCountries = countries.slice(0, 50); }"
+                                                                    @blur="setTimeout(() => showDropdown = false, 200)"
+                                                                    @keydown.arrow-down.prevent="highlightNext()"
+                                                                    @keydown.arrow-up.prevent="highlightPrevious()"
+                                                                    @keydown.enter.prevent="selectHighlighted()"
+                                                                    @keydown.escape="showDropdown = false"
+                                                                    class="block w-full pr-10" 
+                                                                    placeholder="Type to search countries..." 
+                                                                    autocomplete="off" />
+                                                                <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
+                                                                    <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                                                </div>
+                                                            </div>
+                                                            <input type="hidden" name="location_country_code" x-model="selectedValue" />
+                                                            <div x-show="showDropdown && filteredCountries.length > 0" 
+                                                                 x-cloak
+                                                                 x-transition
+                                                                 x-init="
+                                                                    $watch('showDropdown', value => {
+                                                                        if (value) {
+                                                                            setTimeout(() => {
+                                                                                const dropdown = $el;
+                                                                                const input = dropdown.previousElementSibling.querySelector('input');
+                                                                                const rect = input.getBoundingClientRect();
+                                                                                const viewportHeight = window.innerHeight;
+                                                                                const spaceBelow = viewportHeight - rect.bottom;
+                                                                                const spaceAbove = rect.top;
+                                                                                
+                                                                                if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+                                                                                    dropdown.classList.add('bottom-full');
+                                                                                    dropdown.classList.remove('mt-1');
+                                                                                    dropdown.classList.add('mb-1');
+                                                                                    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
+                                                                                } else {
+                                                                                    dropdown.classList.remove('bottom-full', 'mb-1');
+                                                                                    dropdown.classList.add('mt-1');
+                                                                                    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
+                                                                                }
+                                                                            }, 10);
+                                                                        }
+                                                                    });
+                                                                 "
+                                                                 class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                                                 style="max-height: 240px;">
+                                                                <template x-for="(country, index) in filteredCountries" :key="country.code">
+                                                                    <div @click="selectCountry(country); $dispatch('location-updated', {country: country.code})" 
+                                                                         @mouseenter="highlightedIndex = index"
+                                                                         :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === country.code, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== country.code }"
+                                                                         class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                                        <div class="font-medium" x-text="country.name"></div>
+                                                                    </div>
+                                                                </template>
+                                                            </div>
+                                                            <div x-show="showDropdown && filteredCountries.length === 0" 
+                                                                 x-cloak
+                                                                 class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl p-4 text-center text-gray-500">
+                                                                No countries found
+                                                            </div>
+                                                        </div>
+                                                        <x-input-error :messages="$errors->get('location_country_code')" class="mt-2" />
+                                                    </div>
+
+                                                    <div>
+                                                        <div class="text-xs text-gray-500 mb-1">City</div>
+                                                        <div class="relative"
+                                                             x-data="locationAutocomplete()" 
+                                                             x-init="init('{{ old('location_country_code', $profile->location_country_code) }}', '{{ old('location_city', $profile->location_city) }}', {{ old('location_geoname_id', $profile->location_geoname_id ?? 'null') }})">
+                                                            <x-text-input 
+                                                                id="location_city" 
+                                                                name="location_city" 
+                                                                type="text" 
+                                                                x-model="cityInput"
+                                                                @input="searchCities()"
+                                                                @focus="showSuggestions = true"
+                                                                @blur="setTimeout(() => showSuggestions = false, 200)"
+                                                                class="block w-full" 
+                                                                placeholder="Start typing city name..." 
+                                                                autocomplete="off" />
+                                                            <input type="hidden" name="location_geoname_id" x-model="selectedGeonameId" />
+                                                            <input type="hidden" name="location_country" x-model="selectedCountryName" />
+                                                            
+                                                            <div x-show="showSuggestions && suggestions.length > 0" 
+                                                                 x-cloak
+                                                                 x-init="
+                                                                    $watch('showSuggestions', value => {
+                                                                        if (value) {
+                                                                            setTimeout(() => {
+                                                                                const dropdown = $el;
+                                                                                const input = dropdown.previousElementSibling.previousElementSibling;
+                                                                                const rect = input.getBoundingClientRect();
+                                                                                const viewportHeight = window.innerHeight;
+                                                                                const spaceBelow = viewportHeight - rect.bottom;
+                                                                                const spaceAbove = rect.top;
+                                                                                
+                                                                                if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+                                                                                    dropdown.classList.add('bottom-full');
+                                                                                    dropdown.classList.remove('mt-1');
+                                                                                    dropdown.classList.add('mb-1');
+                                                                                    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
+                                                                                } else {
+                                                                                    dropdown.classList.remove('bottom-full', 'mb-1');
+                                                                                    dropdown.classList.add('mt-1');
+                                                                                    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
+                                                                                }
+                                                                            }, 10);
+                                                                        }
+                                                                    });
+                                                                 "
+                                                                 class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                                                 style="max-height: 240px;">
+                                                                <template x-for="(suggestion, index) in suggestions" :key="index">
+                                                                    <div @click="selectCity(suggestion); $dispatch('location-updated', {city: suggestion.city, geonameId: suggestion.id})" 
+                                                                         class="px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                                        <div class="font-medium text-black" x-text="suggestion.city"></div>
+                                                                        <div class="text-sm text-gray-600" x-text="suggestion.label"></div>
+                                                                    </div>
+                                                                </template>
+                                                            </div>
+                                                        </div>
+                                                        <x-input-error :messages="$errors->get('location_city')" class="mt-2" />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Bio -->
+                                            <div class="group relative" 
+                                                 x-data="{ editing: false, value: '{{ old('bio', $profile->bio) }}' }">
+                                                <div x-show="!editing" 
+                                                     @click="editing = true"
+                                                     class="cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
+                                                    <div class="text-xs text-gray-500 mb-1">Bio</div>
+                                                    <div class="text-sm text-gray-700 whitespace-pre-line" x-text="value || 'Click to add bio'"></div>
+                                                </div>
+                                                <div x-show="editing" x-transition class="relative">
+                                                    <textarea 
+                                                        x-model="value"
+                                                        @blur="editing = false"
+                                                        @keydown.escape="editing = false; value = '{{ old('bio', $profile->bio) }}'"
+                                                        rows="4"
+                                                        class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 text-gray-900 placeholder-gray-400" 
+                                                        placeholder="Tell us about yourself and your photography style..."
+                                                        autofocus></textarea>
+                                                    <input type="hidden" name="bio" x-model="value" />
+                                                </div>
+                                                <x-input-error :messages="$errors->get('bio')" class="mt-2" />
                                             </div>
                                         </div>
-                                        <x-input-error :messages="$errors->get('location_city')" class="mt-2" />
                                     </div>
                                 </div>
                             </div>
@@ -558,8 +692,8 @@
                                                 </button>
                                             </div>
                                         </div>
+                                        <input type="hidden" name="studio_location" :value="(studioLocationCity && studioLocationCountry) ? studioLocationCity + ', ' + studioLocationCountry : (locationCity && locationCountry) ? locationCity + ', ' + locationCountry : ''" />
                                     </div>
-                                    <input type="hidden" name="studio_location" :value="(studioLocationCity && studioLocationCountry) ? studioLocationCity + ', ' + studioLocationCountry : (locationCity && locationCountry) ? locationCity + ', ' + locationCountry : ''" />
                                     <p class="mt-1 text-xs text-gray-500">Optional - Where is your studio located? If not set, your main location will be used.</p>
                                     <x-input-error :messages="$errors->get('studio_location')" class="mt-2" />
                                 </div>
@@ -1034,6 +1168,194 @@
                 this.selectedCountryName = suggestion.country_name;
                 this.suggestions = [];
                 this.showSuggestions = false;
+            }
+        };
+    }
+    
+    function imageCropper(fieldName, isRequired = false) {
+        return {
+            showCropModal: false,
+            previewUrl: null,
+            cropData: null,
+            originalFile: null,
+            cropper: null,
+            
+            handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                this.originalFile = file;
+                const reader = new FileReader();
+                
+                reader.onload = (e) => {
+                    const img = this.$refs.cropImage;
+                    // Reset image source to trigger load event
+                    img.src = '';
+                    this.showCropModal = true;
+                    // Wait for modal to show, then set image source
+                    this.$nextTick(() => {
+                        img.src = e.target.result;
+                        // Cropper will initialize when image loads (@load event)
+                    });
+                };
+                
+                reader.readAsDataURL(file);
+            },
+            
+            initCropper() {
+                const image = this.$refs.cropImage;
+                if (!image || !image.complete) return;
+                
+                // Destroy existing cropper if any
+                if (this.cropper) {
+                    this.cropper.destroy();
+                    this.cropper = null;
+                }
+                
+                // Wait a tiny bit to ensure image is fully rendered
+                setTimeout(() => {
+                    if (!image || !this.showCropModal) return;
+                    
+                    // Initialize Cropper.js with square aspect ratio (1:1)
+                    this.cropper = new Cropper(image, {
+                        aspectRatio: 1,
+                        viewMode: 1,
+                        dragMode: 'move',
+                        autoCropArea: 0.8,
+                        restore: false,
+                        guides: true,
+                        center: true,
+                        highlight: false,
+                        cropBoxMovable: true,
+                        cropBoxResizable: true,
+                        toggleDragModeOnDblclick: false,
+                        minCropBoxWidth: 50,
+                        minCropBoxHeight: 50,
+                        ready: () => {
+                            // Cropper is ready
+                            console.log('Cropper initialized');
+                        }
+                    });
+                }, 100);
+            },
+            
+            cancelCrop() {
+                if (this.cropper) {
+                    this.cropper.destroy();
+                    this.cropper = null;
+                }
+                // Clear the image source
+                const img = this.$refs.cropImage;
+                if (img) {
+                    img.src = '';
+                }
+                this.showCropModal = false;
+                // Don't clear originalFile - allow reopening
+            },
+            
+            applyCrop() {
+                if (!this.cropper) return;
+                
+                // Get cropped canvas from Cropper.js
+                const canvas = this.cropper.getCroppedCanvas({
+                    width: 800,
+                    height: 800,
+                    imageSmoothingEnabled: true,
+                    imageSmoothingQuality: 'high',
+                });
+                
+                // Store crop data
+                const cropData = this.cropper.getData();
+                this.cropData = JSON.stringify(cropData);
+                
+                // Create preview
+                this.previewUrl = canvas.toDataURL('image/jpeg', 0.9);
+                
+                // Update file input with cropped image
+                canvas.toBlob((blob) => {
+                    const croppedFile = new File([blob], this.originalFile.name, { type: 'image/jpeg' });
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(croppedFile);
+                    const fileInput = document.getElementById(fieldName);
+                    if (fileInput) {
+                        fileInput.files = dataTransfer.files;
+                    }
+                }, 'image/jpeg', 0.9);
+                
+                // Clean up
+                this.cropper.destroy();
+                this.cropper = null;
+                this.showCropModal = false;
+            }
+        };
+    }
+    
+    function logoUploader() {
+        return {
+            previewUrl: null,
+            
+            handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const maxSize = 800;
+                        let width = img.width;
+                        let height = img.height;
+                        
+                        if (width > height) {
+                            if (width > maxSize) {
+                                height = (height / width) * maxSize;
+                                width = maxSize;
+                            }
+                        } else {
+                            if (height > maxSize) {
+                                width = (width / height) * maxSize;
+                                height = maxSize;
+                            }
+                        }
+                        
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Preserve transparency for PNG files
+                        const isPNG = file.type === 'image/png';
+                        if (isPNG) {
+                            // Clear canvas with transparent background
+                            ctx.clearRect(0, 0, width, height);
+                        } else {
+                            // Fill with white background for JPEG
+                            ctx.fillStyle = '#FFFFFF';
+                            ctx.fillRect(0, 0, width, height);
+                        }
+                        
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        // Preserve PNG format if original is PNG, otherwise use JPEG
+                        if (isPNG) {
+                            canvas.toBlob((blob) => {
+                                const resizedFile = new File([blob], file.name.replace(/\.(jpg|jpeg)$/i, '.png'), { type: 'image/png' });
+                                const dataTransfer = new DataTransfer();
+                                dataTransfer.items.add(resizedFile);
+                                event.target.files = dataTransfer.files;
+                            }, 'image/png');
+                        } else {
+                            canvas.toBlob((blob) => {
+                                const resizedFile = new File([blob], file.name.replace(/\.(png)$/i, '.jpg'), { type: 'image/jpeg' });
+                                const dataTransfer = new DataTransfer();
+                                dataTransfer.items.add(resizedFile);
+                                event.target.files = dataTransfer.files;
+                            }, 'image/jpeg', 0.9);
+                        }
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
             }
         };
     }

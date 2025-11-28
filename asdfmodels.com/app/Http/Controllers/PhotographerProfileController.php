@@ -127,6 +127,7 @@ class PhotographerProfileController extends Controller
         $services = array_intersect($services, array_keys($servicesOptions));
 
         $validated = $request->validate([
+            'name' => ['nullable', 'string', 'max:255'],
             'bio' => ['nullable', 'string', 'min:50', 'max:1200'],
             'gender' => ['nullable', 'in:male,female,other'],
             'professional_name' => ['nullable', 'string', 'max:255'],
@@ -225,6 +226,12 @@ class PhotographerProfileController extends Controller
         $isNewProfile = !$user->photographerProfile || !$user->photographerProfile->exists;
         $isWizardCompletion = $request->has('wizard_completion') && $isNewProfile;
 
+        // Update user name if provided
+        if (isset($validated['name']) && $validated['name']) {
+            $user->name = $validated['name'];
+            $user->save();
+        }
+        
         $profile = $user->photographerProfile ?? new PhotographerProfile();
         $profile->user_id = $user->id;
         $profile->fill($validated);

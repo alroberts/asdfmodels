@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class PhotographerPortfolioImage extends Model
 {
@@ -54,13 +55,16 @@ class PhotographerPortfolioImage extends Model
     }
 
     /**
-     * Get the album this image belongs to.
-     * Note: Photographer albums not yet implemented, but structure is ready.
+     * Get the galleries this image belongs to.
      */
-    // public function album(): BelongsTo
-    // {
-    //     return $this->belongsTo(PhotographerPortfolioAlbum::class, 'album_id');
-    // }
+    public function galleries(): BelongsToMany
+    {
+        return $this->belongsToMany(PhotographerGallery::class, 'gallery_image', 'image_id', 'gallery_id')
+            ->withPivot('display_order')
+            ->withTimestamps()
+            ->orderBy('gallery_image.display_order')
+            ->orderBy('gallery_image.created_at');
+    }
 
     /**
      * Get the URL for the thumbnail image.

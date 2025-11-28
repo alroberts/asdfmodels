@@ -168,9 +168,6 @@
                         @if($profile->available_for_travel)
                             <p><strong>Available for travel:</strong> <i class="fas fa-check text-green-600"></i></p>
                         @endif
-                        @if($profile->pricing_info)
-                            <p><strong>Pricing:</strong> {{ $profile->pricing_info }}</p>
-                        @endif
                     </div>
                 </div>
 

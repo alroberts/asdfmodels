@@ -91,6 +91,16 @@ Route::middleware(['auth', 'profile.complete'])->group(function () {
     Route::get('/photographers/portfolio/{id}/edit', [\App\Http\Controllers\PhotographerPortfolioController::class, 'edit'])->name('photographers.portfolio.edit');
     Route::patch('/photographers/portfolio/{id}', [\App\Http\Controllers\PhotographerPortfolioController::class, 'update'])->name('photographers.portfolio.update');
     Route::delete('/photographers/portfolio/{id}', [\App\Http\Controllers\PhotographerPortfolioController::class, 'destroy'])->name('photographers.portfolio.destroy');
+    Route::post('/photographers/portfolio/bulk-action', [\App\Http\Controllers\PhotographerPortfolioController::class, 'bulkAction'])->name('photographers.portfolio.bulk-action');
+    Route::post('/photographers/portfolio/reorder', [\App\Http\Controllers\PhotographerPortfolioController::class, 'reorder'])->name('photographers.portfolio.reorder');
+    
+    // Gallery Management
+    Route::get('/photographers/portfolio/galleries/create', [\App\Http\Controllers\PhotographerGalleryController::class, 'create'])->name('photographers.portfolio.galleries.create');
+    Route::post('/photographers/portfolio/galleries', [\App\Http\Controllers\PhotographerGalleryController::class, 'store'])->name('photographers.portfolio.galleries.store');
+    Route::get('/photographers/portfolio/galleries/{id}', [\App\Http\Controllers\PhotographerGalleryController::class, 'show'])->name('photographers.portfolio.galleries.show');
+    Route::get('/photographers/portfolio/galleries/{id}/edit', [\App\Http\Controllers\PhotographerGalleryController::class, 'edit'])->name('photographers.portfolio.galleries.edit');
+    Route::patch('/photographers/portfolio/galleries/{id}', [\App\Http\Controllers\PhotographerGalleryController::class, 'update'])->name('photographers.portfolio.galleries.update');
+    Route::delete('/photographers/portfolio/galleries/{id}', [\App\Http\Controllers\PhotographerGalleryController::class, 'destroy'])->name('photographers.portfolio.galleries.destroy');
     
     // Album Management
     Route::resource('albums', \App\Http\Controllers\PortfolioAlbumController::class);

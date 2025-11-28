@@ -53,7 +53,7 @@
                 @elseif($userType === 'photographer')
                     <a href="{{ route('dashboard') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Dashboard</a>
                     <a href="{{ route('models.browse') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Browse Models</a>
-                    <a href="#" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">My Portfolio</a>
+                    <a href="{{ route('photographers.portfolio.index') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">My Portfolio</a>
                     <a href="{{ route('messages.index') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Messages</a>
                     <div class="relative" x-data="{ open: false }">
                         <button @click="open = !open" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition flex items-center">
@@ -134,7 +134,7 @@
                 @elseif($userType === 'photographer')
                     <a href="{{ route('dashboard') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Dashboard</a>
                     <a href="{{ route('models.browse') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Browse Models</a>
-                    <a href="#" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">My Portfolio</a>
+                    <a href="{{ route('photographers.portfolio.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">My Portfolio</a>
                     <a href="{{ route('messages.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Messages</a>
                     <a href="{{ route('photographers.profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Edit Profile</a>
                     <a href="{{ route('profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Settings</a>

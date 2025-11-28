@@ -291,10 +291,10 @@
                             </div>
 
                             <div>
-                                <x-input-label for="experience_start_year" :value="__('What year did you start photography?')" />
-                                <x-text-input id="experience_start_year" name="experience_start_year" type="number" x-model="formData.experience_start_year" class="block mt-1 w-full" min="1900" max="{{ date('Y') }}" placeholder="e.g., 2015" />
-                                <p class="mt-1 text-xs text-gray-500">Optional - helps show your experience level</p>
-                                <x-input-error :messages="$errors?->get('experience_start_year') ?? []" class="mt-2" />
+                                <x-input-label for="date_of_birth" :value="__('Date of Birth')" />
+                                <x-text-input id="date_of_birth" name="date_of_birth" type="date" x-model="formData.date_of_birth" @change="$dispatch('step1-validation-changed')" class="block mt-1 w-full" max="{{ date('Y-m-d', strtotime('-13 years')) }}" required />
+                                <p class="mt-1 text-xs text-gray-500">Must be at least 13 years old</p>
+                                <x-input-error :messages="$errors?->get('date_of_birth') ?? []" class="mt-2" />
                             </div>
                         </div>
                     </div>
@@ -370,6 +370,13 @@
                                 </div>
                             </div>
                             <x-input-error :messages="$errors?->get('experience_level') ?? []" class="mt-2" />
+                        </div>
+
+                        <div>
+                            <x-input-label for="experience_start_year" :value="__('What year did you start photography?')" />
+                            <x-text-input id="experience_start_year" name="experience_start_year" type="number" x-model="formData.experience_start_year" class="block mt-1 w-full" min="1900" max="{{ date('Y') }}" placeholder="e.g., 2015" />
+                            <p class="mt-1 text-xs text-gray-500">Optional - helps show your experience level</p>
+                            <x-input-error :messages="$errors?->get('experience_start_year') ?? []" class="mt-2" />
                         </div>
 
                         <div>
@@ -880,6 +887,7 @@
                 <!-- Hidden inputs for all form data -->
                 <input type="hidden" name="bio" x-model="formData.bio" />
                 <input type="hidden" name="gender" x-model="formData.gender" />
+                <input type="hidden" name="date_of_birth" x-model="formData.date_of_birth" />
                 <input type="hidden" name="professional_name" x-model="formData.professional_name" />
                 <input type="hidden" name="experience_start_year" x-model="formData.experience_start_year" />
                 <input type="hidden" name="experience_level" x-model="formData.experience_level" />
@@ -946,6 +954,7 @@
                 locationCity: '',
                 locationGeonameId: null,
                 gender: '',
+                date_of_birth: '',
                 experience_start_year: '',
                 experience_level: '',
                 specialties: [],
@@ -985,7 +994,9 @@
                            this.formData.locationCity && 
                            this.formData.locationCity.trim().length > 0 &&
                            this.formData.locationGeonameId &&
-                           this.formData.gender;
+                           this.formData.gender &&
+                           this.formData.date_of_birth &&
+                           this.formData.date_of_birth.trim().length > 0;
                 }
                 // Other steps can proceed
                 return true;
@@ -1002,19 +1013,43 @@
                 
                 // Load existing profile data if available
                 @php
-                    $hasProfile = isset($profile) && method_exists($profile, 'exists') && $profile->exists;
+                    // Check if profile exists and has data
+                    $hasProfile = isset($profile) && $profile->id;
                     $wizardData = null;
-                    if ($hasProfile && $profile->id) {
+                    if ($hasProfile) {
+                        // Handle equipment - ensure it's a proper array structure
                         $equipment = $profile->equipment ?? [];
                         if (!is_array($equipment) || !isset($equipment['cameras'])) {
                             $equipment = ['cameras' => [], 'lenses' => [], 'lighting' => [], 'other' => []];
                         }
+                        
+                        // Handle specialties and services - ensure they're arrays
+                        $specialties = $profile->specialties ?? [];
+                        if (!is_array($specialties)) {
+                            $specialties = [];
+                        }
+                        
+                        $services = $profile->services_offered ?? [];
+                        if (!is_array($services)) {
+                            $services = [];
+                        }
+                        
+                        // Get location country name
                         $locationCountry = '';
                         if ($profile->location_country_code) {
                             $countries = config('countries', []);
                             $locationCountry = $countries[$profile->location_country_code] ?? $profile->location_country ?? '';
                         } else {
                             $locationCountry = $profile->location_country ?? '';
+                        }
+                        
+                        // Parse studio location
+                        $studioLocationCity = '';
+                        $studioLocationCountry = '';
+                        if ($profile->studio_location) {
+                            $parts = explode(', ', $profile->studio_location);
+                            $studioLocationCity = $parts[0] ?? '';
+                            $studioLocationCountry = $parts[1] ?? '';
                         }
                         
                         $wizardData = [
@@ -1025,14 +1060,15 @@
                             'locationCountry' => $locationCountry,
                             'locationGeonameId' => $profile->location_geoname_id ?? null,
                             'gender' => $profile->gender ?? '',
+                            'date_of_birth' => $profile->date_of_birth ? $profile->date_of_birth->format('Y-m-d') : '',
                             'experience_start_year' => $profile->experience_start_year ?? '',
                             'experience_level' => $profile->experience_level ?? '',
-                            'specialties' => $profile->specialties ?? [],
-                            'services' => $profile->services_offered ?? [],
+                            'specialties' => $specialties,
+                            'services' => $services,
                             'equipment' => $equipment,
                             'studio_location' => $profile->studio_location ?? '',
-                            'studioLocationCity' => ($profile->studio_location && strpos($profile->studio_location, ', ') !== false) ? explode(', ', $profile->studio_location)[0] : '',
-                            'studioLocationCountry' => ($profile->studio_location && strpos($profile->studio_location, ', ') !== false) ? explode(', ', $profile->studio_location)[1] : '',
+                            'studioLocationCity' => $studioLocationCity,
+                            'studioLocationCountry' => $studioLocationCountry,
                             'studioLocationCountryCode' => '',
                             'studioLocationGeonameId' => null,
                             'available_for_travel' => (bool)($profile->available_for_travel ?? false),
@@ -1049,7 +1085,14 @@
                 @endphp
                 @if($wizardData)
                     const wizardData = @json($wizardData);
+                    console.log('Loading wizard data:', wizardData);
                     Object.assign(this.formData, wizardData);
+                    // Force reactivity update
+                    this.$nextTick(() => {
+                        console.log('Wizard data loaded:', this.formData);
+                    });
+                @else
+                    console.log('No wizard data to load');
                 @endif
             },
             nextStep() {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PhotographerProfile;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
@@ -65,10 +66,15 @@ class PhotographerProfileController extends Controller
             abort(403, 'Only photographers can have photographer profiles.');
         }
 
-        $profile = $user->photographerProfile ?? new PhotographerProfile(['user_id' => $user->id]);
+        // Load the profile - ensure we get the actual model instance, not a new one
+        $profile = $user->photographerProfile;
+        if (!$profile) {
+            $profile = new PhotographerProfile(['user_id' => $user->id]);
+        }
 
-        // Use wizard view for new profiles (no existing profile data) or if wizard parameter is set
-        $hasExistingProfile = $user->photographerProfile && $user->photographerProfile->exists;
+        // Use wizard view if wizard parameter is set, or if no existing profile
+        // When wizard=1 is explicitly set, always show wizard (even for existing profiles)
+        $hasExistingProfile = $profile->id !== null;
         $useWizard = $request->has('wizard') || !$hasExistingProfile;
         
         return view($useWizard ? 'photographers.edit-wizard' : 'photographers.edit', [
@@ -80,7 +86,7 @@ class PhotographerProfileController extends Controller
     /**
      * Update the authenticated user's photographer profile.
      */
-    public function update(Request $request): RedirectResponse
+    public function update(Request $request): RedirectResponse|JsonResponse
     {
         $user = Auth::user();
 
@@ -126,10 +132,14 @@ class PhotographerProfileController extends Controller
         }
         $services = array_intersect($services, array_keys($servicesOptions));
 
-        $validated = $request->validate([
+        try {
+            $validated = $request->validate([
             'name' => ['nullable', 'string', 'max:255'],
-            'bio' => ['nullable', 'string', 'min:50', 'max:1200'],
+            'bio' => ['nullable', 'string', 'max:1200'],
+            // Bio validation: if provided, must be 50-1200 chars, but can be empty
+            // We'll handle this in the controller logic
             'gender' => ['nullable', 'in:male,female,other'],
+            'date_of_birth' => ['required', 'date', 'before:today'],
             'professional_name' => ['nullable', 'string', 'max:255'],
             'location_city' => ['nullable', 'string', 'max:255'],
             'location_country' => ['nullable', 'string', 'max:255'],
@@ -149,7 +159,6 @@ class PhotographerProfileController extends Controller
             'studio_location_geoname_id' => ['nullable', 'integer', 'exists:geonames_locations,geoname_id'],
             'studio_location_country_code' => ['nullable', 'string', 'size:2'],
             'available_for_travel' => ['boolean'],
-            'pricing_info' => ['nullable', 'string', 'max:1000'],
             
             // Contact
             'public_email' => ['nullable', 'email', 'max:255'],
@@ -169,6 +178,32 @@ class PhotographerProfileController extends Controller
             'contains_nudity' => ['boolean'],
         ]);
 
+        // Validate bio length if provided (must be 50-1200 chars if not empty)
+        if (isset($validated['bio']) && $validated['bio'] !== null && trim($validated['bio']) !== '') {
+            $bioLength = mb_strlen(trim($validated['bio']));
+            if ($bioLength < 50 || $bioLength > 1200) {
+                if ($request->wantsJson() || $request->ajax()) {
+                    return response()->json([
+                        'message' => 'Bio must be between 50 and 1200 characters if provided.',
+                        'errors' => ['bio' => ['Bio must be between 50 and 1200 characters if provided.']]
+                    ], 422);
+                }
+                return redirect()->back()
+                    ->withErrors(['bio' => 'Bio must be between 50 and 1200 characters if provided.'])
+                    ->withInput();
+            }
+        }
+        
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'message' => 'Validation failed.',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            throw $e;
+        }
+        
         // Replace validated specialties and services with filtered arrays
         $validated['specialties'] = $specialties;
         $validated['services_offered'] = $services;
@@ -195,10 +230,18 @@ class PhotographerProfileController extends Controller
         }
         
         // Build studio_location string from city and country
-        if (isset($validated['studio_location_city']) && isset($validated['studio_location_country'])) {
-            $validated['studio_location'] = $validated['studio_location_city'] . ', ' . $validated['studio_location_country'];
-        } elseif (isset($validated['studio_location_city']) || isset($validated['studio_location_country'])) {
-            $validated['studio_location'] = trim(($validated['studio_location_city'] ?? '') . ', ' . ($validated['studio_location_country'] ?? ''));
+        // Clean up the city and country values first
+        $studioCity = isset($validated['studio_location_city']) ? trim($validated['studio_location_city']) : '';
+        $studioCountry = isset($validated['studio_location_country']) ? trim($validated['studio_location_country']) : '';
+        
+        // Remove any extra commas from city name
+        $studioCity = preg_replace('/,+/', '', $studioCity);
+        $studioCity = trim($studioCity);
+        
+        if ($studioCity && $studioCountry) {
+            $validated['studio_location'] = $studioCity . ', ' . $studioCountry;
+        } elseif ($studioCity || $studioCountry) {
+            $validated['studio_location'] = trim($studioCity . ', ' . $studioCountry);
         }
 
         // Sanitize bio: strip HTML but preserve line breaks
@@ -234,6 +277,26 @@ class PhotographerProfileController extends Controller
         
         $profile = $user->photographerProfile ?? new PhotographerProfile();
         $profile->user_id = $user->id;
+        
+        // Handle boolean fields - convert string '0' to false, '1' or true to true
+        if (isset($validated['is_public'])) {
+            $validated['is_public'] = filter_var($validated['is_public'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+        }
+        if (isset($validated['contains_nudity'])) {
+            $validated['contains_nudity'] = filter_var($validated['contains_nudity'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+        }
+        if (isset($validated['available_for_travel'])) {
+            $validated['available_for_travel'] = filter_var($validated['available_for_travel'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+        }
+        
+        // Explicitly handle date_of_birth to ensure it's saved correctly
+        // Laravel's date cast will handle the conversion, but we ensure it's set
+        if (isset($validated['date_of_birth']) && !empty($validated['date_of_birth'])) {
+            $profile->date_of_birth = $validated['date_of_birth'];
+            // Remove from validated so fill() doesn't try to set it again
+            unset($validated['date_of_birth']);
+        }
+        
         $profile->fill($validated);
         
         // Handle profile photo upload with cropping
@@ -253,14 +316,21 @@ class PhotographerProfileController extends Controller
                 );
                 $profile->profile_photo_path = $profilePhotoPath;
             } catch (\Exception $e) {
+                if ($request->wantsJson() || $request->ajax()) {
+                    return response()->json([
+                        'message' => 'Failed to process profile photo: ' . $e->getMessage(),
+                        'errors' => ['profile_photo' => ['Failed to process profile photo: ' . $e->getMessage()]]
+                    ], 422);
+                }
                 return redirect()->back()
                     ->withErrors(['profile_photo' => 'Failed to process profile photo: ' . $e->getMessage()])
                     ->withInput();
             }
         }
         
-        // Handle logo upload (only if professional_name is set)
-        if ($request->hasFile('logo') && $profile->professional_name) {
+        // Handle logo upload (only if professional_name is set or being set)
+        $hasProfessionalName = $profile->professional_name || ($validated['professional_name'] ?? null);
+        if ($request->hasFile('logo') && $hasProfessionalName) {
             // Delete old logo if exists
             if ($profile->logo_path) {
                 \App\Services\ImageProcessingService::deleteImage($profile->logo_path);
@@ -273,13 +343,39 @@ class PhotographerProfileController extends Controller
                 );
                 $profile->logo_path = $logoPath;
             } catch (\Exception $e) {
+                if ($request->wantsJson() || $request->ajax()) {
+                    return response()->json([
+                        'message' => 'Failed to process logo: ' . $e->getMessage(),
+                        'errors' => ['logo' => ['Failed to process logo: ' . $e->getMessage()]]
+                    ], 422);
+                }
                 return redirect()->back()
                     ->withErrors(['logo' => 'Failed to process logo: ' . $e->getMessage()])
                     ->withInput();
             }
+        } elseif ($request->hasFile('logo') && !$hasProfessionalName) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'message' => 'Please set a professional/company name before uploading a logo.',
+                    'errors' => ['logo' => ['Please set a professional/company name before uploading a logo.']]
+                ], 422);
+            }
+            return redirect()->back()
+                ->withErrors(['logo' => 'Please set a professional/company name before uploading a logo.'])
+                ->withInput();
         }
         
         $profile->save();
+
+        // Handle AJAX requests - check for X-Requested-With header or Accept: application/json
+        if ($request->wantsJson() || $request->ajax() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+            return response()->json([
+                'message' => 'Profile updated successfully.',
+                'status' => 'success',
+                'profile_photo_path' => $profile->profile_photo_path ? asset($profile->profile_photo_path) : null,
+                'logo_path' => $profile->logo_path ? asset($profile->logo_path) : null,
+            ]);
+        }
 
         if ($isWizardCompletion) {
             return redirect()->route('photographers.profile.photos')

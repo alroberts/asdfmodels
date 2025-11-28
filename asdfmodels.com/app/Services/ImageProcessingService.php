@@ -117,17 +117,31 @@ class ImageProcessingService
             throw new \Exception('Failed to load image');
         }
         
+        // Check if source is PNG and has transparency
+        $isPng = strtolower($file->getClientOriginalExtension()) === 'png' || $file->getMimeType() === 'image/png';
+        $sourceHasAlpha = $isPng && self::imageHasAlpha($sourceImage);
+        
         $sourceWidth = imagesx($sourceImage);
         $sourceHeight = imagesy($sourceImage);
         $maxSize = 800;
         
         // Calculate new dimensions maintaining aspect ratio
         if ($sourceWidth <= $maxSize && $sourceHeight <= $maxSize) {
-            // No resize needed
-            $newWidth = $sourceWidth;
-            $newHeight = $sourceHeight;
-            $destImage = $sourceImage;
-            $needsCleanup = false;
+            // No resize needed - check if we need to copy to preserve format
+            if ($sourceHasAlpha) {
+                // Create new image to ensure proper PNG format
+                $destImage = imagecreatetruecolor($sourceWidth, $sourceHeight);
+                imagealphablending($destImage, false);
+                imagesavealpha($destImage, true);
+                $transparent = imagecolorallocatealpha($destImage, 0, 0, 0, 127);
+                imagefill($destImage, 0, 0, $transparent);
+                imagealphablending($destImage, true);
+                imagecopy($destImage, $sourceImage, 0, 0, 0, 0, $sourceWidth, $sourceHeight);
+                $needsCleanup = true;
+            } else {
+                $destImage = $sourceImage;
+                $needsCleanup = false;
+            }
         } else {
             if ($sourceWidth > $sourceHeight) {
                 $newWidth = $maxSize;
@@ -141,12 +155,16 @@ class ImageProcessingService
             $destImage = imagecreatetruecolor($newWidth, $newHeight);
             
             // Preserve transparency for PNG
-            $hasAlpha = self::imageHasAlpha($sourceImage);
-            if ($hasAlpha) {
+            if ($sourceHasAlpha) {
                 imagealphablending($destImage, false);
                 imagesavealpha($destImage, true);
                 $transparent = imagecolorallocatealpha($destImage, 0, 0, 0, 127);
                 imagefill($destImage, 0, 0, $transparent);
+                imagealphablending($destImage, true);
+            } else {
+                // Fill with white for non-transparent images
+                $white = imagecolorallocate($destImage, 255, 255, 255);
+                imagefill($destImage, 0, 0, $white);
             }
             
             imagecopyresampled($destImage, $sourceImage, 0, 0, 0, 0, $newWidth, $newHeight, $sourceWidth, $sourceHeight);
@@ -154,7 +172,7 @@ class ImageProcessingService
         }
         
         // Determine file extension based on transparency
-        $hasTransparency = self::imageHasAlpha($destImage);
+        $hasTransparency = $sourceHasAlpha || self::imageHasAlpha($destImage);
         $ext = $hasTransparency ? 'png' : 'jpg';
         $filename = 'logo_' . uniqid() . '.' . $ext;
         $path = "uploads/photographers/{$userId}/logo/{$filename}";
@@ -162,6 +180,8 @@ class ImageProcessingService
         
         // Save with appropriate format
         if ($hasTransparency) {
+            imagealphablending($destImage, false);
+            imagesavealpha($destImage, true);
             imagepng($destImage, $fullPath, 9);
         } else {
             imagejpeg($destImage, $fullPath, 90);
@@ -192,7 +212,13 @@ class ImageProcessingService
                 return imagecreatefromjpeg($tempPath);
             
             case 'image/png':
-                return imagecreatefrompng($tempPath);
+                $image = imagecreatefrompng($tempPath);
+                if ($image) {
+                    // Enable alpha blending and save alpha channel
+                    imagealphablending($image, false);
+                    imagesavealpha($image, true);
+                }
+                return $image;
             
             case 'image/gif':
                 return imagecreatefromgif($tempPath);
@@ -231,7 +257,13 @@ class ImageProcessingService
                     case 'jpeg':
                         return imagecreatefromjpeg($tempPath);
                     case 'png':
-                        return imagecreatefrompng($tempPath);
+                        $image = imagecreatefrompng($tempPath);
+                        if ($image) {
+                            // Enable alpha blending and save alpha channel
+                            imagealphablending($image, false);
+                            imagesavealpha($image, true);
+                        }
+                        return $image;
                     case 'gif':
                         return imagecreatefromgif($tempPath);
                     case 'webp':

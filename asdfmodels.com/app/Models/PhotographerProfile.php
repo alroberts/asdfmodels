@@ -12,6 +12,7 @@ class PhotographerProfile extends Model
         'user_id',
         'bio',
         'gender',
+        'date_of_birth',
         'professional_name',
         'location_city',
         'location_country',
@@ -24,7 +25,6 @@ class PhotographerProfile extends Model
         'services_offered',
         'studio_location',
         'available_for_travel',
-        'pricing_info',
         'verified_at',
         'verified_by',
         'public_email',
@@ -48,6 +48,7 @@ class PhotographerProfile extends Model
         'verified_at' => 'datetime',
         'is_public' => 'boolean',
         'contains_nudity' => 'boolean',
+        'date_of_birth' => 'date',
     ];
 
     /**

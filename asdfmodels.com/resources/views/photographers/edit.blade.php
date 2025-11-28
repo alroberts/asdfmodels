@@ -111,6 +111,22 @@
                 window.photographerProfileInitialData = @json($initialData);
             </script>
 
+            <!-- Wizard Access Banner -->
+            <div class="mb-6 bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-magic text-blue-600 text-xl"></i>
+                        <div>
+                            <h3 class="font-semibold text-blue-900">Complete Your Profile with the Wizard</h3>
+                            <p class="text-sm text-blue-700">Use the step-by-step wizard to ensure all required fields are filled</p>
+                        </div>
+                    </div>
+                    <a href="{{ route('photographers.profile.edit', ['wizard' => 1]) }}" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors font-medium">
+                        <i class="fas fa-wand-magic-sparkles mr-2"></i>Open Wizard
+                    </a>
+                </div>
+            </div>
+
             <!-- Tabbed Interface -->
             <div x-data="{ activeTab: 'basic' }" class="bg-white shadow-lg rounded-xl overflow-hidden">
                 <!-- Tab Navigation -->
@@ -145,8 +161,10 @@
                 </div>
 
                 <form method="POST" action="{{ route('photographers.profile.update') }}"
+                      enctype="multipart/form-data"
                       x-data="photographerProfileForm()"
-                      x-init="init(window.photographerProfileInitialData || {})">
+                      x-init="init(window.photographerProfileInitialData || {})"
+                      @submit.prevent="submitForm($event)">
                     @csrf
                     @method('patch')
 
@@ -211,14 +229,16 @@
                                             <!-- Company Logo -->
                                             @if($profile->logo_path)
                                             <div x-data="logoUploader()" class="w-32 h-32 md:w-40 md:h-40">
-                                                <img src="{{ asset($profile->logo_path) }}" alt="Company logo" class="w-full h-full object-contain cursor-pointer hover:opacity-75 transition-opacity" @click="$refs.logoInput.click()">
+                                                <img x-show="!previewUrl" src="{{ asset($profile->logo_path) }}" alt="Company logo" class="w-full h-full object-contain cursor-pointer hover:opacity-75 transition-opacity" @click.stop="$refs.logoInput.click()">
+                                                <img x-show="previewUrl" :src="previewUrl" alt="Logo preview" class="w-full h-full object-contain cursor-pointer hover:opacity-75 transition-opacity" @click.stop="$refs.logoInput.click()">
                                                 <input type="file" x-ref="logoInput" id="logo" name="logo" accept="image/jpeg,image/jpg,image/png" style="display: none;" @change="handleFileSelect($event)">
                                             </div>
                                             @else
                                             <div x-data="logoUploader()" class="w-32 h-32 md:w-40 md:h-40">
-                                                <div class="w-full h-full border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-gray-500 transition-colors bg-gray-50" @click="$refs.logoInput.click()" title="Add company logo">
+                                                <div x-show="!previewUrl" class="w-full h-full border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-gray-500 transition-colors bg-gray-50" @click.stop="$refs.logoInput.click()" title="Add company logo">
                                                     <i class="fas fa-image text-gray-400 text-2xl"></i>
                                                 </div>
+                                                <img x-show="previewUrl" :src="previewUrl" alt="Logo preview" class="w-full h-full object-contain cursor-pointer hover:opacity-75 transition-opacity" @click.stop="$refs.logoInput.click()">
                                                 <input type="file" x-ref="logoInput" id="logo" name="logo" accept="image/jpeg,image/jpg,image/png" style="display: none;" @change="handleFileSelect($event)">
                                             </div>
                                             @endif
@@ -228,7 +248,8 @@
                                         <div class="flex-1 space-y-4">
                                             <!-- Name -->
                                             <div class="group relative" 
-                                                 x-data="{ editing: false, value: '{{ old('name', $user->name) }}' }">
+                                                 x-data="{ editing: false, value: @js(old('name', $user->name ?? '')) }"
+                                                 x-init="originalValue = value">
                                                 <div class="flex items-center justify-between">
                                                     <div class="flex-1">
                                                         <div x-show="!editing" 
@@ -243,7 +264,7 @@
                                                                 x-model="value"
                                                                 @blur="editing = false"
                                                                 @keydown.enter="editing = false"
-                                                                @keydown.escape="editing = false; value = '{{ old('name', $user->name) }}'"
+                                                                @keydown.escape="editing = false; value = originalValue"
                                                                 class="block w-full text-xl font-bold" 
                                                                 placeholder="Your name"
                                                                 autofocus />
@@ -255,7 +276,8 @@
 
                                             <!-- Company Name -->
                                             <div class="group relative" 
-                                                 x-data="{ editing: false, value: '{{ old('professional_name', $profile->professional_name ?? '') }}' }">
+                                                 x-data="{ editing: false, value: @js(old('professional_name', $profile->professional_name ?? '')) }"
+                                                 x-init="originalValue = value">
                                                 <div x-show="!editing" 
                                                      @click="editing = true"
                                                      class="cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
@@ -268,7 +290,7 @@
                                                         x-model="value"
                                                         @blur="editing = false"
                                                         @keydown.enter="editing = false"
-                                                        @keydown.escape="editing = false; value = '{{ old('professional_name', $profile->professional_name ?? '') }}'"
+                                                        @keydown.escape="editing = false; value = originalValue"
                                                         class="block w-full text-lg font-semibold" 
                                                         placeholder="Company name"
                                                         autofocus />
@@ -430,7 +452,8 @@
 
                                             <!-- Bio -->
                                             <div class="group relative" 
-                                                 x-data="{ editing: false, value: '{{ old('bio', $profile->bio) }}' }">
+                                                 x-data="{ editing: false, value: @js(old('bio', $profile->bio ?? '')) }"
+                                                 x-init="originalValue = value">
                                                 <div x-show="!editing" 
                                                      @click="editing = true"
                                                      class="cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
@@ -441,7 +464,7 @@
                                                     <textarea 
                                                         x-model="value"
                                                         @blur="editing = false"
-                                                        @keydown.escape="editing = false; value = '{{ old('bio', $profile->bio) }}'"
+                                                        @keydown.escape="editing = false; value = originalValue"
                                                         rows="4"
                                                         class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 text-gray-900 placeholder-gray-400" 
                                                         placeholder="Tell us about yourself and your photography style..."
@@ -451,6 +474,115 @@
                                                 <x-input-error :messages="$errors->get('bio')" class="mt-2" />
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Additional Basic Info Fields -->
+                                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <!-- Gender -->
+                                    <div>
+                                        <x-input-label for="gender" :value="__('Gender')" />
+                                        @php
+                                            $hasGender = $profile->gender && in_array($profile->gender, ['male', 'female', 'other']);
+                                            $displayGender = $hasGender ? ucfirst($profile->gender) : '';
+                                        @endphp
+                                        <div x-data="{ editing: !@js($hasGender) }">
+                                            <div x-show="!editing && @js($hasGender)" class="mt-1">
+                                                <div class="flex items-center justify-between p-3 border-2 border-gray-300 rounded-md bg-gray-50">
+                                                    <span class="text-gray-900 font-medium">{{ $displayGender }}</span>
+                                                    <button type="button" @click="editing = true" class="text-sm text-gray-600 hover:text-black underline">
+                                                        <i class="fas fa-edit mr-1"></i>Edit
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div x-show="editing || !@js($hasGender)" 
+                                                 x-transition
+                                                 class="relative mt-1" 
+                                                 x-data="customSelect({
+                                                     options: [
+                                                         { value: '', label: 'Select...' },
+                                                         { value: 'male', label: 'Male' },
+                                                         { value: 'female', label: 'Female' },
+                                                         { value: 'other', label: 'Other' }
+                                                     ],
+                                                     selectedValue: '{{ old('gender', $profile->gender) }}',
+                                                     onSelect: (value) => { }
+                                                 })">
+                                                <input type="hidden" name="gender" x-model="selectedValue" />
+                                                <div @click="showDropdown = !showDropdown" 
+                                                     @click.outside="showDropdown = false"
+                                                     class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
+                                                    <span x-text="selectedLabel || 'Select...'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                                </div>
+                                                <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
+                                                    <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                                </div>
+                                                <div x-show="showDropdown" 
+                                                     x-cloak
+                                                     x-transition
+                                                     class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                                     style="max-height: 240px;">
+                                                    <template x-for="(option, index) in options" :key="index">
+                                                        <div @click="selectOption(option.value)" 
+                                                             @mouseenter="highlightedIndex = index"
+                                                             :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === option.value, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== option.value }"
+                                                             class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                            <div class="font-medium" x-text="option.label"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <x-input-error :messages="$errors->get('gender')" class="mt-2" />
+                                    </div>
+                                    
+                                    <!-- Date of Birth -->
+                                    <div>
+                                        <x-input-label for="date_of_birth" :value="__('Date of Birth')" />
+                                        @php
+                                            $hasDateOfBirth = $profile->date_of_birth;
+                                            $displayDateOfBirth = '';
+                                            if ($hasDateOfBirth) {
+                                                try {
+                                                    $displayDateOfBirth = is_string($profile->date_of_birth) ? $profile->date_of_birth : $profile->date_of_birth->format('Y-m-d');
+                                                } catch (\Exception $e) {
+                                                    $displayDateOfBirth = is_string($profile->date_of_birth) ? $profile->date_of_birth : '';
+                                                }
+                                            }
+                                        @endphp
+                                        <div x-data="{ editing: !@js($hasDateOfBirth), value: @js(old('date_of_birth', $displayDateOfBirth)) }"
+                                             x-init="originalValue = value">
+                                            <!-- Hidden input to ensure value is always submitted -->
+                                            <input type="hidden" name="date_of_birth" :value="value" />
+                                            
+                                            <div x-show="!editing && @js($hasDateOfBirth) && value" 
+                                                 @click="editing = true"
+                                                 class="mt-1 cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
+                                                <div class="flex items-center justify-between p-3 border-2 border-gray-300 rounded-md bg-gray-50">
+                                                    <span class="text-gray-900 font-medium" x-text="value ? new Date(value).toLocaleDateString() : ''"></span>
+                                                    <button type="button" @click.stop="editing = true" class="text-sm text-gray-600 hover:text-black underline">
+                                                        <i class="fas fa-edit mr-1"></i>Edit
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div x-show="editing || !@js($hasDateOfBirth) || !value" 
+                                                 x-transition
+                                                 class="mt-1">
+                                                <x-text-input 
+                                                    id="date_of_birth" 
+                                                    name="date_of_birth" 
+                                                    type="date" 
+                                                    x-model="value"
+                                                    @blur="editing = false"
+                                                    @keydown.enter="editing = false"
+                                                    @keydown.escape="editing = false; value = originalValue"
+                                                    class="block w-full" 
+                                                    max="{{ date('Y-m-d', strtotime('-13 years')) }}"
+                                                    required />
+                                                <p class="mt-1 text-xs text-gray-500">Must be at least 13 years old</p>
+                                            </div>
+                                        </div>
+                                        <x-input-error :messages="$errors->get('date_of_birth')" class="mt-2" />
                                     </div>
                                 </div>
                             </div>
@@ -476,7 +608,7 @@
                                     <div x-data="{ editing: !@js($hasExperienceLevel) }">
                                         <div x-show="!editing && @js($hasExperienceLevel)" class="mt-1">
                                             <div class="flex items-center justify-between p-3 border-2 border-gray-300 rounded-md bg-gray-50">
-                                                <span class="text-gray-900 font-medium">@js($displayExperienceLevel)</span>
+                                                <span class="text-gray-900 font-medium">{{ $displayExperienceLevel }}</span>
                                                 <button type="button" @click="editing = true" class="text-sm text-gray-600 hover:text-black underline">
                                                     <i class="fas fa-edit mr-1"></i>Edit
                                                 </button>
@@ -523,6 +655,45 @@
                                     <x-input-error :messages="$errors->get('experience_level')" class="mt-2" />
                                 </div>
 
+                                <div>
+                                    <x-input-label for="experience_start_year" :value="__('What year did you start photography?')" />
+                                    @php
+                                        $hasStartYear = $profile->experience_start_year && $profile->experience_start_year >= 1900 && $profile->experience_start_year <= date('Y');
+                                        $displayStartYear = $hasStartYear ? $profile->experience_start_year : '';
+                                    @endphp
+                                    <div x-data="{ editing: !@js($hasStartYear), value: @js(old('experience_start_year', $profile->experience_start_year ?? '')) }"
+                                         x-init="originalValue = value">
+                                        <div x-show="!editing && @js($hasStartYear)" 
+                                             @click="editing = true"
+                                             class="mt-1 cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
+                                            <div class="flex items-center justify-between p-3 border-2 border-gray-300 rounded-md bg-gray-50">
+                                                <span class="text-gray-900 font-medium">{{ $displayStartYear }}</span>
+                                                <button type="button" @click.stop="editing = true" class="text-sm text-gray-600 hover:text-black underline">
+                                                    <i class="fas fa-edit mr-1"></i>Edit
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div x-show="editing || !@js($hasStartYear)" 
+                                             x-transition
+                                             class="mt-1">
+                                            <x-text-input 
+                                                id="experience_start_year" 
+                                                name="experience_start_year" 
+                                                type="number" 
+                                                x-model="value"
+                                                @blur="editing = false"
+                                                @keydown.enter="editing = false"
+                                                @keydown.escape="editing = false; value = originalValue"
+                                                class="block w-full" 
+                                                min="1900" 
+                                                max="{{ date('Y') }}" 
+                                                placeholder="e.g., 2015" />
+                                            <p class="mt-1 text-xs text-gray-500">Optional - helps show your experience level</p>
+                                        </div>
+                                    </div>
+                                    <x-input-error :messages="$errors->get('experience_start_year')" class="mt-2" />
+                                </div>
+
                                 <div class="mb-6">
                                     <x-input-label for="specialties" :value="__('Specialties')" />
                                     <p class="text-sm text-gray-600 mb-3">Select your photography specialties</p>
@@ -567,9 +738,19 @@
                                     <x-input-label for="studio_location" :value="__('Studio Location')" />
                                     @php
                                         $countriesData = config('countries');
-                                        $studioLocationParts = $profile->studio_location ? explode(', ', $profile->studio_location) : [];
-                                        $studioLocationCity = $studioLocationParts[0] ?? '';
-                                        $studioLocationCountry = $studioLocationParts[1] ?? '';
+                                        // Parse studio location - handle edge cases with multiple commas
+                                        $studioLocationCity = '';
+                                        $studioLocationCountry = '';
+                                        if ($profile->studio_location) {
+                                            // Split by ', ' first, then handle any remaining commas
+                                            $parts = explode(', ', $profile->studio_location, 2);
+                                            $studioLocationCity = trim($parts[0] ?? '');
+                                            $studioLocationCountry = trim($parts[1] ?? '');
+                                            
+                                            // Clean up any extra commas in the city name
+                                            $studioLocationCity = preg_replace('/,+/', '', $studioLocationCity);
+                                            $studioLocationCity = trim($studioLocationCity);
+                                        }
                                         $locationCountry = $profile->location_country_code ? (config('countries')[$profile->location_country_code] ?? $profile->location_country ?? '') : ($profile->location_country ?? '');
                                     @endphp
                                     <div x-data="{ 
@@ -703,12 +884,6 @@
                                         <input type="checkbox" name="available_for_travel" value="1" {{ old('available_for_travel', $profile->available_for_travel) ? 'checked' : '' }} class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500 w-5 h-5">
                                         <span class="ml-2 text-sm text-gray-700">Available for travel</span>
                                     </label>
-                                </div>
-
-                                <div class="mb-6">
-                                    <x-input-label for="pricing_info" :value="__('Pricing Information')" />
-                                    <textarea id="pricing_info" name="pricing_info" rows="3" class="block mt-1 w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 text-gray-900 placeholder-gray-400" placeholder="e.g., Starting at $500 for headshots">{{ old('pricing_info', $profile->pricing_info) }}</textarea>
-                                    <x-input-error :messages="$errors->get('pricing_info')" class="mt-2" />
                                 </div>
                             </div>
                         </div>
@@ -870,8 +1045,8 @@
                                     <label class="flex items-center p-4 border-2 border-gray-200 rounded-lg hover:border-gray-300 transition cursor-pointer">
                                         <input type="checkbox" name="contains_nudity" value="1" {{ old('contains_nudity', $profile->contains_nudity) ? 'checked' : '' }} class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500 w-5 h-5">
                                         <div class="ml-3">
-                                            <span class="text-sm font-medium text-gray-700">Portfolio contains nudity</span>
-                                            <p class="text-xs text-gray-500">Mark if your portfolio includes artistic nude photography</p>
+                                            <span class="text-sm font-medium text-gray-700">Restrict to users 18+</span>
+                                            <p class="text-xs text-gray-500">Enable this if your portfolio contains content that should only be viewed by users 18 years or older. This includes artistic nude photography, mature themes, or any content that may not be suitable for minors.</p>
                                         </div>
                                     </label>
                                 </div>
@@ -880,10 +1055,25 @@
                     </div>
 
                     <!-- Save Button (Fixed at bottom) -->
-                    <div class="border-t-2 border-gray-200 bg-gray-50 px-6 py-4 flex items-center justify-end">
-                        <x-primary-button class="px-8 py-3">
-                            <i class="fas fa-save mr-2"></i>{{ __('Save Profile') }}
-                        </x-primary-button>
+                    <div class="border-t-2 border-gray-200 bg-gray-50 px-6 py-4 flex items-center justify-between">
+                        <!-- Status Message -->
+                        <div x-show="statusMessage" 
+                             x-text="statusMessage"
+                             :class="statusType === 'success' ? 'text-green-600 font-medium' : 'text-red-600 font-medium'"
+                             class="text-sm"
+                             x-transition></div>
+                        <div class="flex-1"></div>
+                        <button 
+                            type="submit"
+                            class="px-8 py-3 bg-black text-white rounded-lg font-semibold hover:bg-gray-800 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            :disabled="isSubmitting">
+                            <span x-show="!isSubmitting">
+                                <i class="fas fa-save mr-2"></i>{{ __('Save Profile') }}
+                            </span>
+                            <span x-show="isSubmitting" class="flex items-center">
+                                <i class="fas fa-spinner fa-spin mr-2"></i>{{ __('Saving...') }}
+                            </span>
+                        </button>
                     </div>
                 </form>
             </div>
@@ -914,6 +1104,9 @@
             showSuggestions: false,
             highlightedIndex: -1,
             searchTimeout: null,
+            isSubmitting: false,
+            statusMessage: '',
+            statusType: 'success',
             init(initial) {
                 if (!initial || typeof initial !== 'object') {
                     initial = {};
@@ -991,6 +1184,186 @@
                 this.selectedCountryName = suggestion.country_name;
                 this.suggestions = [];
                 this.showSuggestions = false;
+            },
+            showStatus(message, type = 'success') {
+                this.statusMessage = message;
+                this.statusType = type;
+                setTimeout(() => {
+                    this.statusMessage = '';
+                }, 5000);
+            },
+            async submitForm(event) {
+                console.log('submitForm called');
+                event.preventDefault();
+                event.stopPropagation();
+                
+                this.isSubmitting = true;
+                this.statusMessage = '';
+                
+                const form = event.target;
+                const formData = new FormData(form);
+                
+                // Ensure date_of_birth is included (it might be hidden by Alpine.js)
+                const dateOfBirthInput = form.querySelector('input[name="date_of_birth"]');
+                if (dateOfBirthInput) {
+                    // Get the value from the hidden input or visible input
+                    const dateOfBirthValue = dateOfBirthInput.value;
+                    if (dateOfBirthValue) {
+                        formData.set('date_of_birth', dateOfBirthValue);
+                    }
+                }
+                
+                // Debug: Log form data to see what's being sent
+                console.log('Form data being sent:');
+                for (let [key, value] of formData.entries()) {
+                    console.log(key + ':', value);
+                }
+                
+                // Ensure checkboxes are included even when unchecked
+                const isPublicCheckbox = form.querySelector('input[name="is_public"]');
+                if (isPublicCheckbox && !isPublicCheckbox.checked) {
+                    formData.append('is_public', '0');
+                }
+                
+                const containsNudityCheckbox = form.querySelector('input[name="contains_nudity"]');
+                if (containsNudityCheckbox && !containsNudityCheckbox.checked) {
+                    formData.append('contains_nudity', '0');
+                }
+                
+                const availableForTravelCheckbox = form.querySelector('input[name="available_for_travel"]');
+                if (availableForTravelCheckbox && !availableForTravelCheckbox.checked) {
+                    formData.append('available_for_travel', '0');
+                }
+                
+                // Get CSRF token
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || 
+                                 form.querySelector('input[name="_token"]')?.value;
+                
+                console.log('Submitting form via AJAX to:', form.action);
+                
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRF-TOKEN': csrfToken,
+                            'Accept': 'application/json'
+                        },
+                        body: formData
+                    });
+                    
+                    console.log('Response status:', response.status);
+                    console.log('Response content-type:', response.headers.get('content-type'));
+                    
+                    // Check if response is JSON
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        // If not JSON, it might be a redirect - reload the page
+                        console.warn('Response is not JSON, might be redirect. Reloading page.');
+                        const text = await response.text();
+                        console.log('Response text:', text.substring(0, 200));
+                        this.isSubmitting = false;
+                        window.location.reload();
+                        return;
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Response data:', data);
+                    
+                    if (response.ok) {
+                        this.showStatus(data.message || 'Profile updated successfully!', 'success');
+                        
+                        // Clear any preview URLs first so actual images show
+                        const cropperInstances = document.querySelectorAll('[x-data*="imageCropper"]');
+                        cropperInstances.forEach(el => {
+                            const alpine = Alpine.$data(el);
+                            if (alpine && alpine.previewUrl) {
+                                alpine.previewUrl = null;
+                            }
+                        });
+                        
+                        const logoInstances = document.querySelectorAll('[x-data*="logoUploader"]');
+                        logoInstances.forEach(el => {
+                            const alpine = Alpine.$data(el);
+                            if (alpine && alpine.previewUrl) {
+                                alpine.previewUrl = null;
+                            }
+                        });
+                        
+                        // Update any changed images in the UI
+                        if (data.profile_photo_path) {
+                            // Find all profile photo images and update them
+                            const photoImgs = document.querySelectorAll('img[alt="Profile photo"]');
+                            photoImgs.forEach(photoImg => {
+                                photoImg.src = data.profile_photo_path + '?t=' + Date.now();
+                            });
+                            
+                            // Also update via Alpine.js if needed
+                            cropperInstances.forEach(el => {
+                                const alpine = Alpine.$data(el);
+                                if (alpine) {
+                                    // Force Alpine to re-evaluate
+                                    alpine.$nextTick(() => {
+                                        const img = el.querySelector('img[alt="Profile photo"]');
+                                        if (img) {
+                                            img.src = data.profile_photo_path + '?t=' + Date.now();
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                        
+                        if (data.logo_path) {
+                            // Find all logo images and update them
+                            const logoImgs = document.querySelectorAll('img[alt="Company logo"]');
+                            logoImgs.forEach(logoImg => {
+                                logoImg.src = data.logo_path + '?t=' + Date.now();
+                            });
+                            
+                            // Also update via Alpine.js if needed
+                            logoInstances.forEach(el => {
+                                const alpine = Alpine.$data(el);
+                                if (alpine) {
+                                    // Force Alpine to re-evaluate
+                                    alpine.$nextTick(() => {
+                                        const img = el.querySelector('img[alt="Company logo"]');
+                                        if (img) {
+                                            img.src = data.logo_path + '?t=' + Date.now();
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                        
+                        // Reset form file inputs (keep other data)
+                        const fileInputs = form.querySelectorAll('input[type="file"]');
+                        fileInputs.forEach(input => {
+                            input.value = '';
+                        });
+                        
+                    } else {
+                        // Handle validation errors
+                        if (data.errors) {
+                            const errorMessages = Object.values(data.errors).flat();
+                            this.showStatus(errorMessages.join(', '), 'error');
+                        } else {
+                            this.showStatus(data.message || 'An error occurred while saving.', 'error');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error submitting form:', error);
+                    if (error instanceof SyntaxError) {
+                        // Response was not JSON - might be HTML redirect
+                        console.warn('Response was not JSON, might be redirect. Reloading page.');
+                        this.isSubmitting = false;
+                        window.location.reload();
+                        return;
+                    }
+                    this.showStatus('An error occurred while saving. Please try again.', 'error');
+                } finally {
+                    // Always reset submitting state
+                    this.isSubmitting = false;
+                }
             }
         }));
     });
@@ -1179,6 +1552,7 @@
             cropData: null,
             originalFile: null,
             cropper: null,
+            fieldName: fieldName, // Store fieldName for use in closures
             
             handleFileSelect(event) {
                 const file = event.target.files[0];
@@ -1276,7 +1650,8 @@
                     const croppedFile = new File([blob], this.originalFile.name, { type: 'image/jpeg' });
                     const dataTransfer = new DataTransfer();
                     dataTransfer.items.add(croppedFile);
-                    const fileInput = document.getElementById(fieldName);
+                    // Use the stored fieldName to find the correct input
+                    const fileInput = this.$refs.profilePhotoInput || document.getElementById(this.fieldName);
                     if (fileInput) {
                         fileInput.files = dataTransfer.files;
                     }
@@ -1295,65 +1670,24 @@
             previewUrl: null,
             
             handleFileSelect(event) {
+                console.log('Logo file selected');
                 const file = event.target.files[0];
-                if (!file) return;
+                if (!file) {
+                    console.log('No file selected');
+                    return;
+                }
                 
+                console.log('File details:', {
+                    name: file.name,
+                    type: file.type,
+                    size: file.size
+                });
+                
+                // Just show preview - let server handle resizing
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const maxSize = 800;
-                        let width = img.width;
-                        let height = img.height;
-                        
-                        if (width > height) {
-                            if (width > maxSize) {
-                                height = (height / width) * maxSize;
-                                width = maxSize;
-                            }
-                        } else {
-                            if (height > maxSize) {
-                                width = (width / height) * maxSize;
-                                height = maxSize;
-                            }
-                        }
-                        
-                        const canvas = document.createElement('canvas');
-                        canvas.width = width;
-                        canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        
-                        // Preserve transparency for PNG files
-                        const isPNG = file.type === 'image/png';
-                        if (isPNG) {
-                            // Clear canvas with transparent background
-                            ctx.clearRect(0, 0, width, height);
-                        } else {
-                            // Fill with white background for JPEG
-                            ctx.fillStyle = '#FFFFFF';
-                            ctx.fillRect(0, 0, width, height);
-                        }
-                        
-                        ctx.drawImage(img, 0, 0, width, height);
-                        
-                        // Preserve PNG format if original is PNG, otherwise use JPEG
-                        if (isPNG) {
-                            canvas.toBlob((blob) => {
-                                const resizedFile = new File([blob], file.name.replace(/\.(jpg|jpeg)$/i, '.png'), { type: 'image/png' });
-                                const dataTransfer = new DataTransfer();
-                                dataTransfer.items.add(resizedFile);
-                                event.target.files = dataTransfer.files;
-                            }, 'image/png');
-                        } else {
-                            canvas.toBlob((blob) => {
-                                const resizedFile = new File([blob], file.name.replace(/\.(png)$/i, '.jpg'), { type: 'image/jpeg' });
-                                const dataTransfer = new DataTransfer();
-                                dataTransfer.items.add(resizedFile);
-                                event.target.files = dataTransfer.files;
-                            }, 'image/jpeg', 0.9);
-                        }
-                    };
-                    img.src = e.target.result;
+                    this.previewUrl = e.target.result;
+                    console.log('Preview set, file ready for upload');
                 };
                 reader.readAsDataURL(file);
             }

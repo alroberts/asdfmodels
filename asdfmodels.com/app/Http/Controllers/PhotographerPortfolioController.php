@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PhotographerPortfolioImage;
+use App\Models\PhotographerGallery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -13,7 +14,7 @@ use Intervention\Image\Drivers\Gd\Driver;
 class PhotographerPortfolioController extends Controller
 {
     /**
-     * Display a listing of the authenticated photographer's portfolio images.
+     * Display a listing of the authenticated photographer's galleries.
      */
     public function index(): View
     {
@@ -23,13 +24,24 @@ class PhotographerPortfolioController extends Controller
             abort(403, 'Only photographers can manage portfolios.');
         }
 
-        $images = PhotographerPortfolioImage::where('photographer_id', $user->id)
+        $galleries = PhotographerGallery::where('photographer_id', $user->id)
+            ->withCount('images')
             ->orderBy('display_order')
             ->orderBy('created_at', 'desc')
-            ->paginate(24);
+            ->get();
+
+        // Get images not in any gallery for "Uncategorized" section
+        // Use a subquery to find images that don't have any gallery associations
+        $uncategorizedImages = PhotographerPortfolioImage::where('photographer_id', $user->id)
+            ->whereDoesntHave('galleries')
+            ->orderBy('display_order')
+            ->orderBy('created_at', 'desc')
+            ->limit(12)
+            ->get();
 
         return view('photographers.portfolio.index', [
-            'images' => $images,
+            'galleries' => $galleries,
+            'uncategorizedImages' => $uncategorizedImages,
         ]);
     }
 
@@ -198,7 +210,7 @@ class PhotographerPortfolioController extends Controller
     /**
      * Update the specified image.
      */
-    public function update(Request $request, string $id): RedirectResponse
+    public function update(Request $request, string $id)
     {
         $image = PhotographerPortfolioImage::findOrFail($id);
         $user = Auth::user();
@@ -221,6 +233,11 @@ class PhotographerPortfolioController extends Controller
 
         $image->update($validated);
 
+        // Return JSON for AJAX requests, redirect for form submissions
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Image updated successfully.']);
+        }
+
         return redirect()->route('photographers.portfolio.index')
             ->with('status', 'Image updated successfully.');
     }
@@ -228,7 +245,7 @@ class PhotographerPortfolioController extends Controller
     /**
      * Remove the specified image.
      */
-    public function destroy(string $id): RedirectResponse
+    public function destroy(Request $request, string $id)
     {
         $image = PhotographerPortfolioImage::findOrFail($id);
         $user = Auth::user();
@@ -255,8 +272,75 @@ class PhotographerPortfolioController extends Controller
 
         $image->delete();
 
+        // Return JSON for AJAX requests, redirect for form submissions
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Image deleted successfully.']);
+        }
+
         return redirect()->route('photographers.portfolio.index')
             ->with('status', 'Image deleted successfully.');
+    }
+
+    /**
+     * Handle bulk actions on multiple images.
+     */
+    public function bulkAction(Request $request)
+    {
+        $user = Auth::user();
+        
+        if (!$user->is_photographer) {
+            abort(403, 'Only photographers can manage portfolios.');
+        }
+
+        $validated = $request->validate([
+            'image_ids' => ['required', 'array'],
+            'image_ids.*' => ['integer', 'exists:photographer_portfolio_images,id'],
+            'action' => ['required', 'string', 'in:feature,public'],
+            'value' => ['required', 'boolean'],
+        ]);
+
+        $images = PhotographerPortfolioImage::whereIn('id', $validated['image_ids'])
+            ->where('photographer_id', $user->id)
+            ->get();
+
+        foreach ($images as $image) {
+            if ($validated['action'] === 'feature') {
+                $image->is_featured = $validated['value'];
+            } elseif ($validated['action'] === 'public') {
+                $image->is_public = $validated['value'];
+            }
+            $image->save();
+        }
+
+        return response()->json(['success' => true, 'message' => 'Images updated successfully.']);
+    }
+
+    /**
+     * Update display order of images.
+     */
+    public function reorder(Request $request)
+    {
+        $user = Auth::user();
+        
+        if (!$user->is_photographer) {
+            abort(403, 'Only photographers can manage portfolios.');
+        }
+
+        $validated = $request->validate([
+            'order' => ['required', 'array'],
+            'order.*.id' => ['required', 'integer', 'exists:photographer_portfolio_images,id'],
+            'order.*.display_order' => ['required', 'integer', 'min:1'],
+        ]);
+
+        foreach ($validated['order'] as $item) {
+            $image = PhotographerPortfolioImage::find($item['id']);
+            if ($image && $image->photographer_id === $user->id) {
+                $image->display_order = $item['display_order'];
+                $image->save();
+            }
+        }
+
+        return response()->json(['success' => true, 'message' => 'Display order updated successfully.']);
     }
 }
 

@@ -67,7 +67,12 @@
                     <div class="space-y-6">
                         <div>
                             <x-input-label for="bio" :value="__('Bio')" />
-                            <textarea id="bio" name="bio" rows="4" x-model="formData.bio" class="block mt-1 w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 text-gray-900 placeholder-gray-400 resize-y" placeholder="Tell us about your photography style, experience, and what makes your work unique..."></textarea>
+                            <textarea id="bio" name="bio" rows="4" x-model="formData.bio" @input="$dispatch('step1-validation-changed')" maxlength="1200" required class="block mt-1 w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 text-gray-900 placeholder-gray-400 resize-y" placeholder="Tell us about your photography style, experience, and what makes your work unique..."></textarea>
+                            <div class="mt-1 flex justify-end">
+                                <p class="text-xs" :class="(formData.bio || '').length >= 1200 ? 'text-red-600 font-semibold' : ((formData.bio || '').length < 50 ? 'text-red-600' : 'text-gray-900')">
+                                    <span x-text="(formData.bio || '').length"></span> / 1200 characters
+                                </p>
+                            </div>
                             <x-input-error :messages="$errors?->get('bio') ?? []" class="mt-2" />
                         </div>
 
@@ -78,12 +83,13 @@
                             <x-input-error :messages="$errors?->get('professional_name') ?? []" class="mt-2" />
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" x-data="locationAutocomplete()" x-init="init(formData.locationCountryCode || '', formData.locationCity || '', formData.locationGeonameId || null); $watch('formData.locationCountryCode', value => { if (value) { selectedCountry = value; onCountryChange(); } })" @location-updated.window="if ($event.detail && $event.detail.country) { selectedCountry = $event.detail.country; formData.locationCountryCode = $event.detail.country; onCountryChange(); }">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" x-data="locationAutocomplete()" x-init="init(formData.locationCountryCode || '', formData.locationCity || '', formData.locationGeonameId || null); $watch('formData.locationCountryCode', value => { if (value) { selectedCountry = value; onCountryChange(); } }); $watch('selectedGeonameId', value => { formData.locationGeonameId = value; }); $watch('cityInput', value => { formData.locationCity = value; });" @location-updated.window="if ($event.detail && $event.detail.country) { selectedCountry = $event.detail.country; formData.locationCountryCode = $event.detail.country; onCountryChange(); }">
                             <div>
                                 <x-input-label for="location_country_code" :value="__('Country')" />
                                 <div class="relative mt-1" 
                                      x-data="searchableDropdown()" 
-                                     x-init="initCountries(@js($countriesData), formData.locationCountryCode || '')">
+                                     x-init="initCountries(@js($countriesData), formData.locationCountryCode || '')"
+                                     @country-selected.window="if ($event.detail && $event.detail.countryCode) { $dispatch('step1-validation-changed') }">
                                     <div class="relative">
                                         <x-text-input 
                                             id="location_country_code" 
@@ -103,7 +109,7 @@
                                             <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
                                         </div>
                                     </div>
-                                    <input type="hidden" name="location_country_code" x-model="selectedValue" @change="formData.locationCountryCode = selectedValue" />
+                                    <input type="hidden" name="location_country_code" x-model="selectedValue" @change="formData.locationCountryCode = selectedValue; $dispatch('step1-validation-changed')" required />
                                     <div x-show="showDropdown && filteredCountries.length > 0" 
                                          x-cloak
                                          x-transition
@@ -164,10 +170,12 @@
                                         @input="searchCities()"
                                         @focus="showSuggestions = true"
                                         @blur="setTimeout(() => showSuggestions = false, 200)"
+                                        @change="$dispatch('step1-validation-changed')"
                                         class="block mt-1 w-full" 
                                         placeholder="Start typing city name..." 
-                                        autocomplete="off" />
-                                    <input type="hidden" name="location_geoname_id" x-model="selectedGeonameId" />
+                                        autocomplete="off"
+                                        required />
+                                    <input type="hidden" name="location_geoname_id" x-model="selectedGeonameId" @change="$dispatch('step1-validation-changed')" required />
                                     <input type="hidden" name="location_country" x-model="selectedCountryName" />
                                     
                                     <div x-show="showSuggestions && suggestions.length > 0" 
@@ -201,7 +209,7 @@
                                          class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
                                          style="max-height: 240px;">
                                         <template x-for="(suggestion, index) in suggestions" :key="index">
-                                            <div @click="selectCity(suggestion); $dispatch('location-updated', {city: suggestion.city, geonameId: suggestion.id})" 
+                                            <div @click="selectCity(suggestion); $dispatch('location-updated', {city: suggestion.city, geonameId: suggestion.id}); $dispatch('step1-validation-changed')" 
                                                  class="px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
                                                 <div class="font-medium text-black" x-text="suggestion.city"></div>
                                                 <div class="text-sm text-gray-600" x-text="suggestion.label"></div>
@@ -224,9 +232,9 @@
                                         { value: 'other', label: 'Other' }
                                     ],
                                     selectedValue: formData.gender || '',
-                                    onSelect: (value) => { formData.gender = value; }
+                                    onSelect: (value) => { formData.gender = value; $dispatch('step1-validation-changed'); }
                                 })">
-                                    <input type="hidden" name="gender" x-model="selectedValue" />
+                                    <input type="hidden" name="gender" x-model="selectedValue" @change="formData.gender = selectedValue; $dispatch('step1-validation-changed')" required />
                                     <div @click="showDropdown = !showDropdown" 
                                          @click.outside="showDropdown = false"
                                          class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
@@ -411,11 +419,31 @@
                             <x-input-label for="studio_location" :value="__('Studio Location')" />
                             <div x-data="{ 
                                 showStudioLocationEditor: false,
+                                originalCity: '',
+                                originalCountry: '',
+                                originalCountryCode: '',
+                                originalGeonameId: null,
                                 updateStudioLocation(data) {
                                     if (data.city) formData.studioLocationCity = data.city;
                                     if (data.country) formData.studioLocationCountry = data.country;
+                                },
+                                openEditor() {
+                                    // Store original values
+                                    this.originalCity = formData.studioLocationCity || '';
+                                    this.originalCountry = formData.studioLocationCountry || '';
+                                    this.originalCountryCode = formData.studioLocationCountryCode || '';
+                                    this.originalGeonameId = formData.studioLocationGeonameId || null;
+                                    this.showStudioLocationEditor = true;
+                                },
+                                cancelEditor() {
+                                    // Restore original values
+                                    formData.studioLocationCity = this.originalCity;
+                                    formData.studioLocationCountry = this.originalCountry;
+                                    formData.studioLocationCountryCode = this.originalCountryCode;
+                                    formData.studioLocationGeonameId = this.originalGeonameId;
+                                    this.showStudioLocationEditor = false;
                                 }
-                            }" @studio-location-updated.window="updateStudioLocation($event.detail)">
+                            }" @studio-location-updated.window="updateStudioLocation($event.detail)" @cancel-studio-location.window="cancelEditor()" @close-studio-editor.window="showStudioLocationEditor = false">
                                 <!-- Display current location -->
                                 <div x-show="!showStudioLocationEditor" class="mt-1">
                                     <div class="flex items-center justify-between p-3 border-2 border-gray-800 rounded-md bg-white">
@@ -431,7 +459,7 @@
                                                 <span x-show="!formData.locationCity && !formData.locationCountry">No location set</span>
                                             </span>
                                         </div>
-                                        <button type="button" @click="showStudioLocationEditor = true" class="text-sm text-gray-600 hover:text-black underline">
+                                        <button type="button" @click="openEditor()" class="text-sm text-gray-600 hover:text-black underline">
                                             Change Studio Location
                                         </button>
                                     </div>
@@ -576,11 +604,11 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="mt-2 flex items-center gap-4">
-                                        <button type="button" @click="showStudioLocationEditor = false" class="text-sm text-gray-600 hover:text-black underline">
+                                    <div class="mt-2 flex items-center gap-4" x-data @click.outside.stop>
+                                        <button type="button" @click="window.dispatchEvent(new CustomEvent('cancel-studio-location'))" class="text-sm text-gray-600 hover:text-black underline">
                                             Cancel
                                         </button>
-                                        <button type="button" @click="showStudioLocationEditor = false" class="text-sm bg-black text-white px-4 py-2 rounded hover:bg-gray-800">
+                                        <button type="button" @click="$dispatch('close-studio-editor')" class="text-sm bg-black text-white px-4 py-2 rounded hover:bg-gray-800">
                                             Save Location
                                         </button>
                                     </div>
@@ -756,7 +784,7 @@
                         <!-- Profile Photo Upload with Crop -->
                         <div class="p-4 bg-gray-50 rounded-lg border-2 border-gray-200" x-data="imageCropper('profile_photo', formData.professional_name ? null : true)">
                             <x-input-label for="profile_photo" :value="__('Profile Photo')" />
-                            <p class="mt-1 text-xs text-gray-500 mb-4">Upload a photo of yourself. Image will be cropped to a square (800x800).</p>
+                            <p class="mt-1 text-xs text-gray-500 mb-4">Upload a photo of yourself.</p>
                             
                             <button type="button" @click="$refs.profilePhotoInput.click()" class="mt-2 bg-black text-white px-4 py-2 rounded hover:bg-gray-800 transition">
                                 <i class="fas fa-upload mr-2"></i>Choose Photo
@@ -768,7 +796,7 @@
                             <div x-show="showCropModal" x-cloak class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4" @click.self="showCropModal = false">
                                 <div class="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-auto">
                                     <h4 class="text-xl font-bold mb-4">Crop Your Photo</h4>
-                                    <p class="text-sm text-gray-600 mb-4">Adjust the crop area to position your photo. The image will be saved as a square (800x800).</p>
+                                    <p class="text-sm text-gray-600 mb-4">Drag the crop area to position your photo.</p>
                                     
                                     <div class="relative" style="max-height: 600px; overflow: auto;">
                                         <canvas x-ref="cropCanvas" class="max-w-full border-2 border-gray-800"></canvas>
@@ -788,12 +816,7 @@
                             <!-- Preview -->
                             <div x-show="previewUrl" class="mt-4">
                                 <p class="text-sm font-medium text-gray-700 mb-2">Preview:</p>
-                                <div class="flex gap-4">
-                                    <div>
-                                        <p class="text-xs text-gray-500 mb-1">Square (800x800)</p>
-                                        <img :src="previewUrl" alt="Preview" class="w-32 h-32 object-cover rounded-lg border-2 border-gray-800">
-                                    </div>
-                                </div>
+                                <img :src="previewUrl" alt="Preview" class="w-32 h-32 object-cover rounded-lg border-2 border-gray-800">
                             </div>
                             
                             @if(isset($profile) && $profile->profile_photo_path)
@@ -895,7 +918,8 @@
                 <button type="button" 
                         @click="nextStep()" 
                         x-show="currentStep < steps.length - 1"
-                        class="px-6 py-3 bg-black text-white rounded-lg font-semibold hover:bg-gray-800 transition">
+                        :disabled="!canProceedToNextStep()"
+                        :class="canProceedToNextStep() ? 'px-6 py-3 bg-black text-white rounded-lg font-semibold hover:bg-gray-800 transition cursor-pointer' : 'px-6 py-3 bg-gray-300 text-gray-500 rounded-lg font-semibold cursor-not-allowed'">
                     Continue <i class="fas fa-arrow-right ml-2"></i>
                 </button>
                 <button type="button" 
@@ -956,7 +980,31 @@
             newLens: '',
             newLighting: '',
             newOther: '',
+            canProceedToNextStep() {
+                // Step 1 validation: bio (50-1200 chars), country, city (geoname_id), and gender are required
+                if (this.currentStep === 0) {
+                    const bio = (this.formData.bio || '').trim();
+                    return bio.length >= 50 && 
+                           bio.length <= 1200 &&
+                           this.formData.locationCountryCode && 
+                           this.formData.locationCity && 
+                           this.formData.locationCity.trim().length > 0 &&
+                           this.formData.locationGeonameId &&
+                           this.formData.gender;
+                }
+                // Other steps can proceed
+                return true;
+            },
             init() {
+                // Store instance for external access
+                window.photographerWizardInstance = this;
+                
+                // Listen for validation change events
+                window.addEventListener('step1-validation-changed', () => {
+                    // Trigger reactivity check
+                    this.$nextTick(() => {});
+                });
+                
                 // Load existing profile data if available
                 @php
                     $hasProfile = isset($profile) && method_exists($profile, 'exists') && $profile->exists;
@@ -1010,6 +1058,9 @@
                 @endif
             },
             nextStep() {
+                if (!this.canProceedToNextStep()) {
+                    return;
+                }
                 if (this.currentStep < this.steps.length - 1) {
                     this.currentStep++;
                     // Auto-save disabled for now - will save on final submit
@@ -1145,6 +1196,8 @@
                     window.locationAutocompleteInstance.selectedCountry = country.code;
                     window.locationAutocompleteInstance.onCountryChange();
                 }
+                // Dispatch validation change event
+                window.dispatchEvent(new CustomEvent('step1-validation-changed'));
             },
             
             highlightNext() {
@@ -1303,12 +1356,13 @@
                 this.draw();
                 
                 // Add mouse/touch event listeners
+                // Use document-level listeners for mouse to allow dragging outside canvas
                 this.canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
-                this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
-                this.canvas.addEventListener('mouseup', this.onMouseUp.bind(this));
-                this.canvas.addEventListener('touchstart', this.onTouchStart.bind(this));
-                this.canvas.addEventListener('touchmove', this.onTouchMove.bind(this));
-                this.canvas.addEventListener('touchend', this.onTouchEnd.bind(this));
+                document.addEventListener('mousemove', this.onMouseMoveBound = this.onMouseMove.bind(this));
+                document.addEventListener('mouseup', this.onMouseUpBound = this.onMouseUp.bind(this));
+                this.canvas.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
+                this.canvas.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
+                this.canvas.addEventListener('touchend', this.onTouchEnd.bind(this), { passive: false });
             },
             
             draw() {
@@ -1376,8 +1430,12 @@
             },
             
             onMouseMove(e) {
-                if (!this.isDragging) return;
-                const pos = this.getMousePos(e);
+                if (!this.isDragging || !this.canvas) return;
+                const rect = this.canvas.getBoundingClientRect();
+                const pos = {
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top
+                };
                 this.cropX = Math.max(0, Math.min(pos.x - this.dragStartX, this.canvas.width - this.cropSize));
                 this.cropY = Math.max(0, Math.min(pos.y - this.dragStartY, this.canvas.height - this.cropSize));
                 this.draw();
@@ -1417,9 +1475,18 @@
             },
             
             cancelCrop() {
+                // Remove document-level event listeners
+                if (this.onMouseMoveBound) {
+                    document.removeEventListener('mousemove', this.onMouseMoveBound);
+                }
+                if (this.onMouseUpBound) {
+                    document.removeEventListener('mouseup', this.onMouseUpBound);
+                }
+                
                 this.showCropModal = false;
                 this.originalImage = null;
                 this.originalFile = null;
+                this.isDragging = false;
             },
             
             applyCrop() {
@@ -1453,7 +1520,17 @@
                 );
                 
                 this.previewUrl = previewCanvas.toDataURL('image/jpeg', 0.9);
+                
+                // Remove document-level event listeners
+                if (this.onMouseMoveBound) {
+                    document.removeEventListener('mousemove', this.onMouseMoveBound);
+                }
+                if (this.onMouseUpBound) {
+                    document.removeEventListener('mouseup', this.onMouseUpBound);
+                }
+                
                 this.showCropModal = false;
+                this.isDragging = false;
                 
                 // Update file input (create a new File from the cropped canvas)
                 previewCanvas.toBlob((blob) => {

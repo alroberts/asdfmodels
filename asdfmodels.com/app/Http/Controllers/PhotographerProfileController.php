@@ -127,7 +127,7 @@ class PhotographerProfileController extends Controller
         $services = array_intersect($services, array_keys($servicesOptions));
 
         $validated = $request->validate([
-            'bio' => ['nullable', 'string', 'max:2000'],
+            'bio' => ['nullable', 'string', 'min:50', 'max:1200'],
             'gender' => ['nullable', 'in:male,female,other'],
             'professional_name' => ['nullable', 'string', 'max:255'],
             'location_city' => ['nullable', 'string', 'max:255'],
@@ -198,6 +198,27 @@ class PhotographerProfileController extends Controller
             $validated['studio_location'] = $validated['studio_location_city'] . ', ' . $validated['studio_location_country'];
         } elseif (isset($validated['studio_location_city']) || isset($validated['studio_location_country'])) {
             $validated['studio_location'] = trim(($validated['studio_location_city'] ?? '') . ', ' . ($validated['studio_location_country'] ?? ''));
+        }
+
+        // Sanitize bio: strip HTML but preserve line breaks
+        if (isset($validated['bio']) && $validated['bio']) {
+            // Convert common HTML line break tags to newlines
+            $bio = $validated['bio'];
+            $bio = preg_replace('/<br\s*\/?>/i', "\n", $bio);
+            $bio = preg_replace('/<\/p>/i', "\n\n", $bio);
+            $bio = preg_replace('/<p[^>]*>/i', '', $bio);
+            // Strip all remaining HTML tags
+            $bio = strip_tags($bio);
+            // Normalize whitespace (preserve line breaks, collapse multiple spaces)
+            $bio = preg_replace('/[ \t]+/', ' ', $bio);
+            // Remove any remaining HTML entities
+            $bio = html_entity_decode($bio, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            // Trim and ensure max length
+            $bio = trim($bio);
+            if (mb_strlen($bio) > 1200) {
+                $bio = mb_substr($bio, 0, 1200);
+            }
+            $validated['bio'] = $bio;
         }
 
         // Check if this is a new profile (wizard completion)

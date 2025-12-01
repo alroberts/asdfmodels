@@ -7,6 +7,7 @@ use App\Models\PhotographerGallery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
@@ -30,18 +31,18 @@ class PhotographerPortfolioController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // Get images not in any gallery for "Uncategorized" section
-        // Use a subquery to find images that don't have any gallery associations
-        $uncategorizedImages = PhotographerPortfolioImage::where('photographer_id', $user->id)
-            ->whereDoesntHave('galleries')
-            ->orderBy('display_order')
-            ->orderBy('created_at', 'desc')
-            ->limit(12)
+        // Get list of models for tagging (for upload modal)
+        $models = \App\Models\User::where('is_photographer', false)
+            ->where('is_admin', false)
+            ->whereHas('modelProfile', function($q) {
+                $q->where('is_public', true);
+            })
+            ->orderBy('name')
             ->get();
 
         return view('photographers.portfolio.index', [
             'galleries' => $galleries,
-            'uncategorizedImages' => $uncategorizedImages,
+            'models' => $models,
         ]);
     }
 
@@ -73,7 +74,7 @@ class PhotographerPortfolioController extends Controller
     /**
      * Store newly uploaded images.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request)
     {
         $user = Auth::user();
         
@@ -88,6 +89,7 @@ class PhotographerPortfolioController extends Controller
             'is_featured' => ['boolean'],
             'category' => ['nullable', 'string', 'max:100'],
             'model_id' => ['nullable', 'exists:users,id'],
+            'gallery_id' => ['required', 'exists:photographer_galleries,id'],
         ]);
 
         $uploadedCount = 0;
@@ -104,6 +106,7 @@ class PhotographerPortfolioController extends Controller
 
         // Get max image size from settings
         $maxSize = \App\Models\Setting::getValue('max_image_size', 2100);
+        $uploadedImages = [];
 
         foreach ($request->file('images') as $file) {
             $filename = uniqid() . '.' . $file->getClientOriginalExtension();
@@ -158,8 +161,12 @@ class PhotographerPortfolioController extends Controller
             $thumbPath = "{$userFolder}/thumbnails/{$filename}";
             $thumbImage->save($thumbPath, quality: 80);
 
+            // Get display order for gallery if provided
+            $displayOrder = PhotographerPortfolioImage::where('photographer_id', $user->id)->max('display_order') ?? 0;
+            $displayOrder++;
+
             // Create database record
-            $image = PhotographerPortfolioImage::create([
+            $imageRecord = PhotographerPortfolioImage::create([
                 'photographer_id' => $user->id,
                 'model_id' => $validated['model_id'] ?? null,
                 'original_path' => "uploads/photographers/{$user->id}/portfolio/original/{$filename}",
@@ -170,10 +177,38 @@ class PhotographerPortfolioController extends Controller
                 'is_public' => $request->boolean('is_public', true),
                 'is_featured' => $request->boolean('is_featured', false),
                 'category' => $validated['category'] ?? null,
-                'display_order' => PhotographerPortfolioImage::where('photographer_id', $user->id)->max('display_order') + 1,
+                'display_order' => $displayOrder,
             ]);
 
+            // Associate with gallery (required)
+            $gallery = PhotographerGallery::find($validated['gallery_id']);
+            if ($gallery && $gallery->photographer_id === $user->id) {
+                // Get the next display order for this gallery from pivot table
+                $galleryDisplayOrder = DB::table('gallery_image')
+                    ->where('gallery_id', $gallery->id)
+                    ->max('display_order') ?? 0;
+                
+                $gallery->images()->attach($imageRecord->id, [
+                    'display_order' => $galleryDisplayOrder + 1
+                ]);
+            }
+
+            $uploadedImages[] = [
+                'id' => $imageRecord->id,
+                'thumbnail_path' => $imageRecord->thumbnail_path,
+            ];
+
             $uploadedCount++;
+        }
+
+        // Return JSON for AJAX requests, redirect for form submissions
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully uploaded {$uploadedCount} image(s).",
+                'count' => $uploadedCount,
+                'images' => $uploadedImages,
+            ]);
         }
 
         return redirect()->route('photographers.portfolio.index')

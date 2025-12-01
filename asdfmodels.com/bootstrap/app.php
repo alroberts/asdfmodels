@@ -24,18 +24,16 @@ return Application::configure(basePath: dirname(__DIR__))
             try {
                 $devMode = \App\Models\Setting::getValue('dev_mode', false);
                 if ($devMode) {
-                    // Show detailed errors in dev mode
+                    // Show detailed errors in dev mode for all routes
                     $exceptions->render(function (\Throwable $e, \Illuminate\Http\Request $request) {
-                        if ($request->is('admin/*')) {
-                            // For admin routes, show detailed error
-                            return response()->view('errors.dev-mode', [
-                                'exception' => $e,
-                                'message' => $e->getMessage(),
-                                'file' => $e->getFile(),
-                                'line' => $e->getLine(),
-                                'trace' => $e->getTraceAsString(),
-                            ], 500);
-                        }
+                        // Show detailed error for all routes when dev mode is enabled
+                        return response()->view('errors.dev-mode', [
+                            'exception' => $e,
+                            'message' => $e->getMessage(),
+                            'file' => $e->getFile(),
+                            'line' => $e->getLine(),
+                            'trace' => $e->getTraceAsString(),
+                        ], 500);
                     });
                 }
             } catch (\Exception $e) {

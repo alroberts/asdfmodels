@@ -2,24 +2,25 @@
     <x-slot name="header">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                {{ __('Create New Gallery') }}
+                {{ __('Edit Gallery') }}
             </h2>
-            <a href="{{ route('photographers.portfolio.index') }}" class="text-gray-600 hover:text-gray-900 transition-colors flex items-center gap-2">
-                <i class="fas fa-arrow-left"></i> Back to Portfolio
+            <a href="{{ route('photographers.portfolio.galleries.show', $gallery->id) }}" class="text-gray-600 hover:text-gray-900 transition-colors flex items-center gap-2">
+                <i class="fas fa-arrow-left"></i> Back to Gallery
             </a>
         </div>
     </x-slot>
 
     <div class="py-6 md:py-12">
         <div class="max-w-5xl mx-auto sm:px-6 lg:px-8">
-            <form method="POST" action="{{ route('photographers.portfolio.galleries.store') }}" x-data="{ visibility: '{{ old('visibility', 'public') }}', status: '{{ old('status', 'draft') }}', containsNudity: {{ old('contains_nudity') == '1' ? 'true' : 'false' }}, customUsers: [] }">
+            <form method="POST" action="{{ route('photographers.portfolio.galleries.update', $gallery->id) }}" x-data="{ visibility: '{{ old('visibility', $gallery->visibility) }}', status: '{{ old('status', $gallery->status) }}', containsNudity: {{ old('contains_nudity', $gallery->contains_nudity ? '1' : '0') == '1' ? 'true' : 'false' }}, customUsers: [] }">
                 @csrf
+                @method('PATCH')
 
                 <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
                     <!-- Header Section -->
                     <div class="bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 px-6 md:px-8 py-6">
                         <h3 class="text-2xl font-bold text-gray-900">Gallery Information</h3>
-                        <p class="text-sm text-gray-600 mt-1">Create a new gallery to organize your portfolio images</p>
+                        <p class="text-sm text-gray-600 mt-1">Update your gallery details and settings</p>
                     </div>
 
                     <div class="p-6 md:p-8 space-y-8">
@@ -31,7 +32,7 @@
                                 name="title" 
                                 type="text" 
                                 class="block w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-gray-800 focus:ring-2 focus:ring-gray-800 focus:ring-opacity-20 transition-all duration-200" 
-                                :value="old('title')" 
+                                :value="old('title', $gallery->title)" 
                                 required 
                                 autofocus 
                                 placeholder="Enter gallery title"
@@ -48,7 +49,7 @@
                                 rows="4" 
                                 class="block w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-gray-800 focus:ring-2 focus:ring-gray-800 focus:ring-opacity-20 transition-all duration-200 resize-none"
                                 placeholder="Describe your gallery (optional)"
-                            >{{ old('description') }}</textarea>
+                            >{{ old('description', $gallery->description) }}</textarea>
                             <x-input-error :messages="$errors->get('description')" class="mt-2" />
                         </div>
 
@@ -99,7 +100,7 @@
                                                     type="checkbox" 
                                                     name="contains_nudity" 
                                                     value="1" 
-                                                    {{ old('contains_nudity') == '1' ? 'checked' : '' }} 
+                                                    {{ old('contains_nudity', $gallery->contains_nudity ? '1' : '0') == '1' ? 'checked' : '' }} 
                                                     x-model="containsNudity"
                                                     class="sr-only"
                                                 >
@@ -160,15 +161,16 @@
                                                 })
                                                 ->orderBy('name')
                                                 ->get();
+                                            $selectedUsers = old('custom_visibility_users', $gallery->custom_visibility_users ?? []);
                                         @endphp
                                         @foreach($allUsers as $user)
-                                            <label class="flex items-center p-2 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer group" x-data="{ checked: {{ in_array($user->id, old('custom_visibility_users', [])) ? 'true' : 'false' }} }">
+                                            <label class="flex items-center p-2 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer group" x-data="{ checked: {{ in_array($user->id, $selectedUsers) ? 'true' : 'false' }} }">
                                                 <div class="relative">
                                                     <input 
                                                         type="checkbox" 
                                                         name="custom_visibility_users[]" 
                                                         value="{{ $user->id }}" 
-                                                        {{ in_array($user->id, old('custom_visibility_users', [])) ? 'checked' : '' }} 
+                                                        {{ in_array($user->id, $selectedUsers) ? 'checked' : '' }} 
                                                         x-model="checked"
                                                         class="sr-only"
                                                     >
@@ -195,7 +197,7 @@
                     <!-- Actions Footer -->
                     <div class="bg-gray-50 border-t border-gray-200 px-6 md:px-8 py-5 flex flex-col sm:flex-row justify-end gap-3">
                         <a 
-                            href="{{ route('photographers.portfolio.index') }}" 
+                            href="{{ route('photographers.portfolio.galleries.show', $gallery->id) }}" 
                             class="px-6 py-2.5 border-2 border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-white hover:border-gray-400 transition-all duration-200 text-center"
                         >
                             Cancel
@@ -204,8 +206,8 @@
                             type="submit" 
                             class="px-6 py-2.5 bg-gray-900 text-white rounded-lg font-semibold hover:bg-gray-800 active:bg-gray-950 transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2"
                         >
-                            <i class="fas fa-plus"></i>
-                            Create Gallery
+                            <i class="fas fa-save"></i>
+                            Save Changes
                         </button>
                     </div>
                 </div>
@@ -213,3 +215,5 @@
         </div>
     </div>
 </x-app-layout>
+
+

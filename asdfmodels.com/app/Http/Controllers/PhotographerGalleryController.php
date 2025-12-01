@@ -22,13 +22,7 @@ class PhotographerGalleryController extends Controller
             abort(403, 'Only photographers can create galleries.');
         }
 
-        $images = PhotographerPortfolioImage::where('photographer_id', $user->id)
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        return view('photographers.portfolio.galleries.create', [
-            'images' => $images,
-        ]);
+        return view('photographers.portfolio.galleries.create');
     }
 
     /**
@@ -45,11 +39,11 @@ class PhotographerGalleryController extends Controller
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
-            'cover_image_id' => ['nullable', 'exists:photographer_portfolio_images,id'],
-            'is_featured' => ['boolean'],
-            'is_public' => ['boolean'],
-            'image_ids' => ['nullable', 'array'],
-            'image_ids.*' => ['exists:photographer_portfolio_images,id'],
+            'contains_nudity' => ['nullable'],
+            'visibility' => ['required', 'in:public,link_only,hidden,custom'],
+            'status' => ['required', 'in:draft,published'],
+            'custom_visibility_users' => ['nullable', 'array'],
+            'custom_visibility_users.*' => ['exists:users,id'],
         ]);
 
         // Get the highest display_order
@@ -60,29 +54,16 @@ class PhotographerGalleryController extends Controller
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
             'display_order' => $maxOrder + 1,
-            'is_featured' => $validated['is_featured'] ?? false,
-            'is_public' => $validated['is_public'] ?? true,
+            'contains_nudity' => isset($validated['contains_nudity']) && $validated['contains_nudity'] == '1',
+            'visibility' => $validated['visibility'],
+            'status' => $validated['status'],
+            'custom_visibility_users' => $validated['visibility'] === 'custom' && !empty($validated['custom_visibility_users']) 
+                ? $validated['custom_visibility_users'] 
+                : null,
+            // Keep legacy fields for now (can be removed later)
+            'is_featured' => false,
+            'is_public' => $validated['visibility'] === 'public',
         ]);
-
-        // Set cover image if provided
-        if (isset($validated['cover_image_id'])) {
-            $coverImage = PhotographerPortfolioImage::find($validated['cover_image_id']);
-            if ($coverImage && $coverImage->photographer_id === $user->id) {
-                $gallery->cover_image_path = $coverImage->thumbnail_path;
-                $gallery->save();
-            }
-        }
-
-        // Attach images to gallery
-        if (isset($validated['image_ids']) && count($validated['image_ids']) > 0) {
-            $images = PhotographerPortfolioImage::whereIn('id', $validated['image_ids'])
-                ->where('photographer_id', $user->id)
-                ->get();
-            
-            foreach ($images as $index => $image) {
-                $gallery->images()->attach($image->id, ['display_order' => $index]);
-            }
-        }
 
         return redirect()->route('photographers.portfolio.index')
             ->with('status', 'Gallery created successfully!');
@@ -150,43 +131,25 @@ class PhotographerGalleryController extends Controller
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
-            'cover_image_id' => ['nullable', 'exists:photographer_portfolio_images,id'],
-            'is_featured' => ['boolean'],
-            'is_public' => ['boolean'],
-            'image_ids' => ['nullable', 'array'],
-            'image_ids.*' => ['exists:photographer_portfolio_images,id'],
+            'contains_nudity' => ['nullable'],
+            'visibility' => ['required', 'in:public,link_only,hidden,custom'],
+            'status' => ['required', 'in:draft,published'],
+            'custom_visibility_users' => ['nullable', 'array'],
+            'custom_visibility_users.*' => ['exists:users,id'],
         ]);
 
         $gallery->update([
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
-            'is_featured' => $validated['is_featured'] ?? false,
-            'is_public' => $validated['is_public'] ?? true,
+            'contains_nudity' => isset($validated['contains_nudity']) && $validated['contains_nudity'] == '1',
+            'visibility' => $validated['visibility'],
+            'status' => $validated['status'],
+            'custom_visibility_users' => $validated['visibility'] === 'custom' && !empty($validated['custom_visibility_users']) 
+                ? $validated['custom_visibility_users'] 
+                : null,
+            // Keep legacy fields for now (can be removed later)
+            'is_public' => $validated['visibility'] === 'public',
         ]);
-
-        // Update cover image if provided
-        if (isset($validated['cover_image_id'])) {
-            $coverImage = PhotographerPortfolioImage::find($validated['cover_image_id']);
-            if ($coverImage && $coverImage->photographer_id === $user->id) {
-                $gallery->cover_image_path = $coverImage->thumbnail_path;
-                $gallery->save();
-            }
-        }
-
-        // Sync images to gallery
-        if (isset($validated['image_ids'])) {
-            $images = PhotographerPortfolioImage::whereIn('id', $validated['image_ids'])
-                ->where('photographer_id', $user->id)
-                ->get();
-            
-            // Detach all current images
-            $gallery->images()->detach();
-            
-            // Attach new images with display order
-            foreach ($images as $index => $image) {
-                $gallery->images()->attach($image->id, ['display_order' => $index]);
-            }
-        }
 
         return redirect()->route('photographers.portfolio.index')
             ->with('status', 'Gallery updated successfully!');

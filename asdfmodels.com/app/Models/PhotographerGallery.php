@@ -16,12 +16,18 @@ class PhotographerGallery extends Model
         'display_order',
         'is_featured',
         'is_public',
+        'contains_nudity',
+        'visibility',
+        'status',
+        'custom_visibility_users',
     ];
 
     protected $casts = [
         'is_featured' => 'boolean',
         'is_public' => 'boolean',
+        'contains_nudity' => 'boolean',
         'display_order' => 'integer',
+        'custom_visibility_users' => 'array',
     ];
 
     /**

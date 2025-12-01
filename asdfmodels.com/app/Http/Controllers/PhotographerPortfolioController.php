@@ -95,8 +95,8 @@ class PhotographerPortfolioController extends Controller
         $uploadedCount = 0;
         $userFolder = public_path("uploads/photographers/{$user->id}/portfolio");
 
-        // Create directories if they don't exist
-        $directories = ['original', 'full', 'medium', 'thumbnails'];
+        // Create directories if they don't exist (only resized and thumbnails)
+        $directories = ['resized', 'thumbnails'];
         foreach ($directories as $dir) {
             $path = "{$userFolder}/{$dir}";
             if (!file_exists($path)) {
@@ -111,20 +111,16 @@ class PhotographerPortfolioController extends Controller
         foreach ($request->file('images') as $file) {
             $filename = uniqid() . '.' . $file->getClientOriginalExtension();
             
-            // Store original
-            $originalPath = "{$userFolder}/original/{$filename}";
-            $file->move("{$userFolder}/original", $filename);
-
-            // Process image
+            // Process image directly from uploaded file
             $manager = new ImageManager(new Driver());
-            $image = $manager->read($originalPath);
+            $image = $manager->read($file->getRealPath());
             
             // Get dimensions
             $width = $image->width();
             $height = $image->height();
             $longestEdge = max($width, $height);
 
-            // Resize if needed (max from settings)
+            // Resize to max size if needed (2100px on long edge from settings)
             if ($longestEdge > $maxSize) {
                 if ($width > $height) {
                     $image->scale(width: $maxSize);
@@ -133,26 +129,18 @@ class PhotographerPortfolioController extends Controller
                 }
             }
 
-            // Save full size
-            $fullPath = "{$userFolder}/full/{$filename}";
-            $image->save($fullPath, quality: 90);
-
-            // Create medium (800px)
-            $mediumImage = $manager->read($originalPath);
-            if ($longestEdge > 800) {
-                if ($width > $height) {
-                    $mediumImage->scale(width: 800);
-                } else {
-                    $mediumImage->scale(height: 800);
-                }
-            }
-            $mediumPath = "{$userFolder}/medium/{$filename}";
-            $mediumImage->save($mediumPath, quality: 85);
+            // Save resized version (2100px on long edge)
+            $resizedPath = "{$userFolder}/resized/{$filename}";
+            $image->save($resizedPath, quality: 90);
 
             // Create thumbnail (300px)
-            $thumbImage = $manager->read($originalPath);
-            if ($longestEdge > 300) {
-                if ($width > $height) {
+            $thumbImage = $manager->read($resizedPath);
+            $thumbWidth = $thumbImage->width();
+            $thumbHeight = $thumbImage->height();
+            $thumbLongestEdge = max($thumbWidth, $thumbHeight);
+            
+            if ($thumbLongestEdge > 300) {
+                if ($thumbWidth > $thumbHeight) {
                     $thumbImage->scale(width: 300);
                 } else {
                     $thumbImage->scale(height: 300);
@@ -169,10 +157,10 @@ class PhotographerPortfolioController extends Controller
             $imageRecord = PhotographerPortfolioImage::create([
                 'photographer_id' => $user->id,
                 'model_id' => $validated['model_id'] ?? null,
-                'original_path' => "uploads/photographers/{$user->id}/portfolio/original/{$filename}",
+                'original_path' => null, // No longer storing original
                 'thumbnail_path' => "uploads/photographers/{$user->id}/portfolio/thumbnails/{$filename}",
-                'medium_path' => "uploads/photographers/{$user->id}/portfolio/medium/{$filename}",
-                'full_path' => "uploads/photographers/{$user->id}/portfolio/full/{$filename}",
+                'medium_path' => null, // No longer creating medium version
+                'full_path' => "uploads/photographers/{$user->id}/portfolio/resized/{$filename}", // Store resized version here
                 'contains_nudity' => $request->boolean('contains_nudity', false),
                 'is_public' => $request->boolean('is_public', true),
                 'is_featured' => $request->boolean('is_featured', false),
@@ -195,6 +183,7 @@ class PhotographerPortfolioController extends Controller
 
             $uploadedImages[] = [
                 'id' => $imageRecord->id,
+                'full_path' => $imageRecord->full_path,
                 'thumbnail_path' => $imageRecord->thumbnail_path,
             ];
 
@@ -218,7 +207,7 @@ class PhotographerPortfolioController extends Controller
     /**
      * Show the form for editing the specified image.
      */
-    public function edit(string $id): View
+    public function edit(Request $request, string $id)
     {
         $image = PhotographerPortfolioImage::findOrFail($id);
         $user = Auth::user();
@@ -236,6 +225,8 @@ class PhotographerPortfolioController extends Controller
             ->orderBy('name')
             ->get();
 
+        // Return HTML view for both AJAX and regular requests
+        // The JavaScript will parse the HTML to extract form data
         return view('photographers.portfolio.edit', [
             'image' => $image,
             'models' => $models,
@@ -257,16 +248,39 @@ class PhotographerPortfolioController extends Controller
         $validated = $request->validate([
             'title' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
-            'category' => ['nullable', 'string', 'max:100'],
-            'model_id' => ['nullable', 'exists:users,id'],
-            'is_featured' => ['boolean'],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['string', 'max:255'],
             'contains_nudity' => ['boolean'],
-            'is_public' => ['boolean'],
+            'is_cover' => ['boolean'],
             'shot_date' => ['nullable', 'date'],
-            'display_order' => ['nullable', 'integer'],
         ]);
 
-        $image->update($validated);
+        $image->update([
+            'title' => $validated['title'] ?? null,
+            'description' => $validated['description'] ?? null,
+            'tags' => $validated['tags'] ?? [],
+            'contains_nudity' => $validated['contains_nudity'] ?? false,
+            'shot_date' => $validated['shot_date'] ?? null,
+        ]);
+
+        // Handle cover image - need gallery_id from request
+        $galleryId = $request->input('gallery_id');
+        if ($galleryId) {
+            $gallery = \App\Models\PhotographerGallery::where('photographer_id', $user->id)
+                ->find($galleryId);
+            
+            if ($gallery) {
+                if ($validated['is_cover'] ?? false) {
+                    // Set this image as cover
+                    $gallery->update(['cover_image_path' => $image->full_path]);
+                } else {
+                    // Check if this image is currently the cover and unset it
+                    if ($gallery->cover_image_path === $image->full_path) {
+                        $gallery->update(['cover_image_path' => null]);
+                    }
+                }
+            }
+        }
 
         // Return JSON for AJAX requests, redirect for form submissions
         if ($request->wantsJson() || $request->expectsJson()) {
@@ -290,18 +304,18 @@ class PhotographerPortfolioController extends Controller
             abort(403);
         }
 
-        // Delete files
+        // Delete files (only resized and thumbnail)
         $files = [
-            $image->original_path,
             $image->thumbnail_path,
-            $image->medium_path,
             $image->full_path,
         ];
 
         foreach ($files as $file) {
-            $fullPath = public_path($file);
-            if (file_exists($fullPath)) {
-                unlink($fullPath);
+            if ($file) {
+                $fullPath = public_path($file);
+                if (file_exists($fullPath)) {
+                    unlink($fullPath);
+                }
             }
         }
 
@@ -362,16 +376,23 @@ class PhotographerPortfolioController extends Controller
         }
 
         $validated = $request->validate([
-            'order' => ['required', 'array'],
-            'order.*.id' => ['required', 'integer', 'exists:photographer_portfolio_images,id'],
-            'order.*.display_order' => ['required', 'integer', 'min:1'],
+            'gallery_id' => ['required', 'integer', 'exists:photographer_galleries,id'],
+            'image_ids' => ['required', 'array'],
+            'image_ids.*' => ['required', 'integer', 'exists:photographer_portfolio_images,id'],
         ]);
 
-        foreach ($validated['order'] as $item) {
-            $image = PhotographerPortfolioImage::find($item['id']);
+        // Get the gallery and verify ownership
+        $gallery = \App\Models\PhotographerGallery::where('photographer_id', $user->id)
+            ->findOrFail($validated['gallery_id']);
+
+        // Update display_order in the pivot table based on the order of image_ids array
+        foreach ($validated['image_ids'] as $index => $imageId) {
+            $image = PhotographerPortfolioImage::find($imageId);
             if ($image && $image->photographer_id === $user->id) {
-                $image->display_order = $item['display_order'];
-                $image->save();
+                // Update the pivot table's display_order
+                $gallery->images()->updateExistingPivot($imageId, [
+                    'display_order' => $index + 1
+                ]);
             }
         }
 

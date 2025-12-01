@@ -1,3 +1,7 @@
+@push('styles')
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dropzone@6/dist/dropzone.css">
+@endpush
+
 <x-app-layout>
     <x-slot name="header">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -40,349 +44,773 @@
                 </div>
             </div>
 
-            <!-- Images Grid -->
+            <!-- Images Grid with SortableJS -->
             @if($gallery->images->count() > 0)
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                <div 
+                x-data="galleryManager({{ $gallery->id }})"
+                x-init="initSortable(); justifyGrid(); window.addEventListener('resize', () => { justifyGrid(); });"
+                    class="justified-grid relative"
+                    id="gallery-images-grid"
+                    x-ref="gridContainer"
+                >
                     @foreach($gallery->images as $image)
-                        <div class="relative aspect-square overflow-hidden rounded-lg border-2 border-gray-200 hover:border-gray-800 transition-all cursor-pointer group"
-                             onclick="window.location.href='{{ route('photographers.portfolio.edit', $image->id) }}'">
-                            <img src="{{ asset($image->thumbnail_path) }}" 
+                        <div 
+                            class="relative overflow-hidden rounded-lg border-2 border-gray-200 hover:border-gray-800 transition-all cursor-move group sortable-item justified-image-item"
+                            data-image-id="{{ $image->id }}"
+                        >
+                            <img src="{{ asset($image->full_path ?? $image->thumbnail_path) }}" 
                                  alt="{{ $image->title ?? 'Image' }}"
-                                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
-                            <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center">
-                                <i class="fas fa-edit text-white opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                                 class="justified-img w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-none"
+                                 onload="this.setAttribute('data-aspect-ratio', this.naturalWidth / this.naturalHeight); window.dispatchEvent(new Event('resize'));"
+                                 data-aspect-ratio="1">
+                            <div class="absolute top-2 left-2 bg-gray-800 bg-opacity-75 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                <i class="fas fa-grip-vertical"></i> Drag to reorder
                             </div>
+                            <button 
+                                type="button"
+                                onclick="openEditModal({{ $image->id }}, '{{ asset($image->full_path ?? $image->thumbnail_path) }}'); event.stopPropagation();"
+                                class="absolute top-2 right-2 bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10"
+                                title="Edit image"
+                            >
+                                <i class="fas fa-edit text-sm"></i>
+                            </button>
+                            <button 
+                                type="button"
+                                onclick="deleteImage({{ $image->id }}, this); event.stopPropagation();"
+                                class="absolute bottom-2 right-2 bg-red-600 hover:bg-red-700 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10"
+                                title="Delete image"
+                            >
+                                <i class="fas fa-trash text-sm"></i>
+                            </button>
                         </div>
                     @endforeach
                 </div>
-            @else
-                <div 
-                    x-data="galleryUploader({{ $gallery->id }})"
-                    x-init="
-                        window.addEventListener('resize', () => { justifyGrid(); });
-                        $watch('selectedFiles', () => { $nextTick(() => { justifyGrid(); }); });
-                    "
-                    @dragover.prevent="handleDragOver($event)"
-                    @dragleave.prevent="handleDragLeave($event)"
-                    @drop.prevent="handleDrop($event)"
-                    @click="$refs.fileInput.click()"
-                    :class="{
-                        'border-gray-800 bg-gray-50 scale-[1.02]': isDragging,
-                        'border-gray-200 bg-white': !isDragging
-                    }"
-                    class="bg-white rounded-xl shadow-lg border-2 border-dashed p-12 text-center cursor-pointer transition-all duration-300 ease-in-out"
-                >
-                    <input 
-                        type="file" 
-                        x-ref="fileInput"
-                        @change="handleFiles($event)"
-                        multiple 
-                        accept="image/jpeg,image/jpg,image/png"
-                        class="hidden"
-                    >
+                
+                <!-- Add More Images Dropzone -->
+                <div class="mt-6">
                     <div 
-                        class="space-y-4 transition-all duration-300" 
-                        x-show="selectedFiles.length === 0"
-                        x-transition:enter="ease-out duration-300"
-                        x-transition:enter-start="opacity-0"
-                        x-transition:enter-end="opacity-100"
-                        x-transition:leave="ease-in duration-200"
-                        x-transition:leave-start="opacity-100"
-                        x-transition:leave-end="opacity-0"
-                    >
-                        <i 
-                            class="fas fa-cloud-upload-alt text-6xl transition-all duration-300" 
-                            :class="{
-                                'text-gray-800 scale-110 animate-pulse': isDragging,
-                                'text-gray-300': !isDragging
-                            }"
-                        ></i>
-                        <div>
-                            <p class="text-lg font-semibold text-gray-900 transition-colors duration-300" :class="isDragging ? 'text-gray-800' : 'text-gray-900'">
-                                <span class="text-gray-800 underline">Click to upload</span> or drag and drop
-                            </p>
-                            <p class="text-sm text-gray-600 mt-1">PNG, JPG up to 10MB each</p>
-                        </div>
-                    </div>
-
-                    <!-- Selected Files Preview -->
-                    <div 
-                        x-show="selectedFiles.length > 0" 
-                        class="mt-6"
-                        x-transition:enter="ease-out duration-500"
-                        x-transition:enter-start="opacity-0 transform scale-95"
-                        x-transition:enter-end="opacity-100 transform scale-100"
-                        x-transition:leave="ease-in duration-200"
-                        x-transition:leave-start="opacity-100"
-                        x-transition:leave-end="opacity-0"
-                    >
-                        <h4 
-                            class="text-lg font-semibold text-gray-900 mb-4"
-                            x-transition:enter="ease-out duration-300 delay-100"
-                            x-transition:enter-start="opacity-0 translate-y-2"
-                            x-transition:enter-end="opacity-100 translate-y-0"
-                        >
-                            <span x-text="selectedFiles.length"></span> <span x-text="selectedFiles.length === 1 ? 'Photo' : 'Photos'"></span> Selected
-                        </h4>
-                        <div class="p-2 border-2 border-gray-200 rounded-lg bg-gray-50">
-                            <div class="justified-grid relative" x-ref="gridContainer">
-                                <!-- Drop marker positioned between items -->
-                                <div 
-                                    x-show="draggedIndex !== null && dragOverIndex !== null && dropPosition !== null"
-                                    class="drop-marker"
-                                    :style="dropMarkerStyle"
-                                    x-transition:enter="ease-out duration-200"
-                                    x-transition:enter-start="opacity-0 scale-0.8"
-                                    x-transition:enter-end="opacity-100 scale-100"
-                                    x-transition:leave="ease-in duration-150"
-                                    x-transition:leave-start="opacity-100 scale-100"
-                                    x-transition:leave-end="opacity-0 scale-0.8"
-                                >
-                                    <div class="drop-marker-line"></div>
-                                </div>
-                                
-                                <template x-for="(file, index) in selectedFiles" :key="index">
-                                    <div 
-                                        class="relative group justified-item justified-image-item cursor-move transition-all duration-200 ease-out"
-                                        :class="{
-                                            'opacity-30 scale-95': draggedIndex === index,
-                                            'translate-x-4': draggedIndex !== null && draggedIndex !== index && dragOverIndex !== null && 
-                                                            draggedIndex < dragOverIndex && index > draggedIndex && index <= dragOverIndex,
-                                            '-translate-x-4': draggedIndex !== null && draggedIndex !== index && dragOverIndex !== null && 
-                                                             draggedIndex > dragOverIndex && index < draggedIndex && index >= dragOverIndex
-                                        }"
-                                        draggable="true"
-                                        @dragstart.stop="dragStart($event, index)"
-                                        @dragover.stop.prevent="dragOver($event, index)"
-                                        @dragenter.stop.prevent="dragEnter($event, index)"
-                                        @dragleave.stop="dragLeave($event)"
-                                        @drop.stop.prevent="drop($event, index)"
-                                        @dragend.stop="dragEnd($event)"
-                                        x-transition:enter="ease-out duration-300"
-                                        x-transition:enter-start="opacity-0 transform scale-90 translate-y-4"
-                                        x-transition:enter-end="opacity-100 transform scale-100 translate-y-0"
-                                        :style="`transition-delay: ${index * 50}ms`"
-                                        :data-item-index="index"
-                                    >
-                                        <div class="rounded-lg overflow-hidden border-2 border-gray-300 bg-gray-200 transform transition-transform duration-200 group-hover:scale-105 h-full">
-                                            <img :src="file.preview" :alt="file.name" class="justified-img pointer-events-none" :data-index="index">
-                                        </div>
-                                        <button 
-                                            @click.stop="removeFile(index)"
-                                            class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 z-10"
-                                        >
-                                            <i class="fas fa-times text-xs"></i>
-                                        </button>
-                                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity duration-200" x-text="file.name"></div>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-                        
-                        <style>
-                            .justified-grid {
-                                display: flex;
-                                flex-wrap: wrap;
-                                gap: 1rem;
-                                align-items: flex-start;
-                            }
-                            .justified-item {
-                                flex-shrink: 0;
-                                margin-bottom: 1rem;
-                            }
-                            .justified-img {
-                                height: 100%;
-                                width: auto;
-                                object-fit: contain;
-                                display: block;
-                            }
-                            .drop-marker {
-                                pointer-events: none;
-                                display: flex;
-                                flex-direction: column;
-                                align-items: center;
-                                padding: 0 1rem;
-                                transform: translateX(-50%);
-                            }
-                            .drop-marker-line {
-                                width: 3px;
-                                height: 250px;
-                                background: #000000;
-                                border-radius: 2px;
-                                box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
-                                transition: height 0.2s ease;
-                            }
-                        </style>
-                    </div>
-
-                    <!-- Upload Progress -->
-                    <div x-show="isUploading" class="mt-6">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-sm font-medium text-gray-700">Uploading...</span>
-                            <span class="text-sm text-gray-600" x-text="uploadProgress + '%'"></span>
-                        </div>
-                        <div class="w-full bg-gray-200 rounded-full h-2.5">
-                            <div 
-                                class="bg-gray-800 h-2.5 rounded-full transition-all duration-300"
-                                :style="'width: ' + uploadProgress + '%'"
-                            ></div>
-                        </div>
-                        <p class="text-xs text-gray-500 mt-2" x-text="uploadStatus"></p>
-                    </div>
-
-                    <!-- Error Message -->
-                    <div x-show="errorMessage" class="mt-6 p-4 bg-red-50 border-2 border-red-500 rounded-lg">
-                        <p class="text-sm text-red-700" x-text="errorMessage"></p>
-                    </div>
-
-                    <!-- Upload Button (shown when files selected) -->
-                    <div 
-                        x-show="selectedFiles.length > 0 && !isUploading" 
-                        class="mt-6"
-                        x-transition:enter="ease-out duration-300"
-                        x-transition:enter-start="opacity-0 translate-y-4"
-                        x-transition:enter-end="opacity-100 translate-y-0"
-                        x-transition:leave="ease-in duration-200"
-                        x-transition:leave-start="opacity-100"
-                        x-transition:leave-end="opacity-0"
-                    >
-                        <button 
-                            @click.stop="uploadFiles()"
-                            class="px-6 py-2.5 bg-gray-900 text-white rounded-lg font-semibold hover:bg-gray-800 active:bg-gray-950 transition-all duration-200 shadow-sm hover:shadow-md hover:scale-105 active:scale-95 flex items-center justify-center gap-2 mx-auto"
-                        >
-                            <i class="fas fa-upload"></i>
-                            Upload <span x-text="selectedFiles.length"></span> <span x-text="selectedFiles.length === 1 ? 'Photo' : 'Photos'"></span>
-                        </button>
-                    </div>
+                        id="add-images-dropzone"
+                        class="dropzone bg-white rounded-xl shadow-lg border-2 border-dashed border-gray-200 p-8 text-center"
+                    ></div>
                 </div>
+            @else
+                <!-- Dropzone.js Upload Area -->
+                <div 
+                    id="gallery-dropzone"
+                    class="dropzone bg-white rounded-xl shadow-lg border-2 border-dashed border-gray-200 p-12 text-center"
+                ></div>
+
             @endif
         </div>
     </div>
 
+    <!-- Edit Image Modal -->
+    <div id="editImageModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4" onclick="closeEditModal(event)">
+        <div class="bg-white rounded-xl shadow-lg border border-gray-200 max-w-5xl w-full max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+            <div id="editModalLoading" class="text-center py-12">
+                <i class="fas fa-spinner fa-spin text-4xl text-gray-400"></i>
+                <p class="mt-4 text-gray-600">Loading image data...</p>
+            </div>
+            <div id="editModalContent" class="hidden">
+                <form id="editImageForm" onsubmit="submitEditForm(event)">
+                    <!-- Header Section -->
+                    <div class="bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 px-6 md:px-8 py-6 flex justify-between items-center">
+                        <div>
+                            <h3 class="text-2xl font-bold text-gray-900">Edit Image</h3>
+                            <p class="text-sm text-gray-600 mt-1">Update your image details and settings</p>
+                        </div>
+                        <button type="button" onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <i class="fas fa-times text-2xl"></i>
+                        </button>
+                    </div>
+
+                    <div class="p-6 md:p-8">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <!-- Left Column: Image Preview -->
+                            <div>
+                                <img id="editModalImage" src="" alt="Image" class="w-full h-auto rounded-lg border-2 border-gray-200 object-cover">
+                            </div>
+
+                            <!-- Right Column: Form Fields -->
+                            <div class="space-y-6">
+                                <!-- Image Title -->
+                                <div class="space-y-2">
+                                    <label for="edit_title" class="text-sm font-semibold text-gray-900">Title (optional)</label>
+                                    <input 
+                                        type="text" 
+                                        id="edit_title" 
+                                        name="title" 
+                                        class="block w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-gray-800 focus:ring-2 focus:ring-gray-800 focus:ring-opacity-20 transition-all duration-200" 
+                                        placeholder="Enter image title"
+                                    >
+                                </div>
+
+                                <!-- Description -->
+                                <div class="space-y-2">
+                                    <label for="edit_description" class="text-sm font-semibold text-gray-900">Description (optional)</label>
+                                    <textarea 
+                                        id="edit_description" 
+                                        name="description" 
+                                        rows="4" 
+                                        class="block w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-gray-800 focus:ring-2 focus:ring-gray-800 focus:ring-opacity-20 transition-all duration-200 resize-none"
+                                        placeholder="Describe your image (optional)"
+                                    ></textarea>
+                                </div>
+
+                                <!-- Models in Photo (Tag Input) -->
+                                <div class="space-y-2">
+                                    <label for="edit_models" class="text-sm font-semibold text-gray-900">Models in Photo (optional)</label>
+                                    <div id="edit_models_container" class="border-2 border-gray-300 rounded-lg px-4 py-2 min-h-[48px] focus-within:border-gray-800 focus-within:ring-2 focus-within:ring-gray-800 focus-within:ring-opacity-20 transition-all duration-200 flex flex-wrap gap-2 items-center">
+                                        <input 
+                                            type="text" 
+                                            id="edit_models_input" 
+                                            class="flex-1 min-w-[120px] outline-none text-gray-900 placeholder-gray-400"
+                                            placeholder="Type @username and press Enter"
+                                            onkeydown="handleModelTagInput(event)"
+                                        >
+                                    </div>
+                                    <input type="hidden" id="edit_models" name="models" value="">
+                                    <p class="text-xs text-gray-500 mt-1">Type @username and press Enter to add models</p>
+                                </div>
+
+                                <!-- Shot Date -->
+                                <div class="space-y-2">
+                                    <label for="edit_shot_date" class="text-sm font-semibold text-gray-900">Shot Date (optional)</label>
+                                    <input 
+                                        type="date" 
+                                        id="edit_shot_date" 
+                                        name="shot_date" 
+                                        class="block w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:border-gray-800 focus:ring-2 focus:ring-gray-800 focus:ring-opacity-20 transition-all duration-200"
+                                    >
+                                </div>
+
+                                <!-- Image Settings -->
+                                <div class="border-t border-gray-200 pt-6 space-y-4">
+                                    <div>
+                                        <h3 class="text-lg font-bold text-gray-900 mb-4">Image Settings</h3>
+                                    </div>
+
+                                    <!-- Cover Image -->
+                                    <div class="bg-gray-50 rounded-lg p-5 border border-gray-200 hover:border-gray-300 transition-colors">
+                                        <label class="flex items-center group cursor-pointer" x-data="{ checked: false }" x-init="checked = document.getElementById('edit_is_cover')?.checked || false">
+                                            <div class="relative">
+                                                <input 
+                                                    type="checkbox" 
+                                                    id="edit_is_cover" 
+                                                    name="is_cover" 
+                                                    value="1" 
+                                                    class="sr-only"
+                                                    x-model="checked"
+                                                >
+                                                <div class="w-5 h-5 border-2 rounded transition-all duration-200 flex items-center justify-center relative" :class="checked ? 'border-gray-800 bg-gray-800' : 'border-gray-300 bg-white'">
+                                                    <svg class="absolute w-3.5 h-3.5 transition-opacity duration-200" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" :class="checked ? 'opacity-100' : 'opacity-0'">
+                                                        <path d="M5 13l4 4L19 7"></path>
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                            <span class="ml-3 text-sm font-medium text-gray-700 group-hover:text-gray-900 transition-colors">Cover Image</span>
+                                        </label>
+                                        <p class="text-xs text-gray-500 mt-2 ml-8">Set as the gallery cover image</p>
+                                    </div>
+
+                                    <!-- NSFW Content -->
+                                    <div class="bg-gray-50 rounded-lg p-5 border border-gray-200 hover:border-gray-300 transition-colors">
+                                        <label class="flex items-center group cursor-pointer" x-data="{ checked: false }" x-init="checked = document.getElementById('edit_contains_nudity')?.checked || false">
+                                            <div class="relative">
+                                                <input 
+                                                    type="checkbox" 
+                                                    id="edit_contains_nudity" 
+                                                    name="contains_nudity" 
+                                                    value="1" 
+                                                    class="sr-only"
+                                                    x-model="checked"
+                                                >
+                                                <div class="w-5 h-5 border-2 rounded transition-all duration-200 flex items-center justify-center relative" :class="checked ? 'border-gray-800 bg-gray-800' : 'border-gray-300 bg-white'">
+                                                    <svg class="absolute w-3.5 h-3.5 transition-opacity duration-200" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" :class="checked ? 'opacity-100' : 'opacity-0'">
+                                                        <path d="M5 13l4 4L19 7"></path>
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                            <span class="ml-3 text-sm font-medium text-gray-700 group-hover:text-gray-900 transition-colors">NSFW Content</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions Footer -->
+                    <div class="bg-gray-50 border-t border-gray-200 px-6 md:px-8 py-5 flex flex-col sm:flex-row justify-between items-center gap-3">
+                        <button 
+                            type="button" 
+                            onclick="deleteImageFromModal(); event.stopPropagation();" 
+                            class="px-6 py-2.5 border-2 border-red-300 text-red-700 rounded-lg font-medium hover:bg-red-50 hover:border-red-400 transition-all duration-200 flex items-center justify-center gap-2"
+                        >
+                            <i class="fas fa-trash"></i>
+                            Delete Image
+                        </button>
+                        <div class="flex gap-3">
+                            <button 
+                                type="button" 
+                                onclick="closeEditModal()" 
+                                class="px-6 py-2.5 border-2 border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-white hover:border-gray-400 transition-all duration-200 text-center"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                type="submit" 
+                                class="px-6 py-2.5 bg-gray-900 text-white rounded-lg font-semibold hover:bg-gray-800 active:bg-gray-950 transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2"
+                            >
+                                <i class="fas fa-save"></i>
+                                Save Changes
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
-        function galleryUploader(galleryId) {
-            return {
-                galleryId: galleryId,
-                isDragging: false,
-                selectedFiles: [],
-                isUploading: false,
-                uploadProgress: 0,
-                uploadStatus: '',
-                errorMessage: '',
-                draggedIndex: null,
-                dragOverIndex: null,
-                dropPosition: null, // 'before' or 'after' the dragOverIndex
-                dropMarkerStyle: 'display: none;',
-                updateDropMarker() {
-                    if (this.draggedIndex === null || this.dragOverIndex === null || this.dropPosition === null) {
-                        this.dropMarkerStyle = 'display: none;';
-                        return;
-                    }
-                    
-                    this.$nextTick(() => {
-                        const container = this.$refs.gridContainer;
-                        if (!container) return;
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            const galleryId = {{ $gallery->id }};
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            const uploadUrl = '{{ route("photographers.portfolio.store") }}';
+            const reorderUrl = '{{ route("photographers.portfolio.reorder") }}';
+            
+            // Initialize Dropzone for empty gallery
+            const emptyDropzone = document.getElementById('gallery-dropzone');
+            if (emptyDropzone) {
+                const dz = new Dropzone(emptyDropzone, {
+                    url: uploadUrl,
+                    paramName: 'images',
+                    maxFilesize: 10, // MB
+                    acceptedFiles: 'image/jpeg,image/jpg,image/png',
+                    addRemoveLinks: false,
+                    dictDefaultMessage: '<i class="fas fa-cloud-upload-alt text-6xl text-gray-300 mb-4"></i><p class="text-lg font-semibold text-gray-900">Click to upload or drag and drop</p><p class="text-sm text-gray-600 mt-1">PNG, JPG up to 10MB each</p>',
+                    dictFileTooBig: 'File is too large. Max filesize: 10MB.',
+                    dictInvalidFileType: 'Invalid file type. Only JPEG and PNG allowed.',
+                    parallelUploads: 1,
+                    uploadMultiple: true,
+                    headers: {
+                        'X-CSRF-TOKEN': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    previewTemplate: `
+                        <div class="dz-preview dz-file-preview">
+                            <div class="dz-image">
+                                <img data-dz-thumbnail />
+                            </div>
+                            <div class="dz-details">
+                                <div class="dz-size"><span data-dz-size></span></div>
+                                <div class="dz-filename"><span data-dz-name></span></div>
+                            </div>
+                            <div class="dz-progress"><span class="dz-upload" data-dz-uploadprogress></span></div>
+                            <div class="dz-error-message"><span data-dz-errormessage></span></div>
+                            <div class="dz-success-mark">
+                                <svg width="54px" height="54px" viewBox="0 0 54 54" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                                    <title>Check</title>
+                                    <g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+                                        <path d="M23.5,31.8431458 L17.5852419,25.9283877 C16.0248253,24.3679711 13.4910294,24.3679711 11.9306128,25.9283877 C10.3701962,27.4888043 10.3701962,30.0226002 11.9306128,31.5830168 L21.7071068,41.3595208 C23.2675234,42.9199374 25.8013193,42.9199374 27.3617359,41.3595208 L43.0693872,25.6518695 C44.6298038,24.0914529 44.6298038,21.557657 43.0693872,19.9972404 C41.5089706,18.4368238 38.9751747,18.4368238 37.4147581,19.9972404 L23.5,33.9119989 Z" stroke-opacity="0.198794158" stroke="#747474" fill-opacity="0.816519475" fill="#FFFFFF"></path>
+                                    </g>
+                                </svg>
+                            </div>
+                        </div>
+                    `,
+                    init: function() {
+                        const dropzoneInstance = this;
+                        let totalFiles = 0;
+                        let completedFiles = 0;
+                        let hasErrors = false;
                         
-                        const items = container.querySelectorAll('.justified-image-item');
-                        if (items.length <= this.dragOverIndex) return;
+                        this.on('addedfiles', function(files) {
+                            totalFiles = files.length;
+                            completedFiles = 0;
+                            hasErrors = false;
+                        });
                         
-                        const targetItem = items[this.dragOverIndex];
-                        if (!targetItem) return;
+                        this.on('sendingmultiple', function(files, xhr, formData) {
+                            formData.append('gallery_id', galleryId);
+                            formData.append('is_public', '1');
+                            formData.append('is_featured', '0');
+                            formData.append('contains_nudity', '0');
+                        });
                         
-                        const rect = targetItem.getBoundingClientRect();
-                        const containerRect = container.getBoundingClientRect();
-                        
-                        let left, top;
-                        if (this.dropPosition === 'before') {
-                            left = rect.left - containerRect.left - 20; // Position before the item
-                            top = rect.top - containerRect.top;
-                        } else {
-                            left = rect.right - containerRect.left + 20; // Position after the item
-                            top = rect.top - containerRect.top;
-                        }
-                        
-                        const lineHeight = Math.max(250, rect.height);
-                        this.dropMarkerStyle = `position: absolute; left: ${left}px; top: ${top}px; z-index: 30; pointer-events: none;`;
-                        
-                        // Update line height
-                        this.$nextTick(() => {
-                            const marker = container.querySelector('.drop-marker');
-                            if (marker) {
-                                const line = marker.querySelector('.drop-marker-line');
-                                if (line) {
-                                    line.style.height = lineHeight + 'px';
-                                }
+                        this.on('success', function(file, response) {
+                            completedFiles++;
+                            console.log(`Upload successful: ${file.name} (${completedFiles}/${totalFiles})`);
+                            
+                            // Check if all files are done
+                            if (completedFiles >= totalFiles) {
+                                console.log('All files uploaded successfully, reloading...');
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 1000);
                             }
                         });
-                    });
-                },
-                handleDragOver(event) {
-                    // Only trigger dropzone animation if dragging files (external drag)
-                    // Not if dragging images to reorder (internal drag)
-                    // If we're currently reordering (draggedIndex is set), don't trigger dropzone animation
-                    if (this.draggedIndex !== null) {
-                        return;
-                    }
-                    // Check if dataTransfer contains files (external drag)
-                    const types = Array.from(event.dataTransfer.types || []);
-                    const hasFiles = types.includes('Files');
-                    if (hasFiles) {
-                        this.isDragging = true;
-                    }
-                },
-                handleDragLeave(event) {
-                    // Only clear dragging state if we're actually leaving the dropzone
-                    // and not just moving between child elements
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    const x = event.clientX;
-                    const y = event.clientY;
-                    
-                    // Check if we're still within the dropzone bounds
-                    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-                        this.isDragging = false;
-                    }
-                },
-                handleDrop(event) {
-                    this.isDragging = false;
-                    // Only handle file drops, not internal reordering
-                    if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
-                        const files = Array.from(event.dataTransfer.files).filter(file => 
-                            file.type.startsWith('image/')
-                        );
-                        this.addFiles(files);
-                    }
-                },
-                handleFiles(event) {
-                    const files = Array.from(event.target.files);
-                    this.addFiles(files);
-                },
-                addFiles(files) {
-                    files.forEach(file => {
-                        if (file.size > 10 * 1024 * 1024) {
-                            this.errorMessage = `${file.name} is too large. Maximum size is 10MB.`;
-                            return;
-                        }
                         
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            const img = new Image();
-                            img.onload = () => {
-                                this.selectedFiles.push({
-                                    file: file,
-                                    name: file.name,
-                                    size: file.size,
-                                    preview: e.target.result,
-                                    width: img.width,
-                                    height: img.height,
-                                    aspectRatio: img.width / img.height
-                                });
-                                this.$nextTick(() => {
-                                    this.justifyGrid();
-                                });
-                            };
-                            img.src = e.target.result;
-                        };
-                        reader.readAsDataURL(file);
+                        this.on('error', function(file, message) {
+                            completedFiles++;
+                            hasErrors = true;
+                            console.error(`Upload error for ${file.name}:`, message);
+                            
+                            // Check if all files are done (even with errors)
+                            if (completedFiles >= totalFiles) {
+                                if (hasErrors) {
+                                    alert('Some files failed to upload. Please check the console for details.');
+                                }
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 1000);
+                            }
+                        });
+                        
+                        this.on('errormultiple', function(files, message) {
+                            console.error('Batch upload error:', message);
+                        });
+                    }
+                });
+            }
+            
+            // Initialize Dropzone for adding more images (when gallery has images)
+            const addImagesDropzone = document.getElementById('add-images-dropzone');
+            if (addImagesDropzone) {
+                const dz = new Dropzone(addImagesDropzone, {
+                    url: uploadUrl,
+                    paramName: 'images',
+                    maxFilesize: 10,
+                    acceptedFiles: 'image/jpeg,image/jpg,image/png',
+                    addRemoveLinks: false,
+                    dictDefaultMessage: '<i class="fas fa-plus-circle text-4xl text-gray-400 mb-2"></i><p class="text-sm font-semibold text-gray-700">Add more images</p><p class="text-xs text-gray-500 mt-1">Drag files here or click to browse</p>',
+                    dictFileTooBig: 'File is too large. Max filesize: 10MB.',
+                    dictInvalidFileType: 'Invalid file type. Only JPEG and PNG allowed.',
+                    parallelUploads: 1,
+                    uploadMultiple: true,
+                    headers: {
+                        'X-CSRF-TOKEN': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    previewTemplate: `
+                        <div class="dz-preview dz-file-preview">
+                            <div class="dz-image">
+                                <img data-dz-thumbnail />
+                            </div>
+                            <div class="dz-details">
+                                <div class="dz-size"><span data-dz-size></span></div>
+                                <div class="dz-filename"><span data-dz-name></span></div>
+                            </div>
+                            <div class="dz-progress"><span class="dz-upload" data-dz-uploadprogress></span></div>
+                            <div class="dz-error-message"><span data-dz-errormessage></span></div>
+                            <div class="dz-success-mark">
+                                <svg width="54px" height="54px" viewBox="0 0 54 54" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                                    <title>Check</title>
+                                    <g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+                                        <path d="M23.5,31.8431458 L17.5852419,25.9283877 C16.0248253,24.3679711 13.4910294,24.3679711 11.9306128,25.9283877 C10.3701962,27.4888043 10.3701962,30.0226002 11.9306128,31.5830168 L21.7071068,41.3595208 C23.2675234,42.9199374 25.8013193,42.9199374 27.3617359,41.3595208 L43.0693872,25.6518695 C44.6298038,24.0914529 44.6298038,21.557657 43.0693872,19.9972404 C41.5089706,18.4368238 38.9751747,18.4368238 37.4147581,19.9972404 L23.5,33.9119989 Z" stroke-opacity="0.198794158" stroke="#747474" fill-opacity="0.816519475" fill="#FFFFFF"></path>
+                                    </g>
+                                </svg>
+                            </div>
+                        </div>
+                    `,
+                    init: function() {
+                        let totalFiles = 0;
+                        let completedFiles = 0;
+                        let hasErrors = false;
+                        
+                        this.on('addedfiles', function(files) {
+                            totalFiles = files.length;
+                            completedFiles = 0;
+                            hasErrors = false;
+                        });
+                        
+                        this.on('sendingmultiple', function(files, xhr, formData) {
+                            formData.append('gallery_id', galleryId);
+                            formData.append('is_public', '1');
+                            formData.append('is_featured', '0');
+                            formData.append('contains_nudity', '0');
+                        });
+                        
+                        this.on('success', function(file, response) {
+                            completedFiles++;
+                            console.log(`Upload successful: ${file.name} (${completedFiles}/${totalFiles})`);
+                            
+                            // Check if all files are done
+                            if (completedFiles >= totalFiles) {
+                                console.log('All files uploaded successfully, reloading...');
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 1000);
+                            }
+                        });
+                        
+                        this.on('error', function(file, message) {
+                            completedFiles++;
+                            hasErrors = true;
+                            console.error(`Upload error for ${file.name}:`, message);
+                            
+                            // Check if all files are done (even with errors)
+                            if (completedFiles >= totalFiles) {
+                                if (hasErrors) {
+                                    alert('Some files failed to upload. Please check the console for details.');
+                                }
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 1000);
+                            }
+                        });
+                        
+                        this.on('errormultiple', function(files, message) {
+                            console.error('Batch upload error:', message);
+                        });
+                    }
+                });
+            }
+        });
+        
+        // Global delete function
+        // Edit Modal Functions
+        let currentEditImageId = null;
+        let modelTags = [];
+
+        // Model Tag Input Functions
+        function handleModelTagInput(event) {
+            if (event.key === 'Enter' || event.key === ',') {
+                event.preventDefault();
+                const input = event.target;
+                const value = input.value.trim();
+                
+                if (value && value.startsWith('@')) {
+                    const username = value.substring(1);
+                    if (username && !modelTags.includes('@' + username)) {
+                        addModelTag('@' + username);
+                        input.value = '';
+                    }
+                }
+            }
+        }
+
+        function addModelTag(tag) {
+            if (!modelTags.includes(tag)) {
+                modelTags.push(tag);
+                renderModelTags();
+            }
+        }
+
+        function removeModelTag(tag) {
+            modelTags = modelTags.filter(t => t !== tag);
+            renderModelTags();
+        }
+
+        function renderModelTags() {
+            const container = document.getElementById('edit_models_container');
+            const input = document.getElementById('edit_models_input');
+            const hiddenInput = document.getElementById('edit_models');
+            
+            // Clear existing tags (except input)
+            const existingTags = container.querySelectorAll('.model-tag');
+            existingTags.forEach(tag => tag.remove());
+            
+            // Add tag elements
+            modelTags.forEach(tag => {
+                const tagElement = document.createElement('span');
+                tagElement.className = 'model-tag inline-flex items-center gap-1 bg-gray-200 text-gray-800 px-2 py-1 rounded text-sm';
+                tagElement.innerHTML = `
+                    ${tag}
+                    <button type="button" onclick="removeModelTag('${tag}')" class="text-gray-600 hover:text-gray-900">
+                        <i class="fas fa-times text-xs"></i>
+                    </button>
+                `;
+                container.insertBefore(tagElement, input);
+            });
+            
+            // Update hidden input
+            hiddenInput.value = JSON.stringify(modelTags);
+        }
+
+        function populateModelTags(tags) {
+            modelTags = tags || [];
+            renderModelTags();
+        }
+
+        function deleteImageFromModal() {
+            if (!currentEditImageId) return;
+            
+            if (!confirm('Are you sure you want to delete this image? This action cannot be undone.')) {
+                return;
+            }
+            
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            const deleteUrl = '{{ url("/photographers/portfolio") }}/' + currentEditImageId;
+            
+            fetch(deleteUrl, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    closeEditModal();
+                    window.location.reload();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'Unknown error');
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting image:', error);
+                alert('Failed to delete image: ' + error.message);
+            });
+        }
+
+        async function openEditModal(imageId, imageSrc) {
+            currentEditImageId = imageId;
+            const modal = document.getElementById('editImageModal');
+            const loading = document.getElementById('editModalLoading');
+            const content = document.getElementById('editModalContent');
+            
+            // Show modal and loading state
+            modal.classList.remove('hidden');
+            loading.classList.remove('hidden');
+            content.classList.add('hidden');
+            
+            // Set image src immediately (before loading form data)
+            if (imageSrc) {
+                document.getElementById('editModalImage').src = imageSrc;
+            }
+            
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            
+            try {
+                // Fetch image data
+                const response = await fetch(`{{ url('/photographers/portfolio') }}/${imageId}/edit`, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to load image data');
+                }
+                
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // Extract image data from the form
+                const form = doc.querySelector('form');
+                if (!form) {
+                    throw new Error('Form not found');
+                }
+                
+                // Get image src from the form area (more specific selector)
+                const formImg = form.parentElement?.querySelector('img') || doc.querySelector('.mb-6 img');
+                if (formImg && !imageSrc) {
+                    document.getElementById('editModalImage').src = formImg.src;
+                }
+                
+                // Populate form fields
+                document.getElementById('edit_title').value = form.querySelector('#title')?.value || '';
+                document.getElementById('edit_description').value = form.querySelector('#description')?.value || '';
+                document.getElementById('edit_shot_date').value = form.querySelector('#shot_date')?.value || '';
+                
+                // Check if this image is the cover image for the gallery
+                const galleryCoverPath = '{{ $gallery->cover_image_path ?? "" }}';
+                const currentImageFullPath = form.querySelector('img')?.src || '';
+                const currentImagePath = currentImageFullPath.split('/').pop() || '';
+                const coverPathOnly = galleryCoverPath ? galleryCoverPath.split('/').pop() : '';
+                document.getElementById('edit_is_cover').checked = (coverPathOnly && currentImagePath && coverPathOnly === currentImagePath);
+                
+                document.getElementById('edit_contains_nudity').checked = form.querySelector('#contains_nudity')?.checked || false;
+                
+                // Populate models as tags (from tags field or model_id)
+                const modelTags = [];
+                const modelSelect = form.querySelector('#model_id');
+                if (modelSelect && modelSelect.value) {
+                    const selectedModel = modelSelect.options[modelSelect.selectedIndex];
+                    if (selectedModel && selectedModel.textContent) {
+                        modelTags.push(selectedModel.textContent);
+                    }
+                }
+                // Also check if there are tags in the image data
+                // For now, we'll use the model_id approach and extend later
+                populateModelTags(modelTags);
+                
+                // Show content
+                loading.classList.add('hidden');
+                content.classList.remove('hidden');
+                
+                // Initialize Alpine.js for checkboxes if available
+                if (window.Alpine) {
+                    window.Alpine.initTree(content);
+                }
+            } catch (error) {
+                console.error('Error loading image data:', error);
+                alert('Failed to load image data. Please try again.');
+                closeEditModal();
+            }
+        }
+
+        function closeEditModal(event) {
+            if (event && event.target.id !== 'editImageModal' && !event.target.closest('.bg-white')) {
+                return;
+            }
+            const modal = document.getElementById('editImageModal');
+            modal.classList.add('hidden');
+            currentEditImageId = null;
+        }
+
+        async function submitEditForm(event) {
+            event.preventDefault();
+            
+            if (!currentEditImageId) return;
+            
+            const form = document.getElementById('editImageForm');
+            const formData = new FormData(form);
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            
+            // Convert FormData to object for JSON
+            const data = {
+                contains_nudity: document.getElementById('edit_contains_nudity').checked,
+                is_cover: document.getElementById('edit_is_cover').checked,
+            };
+            
+            // Add models as tags
+            const modelsInput = document.getElementById('edit_models');
+            if (modelsInput && modelsInput.value) {
+                try {
+                    const tags = JSON.parse(modelsInput.value);
+                    data.tags = tags;
+                } catch (e) {
+                    data.tags = [];
+                }
+            } else {
+                data.tags = [];
+            }
+            
+            // Add gallery_id for cover image handling
+            data.gallery_id = {{ $gallery->id }};
+            
+            formData.forEach((value, key) => {
+                if (key !== 'contains_nudity' && key !== 'is_cover' && key !== 'models') {
+                    data[key] = value || null;
+                }
+            });
+            
+            const submitButton = form.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.textContent = 'Updating...';
+            
+            try {
+                const response = await fetch(`{{ url('/photographers/portfolio') }}/${currentEditImageId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    closeEditModal();
+                    // Optionally reload the page to show updated data
+                    window.location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert('Failed to update image: ' + (errorData.message || 'Unknown error'));
+                    submitButton.disabled = false;
+                    submitButton.textContent = originalText;
+                }
+            } catch (error) {
+                console.error('Error updating image:', error);
+                alert('An error occurred while updating the image.');
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
+            }
+        }
+
+        function deleteImage(imageId, buttonElement) {
+            if (!confirm('Are you sure you want to delete this image? This action cannot be undone.')) {
+                return;
+            }
+            
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            const imageElement = buttonElement.closest('.sortable-item');
+            
+            // Disable button and show loading state
+            buttonElement.disabled = true;
+            buttonElement.innerHTML = '<i class="fas fa-spinner fa-spin text-sm"></i>';
+
+            const deleteUrl = '{{ url("/photographers/portfolio") }}/' + imageId;
+            fetch(deleteUrl, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Remove the image element with animation
+                    imageElement.style.transition = 'opacity 0.3s, transform 0.3s';
+                    imageElement.style.opacity = '0';
+                    imageElement.style.transform = 'scale(0.8)';
+                    
+                    setTimeout(() => {
+                        imageElement.remove();
+                        // Recalculate justified grid
+                        const gridContainer = document.getElementById('gallery-images-grid');
+                        if (gridContainer && window.Alpine) {
+                            const alpineData = Alpine.$data(gridContainer);
+                            if (alpineData && alpineData.justifyGrid) {
+                                alpineData.justifyGrid();
+                            }
+                        }
+                        // Reload page to update image count
+                        window.location.reload();
+                    }, 300);
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'Unknown error');
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting image:', error);
+                alert('Error deleting image: ' + error.message);
+                buttonElement.disabled = false;
+                buttonElement.innerHTML = '<i class="fas fa-trash text-sm"></i>';
+            });
+        }
+        
+        // Alpine.js component for gallery management with SortableJS
+        function galleryManager(galleryId) {
+            return {
+                galleryId: galleryId,
+                sortable: null,
+                initSortable() {
+                    this.$nextTick(() => {
+                        const grid = document.getElementById('gallery-images-grid');
+                        if (!grid || !window.Sortable) return;
+                        
+                        this.sortable = new Sortable(grid, {
+                            animation: 150,
+                            ghostClass: 'opacity-50',
+                            chosenClass: 'sortable-chosen',
+                            dragClass: 'opacity-30',
+                            onEnd: (evt) => {
+                                this.reorderImages(evt.oldIndex, evt.newIndex);
+                                this.justifyGrid();
+                            }
+                        });
                     });
                 },
                 justifyGrid() {
@@ -390,7 +818,6 @@
                         const container = this.$refs.gridContainer;
                         if (!container) return;
                         
-                        // Only select image items, exclude placeholders
                         const items = container.querySelectorAll('.justified-image-item');
                         if (items.length === 0) return;
                         
@@ -400,21 +827,17 @@
                         let currentRow = [];
                         let currentRowWidth = 0;
                         
-                        items.forEach((item, domIndex) => {
+                        items.forEach((item) => {
                             const img = item.querySelector('.justified-img');
                             if (!img) return;
                             
-                            // Get the actual index from the data attribute or find it
-                            const actualIndex = parseInt(img.getAttribute('data-index')) ?? domIndex;
-                            const file = this.selectedFiles[actualIndex];
-                            if (!file || !file.aspectRatio) return;
-                            
-                            const itemWidth = targetRowHeight * file.aspectRatio;
+                            const aspectRatio = parseFloat(img.getAttribute('data-aspect-ratio')) || 1;
+                            const itemWidth = targetRowHeight * aspectRatio;
                             
                             if (currentRowWidth + itemWidth + (currentRow.length * gap) > containerWidth && currentRow.length > 0) {
                                 // Finalize current row
                                 const actualRowHeight = (containerWidth - (currentRow.length - 1) * gap) / currentRow.reduce((sum, i) => sum + i.aspectRatio, 0);
-                                currentRow.forEach((rowItem, idx) => {
+                                currentRow.forEach((rowItem) => {
                                     const width = actualRowHeight * rowItem.aspectRatio;
                                     rowItem.element.style.width = width + 'px';
                                     rowItem.element.style.height = actualRowHeight + 'px';
@@ -430,7 +853,7 @@
                             currentRow.push({
                                 element: item,
                                 img: img,
-                                aspectRatio: file.aspectRatio
+                                aspectRatio: aspectRatio
                             });
                             currentRowWidth += itemWidth;
                         });
@@ -448,187 +871,145 @@
                         }
                     });
                 },
-                removeFile(index) {
-                    this.selectedFiles.splice(index, 1);
-                    this.errorMessage = '';
-                    this.$nextTick(() => {
-                        this.justifyGrid();
-                    });
-                },
-                dragStart(event, index) {
-                    this.draggedIndex = index;
-                    event.dataTransfer.effectAllowed = 'move';
-                    event.dataTransfer.setData('text/html', event.target.outerHTML);
-                    // Don't set opacity here, let CSS handle it
-                },
-                dragEnter(event, index) {
-                    if (this.draggedIndex !== null && this.draggedIndex !== index) {
-                        this.calculateDropPosition(event, index);
-                    }
-                },
-                dragOver(event, index) {
-                    if (this.draggedIndex !== null && this.draggedIndex !== index) {
-                        event.dataTransfer.dropEffect = 'move';
-                        this.calculateDropPosition(event, index);
-                    }
-                },
-                calculateDropPosition(event, index) {
-                    if (this.draggedIndex === null || this.draggedIndex === index) {
-                        return;
-                    }
+                async reorderImages(oldIndex, newIndex) {
+                    if (oldIndex === newIndex) return;
                     
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    const mouseY = event.clientY;
-                    const centerY = rect.top + rect.height / 2;
+                    const items = document.querySelectorAll('.sortable-item');
+                    const imageIds = Array.from(items).map(item => 
+                        parseInt(item.getAttribute('data-image-id'))
+                    );
                     
-                    // Determine if we're dropping before or after based on mouse position
-                    const position = mouseY < centerY ? 'before' : 'after';
-                    
-                    this.dragOverIndex = index;
-                    this.dropPosition = position;
-                    this.updateDropMarker();
-                },
-                dragLeave(event) {
-                    // Only clear if we're actually leaving the element
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    const x = event.clientX;
-                    const y = event.clientY;
-                    
-                    // Check if mouse is still within the element bounds
-                    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-                        // Small delay to avoid flickering when moving between child elements
-                        setTimeout(() => {
-                            const newRect = event.currentTarget.getBoundingClientRect();
-                            const stillOutside = event.clientX < newRect.left || event.clientX > newRect.right || 
-                                                 event.clientY < newRect.top || event.clientY > newRect.bottom;
-                            if (stillOutside) {
-                                this.dragOverIndex = null;
-                                this.dropPosition = null;
-                                this.dropMarkerStyle = 'display: none;';
-                            }
-                        }, 100);
-                    }
-                },
-                drop(event, dropIndex) {
-                    if (this.draggedIndex === null || this.draggedIndex === dropIndex) {
-                        this.dragOverIndex = null;
-                        this.dropPosition = null;
-                        return;
-                    }
-                    
-                    // Calculate final drop index based on position
-                    let finalIndex = dropIndex;
-                    if (this.dropPosition === 'after') {
-                        finalIndex = dropIndex + 1;
-                    } else {
-                        finalIndex = dropIndex;
-                    }
-                    
-                    // Adjust if dragging from after to before
-                    if (this.draggedIndex > dropIndex && this.dropPosition === 'before') {
-                        finalIndex = dropIndex;
-                    } else if (this.draggedIndex < dropIndex && this.dropPosition === 'after') {
-                        finalIndex = dropIndex + 1;
-                    } else if (this.draggedIndex < dropIndex) {
-                        finalIndex = dropIndex;
-                    } else if (this.draggedIndex > dropIndex) {
-                        finalIndex = dropIndex + 1;
-                    }
-                    
-                    // Ensure finalIndex is within bounds
-                    finalIndex = Math.max(0, Math.min(finalIndex, this.selectedFiles.length));
-                    
-                    const draggedItem = this.selectedFiles[this.draggedIndex];
-                    this.selectedFiles.splice(this.draggedIndex, 1);
-                    this.selectedFiles.splice(finalIndex, 0, draggedItem);
-                    
-                    this.draggedIndex = null;
-                    this.dragOverIndex = null;
-                    this.dropPosition = null;
-                    
-                    this.$nextTick(() => {
-                        this.justifyGrid();
-                    });
-                },
-                dragEnd(event) {
-                    this.draggedIndex = null;
-                    this.dragOverIndex = null;
-                    this.dropPosition = null;
-                    this.dropMarkerStyle = 'display: none;';
-                },
-                async uploadFiles() {
-                    if (this.selectedFiles.length === 0) return;
-
-                    this.isUploading = true;
-                    this.uploadProgress = 0;
-                    this.errorMessage = '';
-                    this.uploadStatus = 'Preparing files...';
-
-                    const formData = new FormData();
-                    
-                    // Add files
-                    this.selectedFiles.forEach((item, index) => {
-                        formData.append(`images[${index}]`, item.file);
-                    });
-
-                    // Add gallery_id (required)
-                    formData.append('gallery_id', this.galleryId);
-                    
-                    // Default options
-                    formData.append('is_public', '1');
-                    formData.append('is_featured', '0');
-                    formData.append('contains_nudity', '0');
-
-                    // Get CSRF token
                     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
+                    
                     try {
-                        this.uploadStatus = 'Uploading images...';
+                        const response = await fetch('{{ route("photographers.portfolio.reorder") }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken,
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                gallery_id: this.galleryId,
+                                image_ids: imageIds
+                            })
+                        });
                         
-                        const xhr = new XMLHttpRequest();
-                        
-                        // Track upload progress
-                        xhr.upload.addEventListener('progress', (e) => {
-                            if (e.lengthComputable) {
-                                this.uploadProgress = Math.round((e.loaded / e.total) * 100);
-                            }
-                        });
-
-                        xhr.addEventListener('load', () => {
-                            if (xhr.status === 200) {
-                                const response = JSON.parse(xhr.responseText);
-                                this.uploadStatus = 'Processing images...';
-                                this.uploadProgress = 100;
-                                
-                                setTimeout(() => {
-                                    window.location.reload();
-                                }, 500);
-                            } else {
-                                const response = JSON.parse(xhr.responseText);
-                                this.errorMessage = response.message || 'Upload failed. Please try again.';
-                                this.isUploading = false;
-                            }
-                        });
-
-                        xhr.addEventListener('error', () => {
-                            this.errorMessage = 'Network error. Please check your connection and try again.';
-                            this.isUploading = false;
-                        });
-
-                        xhr.open('POST', '{{ route("photographers.portfolio.store") }}');
-                        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-                        xhr.setRequestHeader('X-CSRF-TOKEN', csrfToken);
-                        xhr.setRequestHeader('Accept', 'application/json');
-                        xhr.send(formData);
-
+                        if (!response.ok) {
+                            console.error('Failed to reorder images');
+                        }
                     } catch (error) {
-                        this.errorMessage = 'An error occurred. Please try again.';
-                        this.isUploading = false;
-                        console.error('Upload error:', error);
+                        console.error('Error reordering images:', error);
                     }
                 }
             };
         }
     </script>
+    
+    <style>
+        /* Custom Dropzone styling */
+        .dropzone {
+            min-height: 200px;
+        }
+        .dropzone.dz-clickable {
+            cursor: pointer;
+        }
+        .dropzone .dz-message {
+            margin: 0;
+        }
+        .dropzone.dz-drag-hover {
+            border-color: #1f2937;
+            background-color: #f9fafb;
+            transform: scale(1.02);
+        }
+        
+        /* Dropzone preview styling */
+        .dropzone .dz-preview {
+            display: inline-block;
+            margin: 8px;
+            vertical-align: top;
+            min-width: 200px;
+            max-width: 300px;
+        }
+        .dropzone .dz-preview .dz-image {
+            width: 100%;
+            height: 200px;
+            overflow: hidden;
+            border-radius: 8px;
+        }
+        .dropzone .dz-preview .dz-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .dropzone .dz-preview .dz-details {
+            padding: 8px;
+            font-size: 12px;
+            color: #666;
+        }
+        .dropzone .dz-preview .dz-progress {
+            width: 100%;
+            height: 4px;
+            background: #e5e7eb;
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        .dropzone .dz-preview .dz-progress .dz-upload {
+            display: block;
+            height: 100%;
+            background: #1f2937;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .dropzone .dz-preview .dz-success-mark,
+        .dropzone .dz-preview .dz-error-mark {
+            display: none;
+        }
+        .dropzone .dz-preview.dz-success .dz-success-mark {
+            display: block;
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+        }
+        .dropzone .dz-preview.dz-error .dz-error-mark {
+            display: block;
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+            color: #dc2626;
+        }
+        
+        /* Justified Grid styling */
+        .justified-grid {
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .justified-image-item {
+            flex-shrink: 0;
+        }
+        .justified-img {
+            display: block;
+        }
+        
+        /* SortableJS styling */
+        .sortable-item {
+            cursor: move;
+        }
+        .sortable-item:active {
+            cursor: grabbing;
+        }
+        .sortable-chosen {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+        }
+    </style>
 </x-app-layout>
 

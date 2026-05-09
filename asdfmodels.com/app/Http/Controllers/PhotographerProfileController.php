@@ -3,11 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\PhotographerProfile;
+use App\Models\PhotographerPortfolioImage;
+use App\Models\PortfolioAlbum;
+use App\Models\PortfolioCredit;
+use App\Models\PortfolioImage;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\File;
 use Illuminate\View\View;
 
 class PhotographerProfileController extends Controller
@@ -46,11 +52,99 @@ class PhotographerProfileController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(24);
 
+        $publicGalleries = PortfolioAlbum::query()
+            ->where('user_id', $user->id)
+            ->where('owner_role', 'photographer')
+            ->where('is_public', true)
+            ->select('portfolio_albums.*')
+            ->selectSub(function ($query) use ($user) {
+                $query->from('photographer_portfolio_images')
+                    ->selectRaw('COUNT(*)')
+                    ->whereColumn('photographer_portfolio_images.album_id', 'portfolio_albums.id')
+                    ->where('photographer_portfolio_images.photographer_id', $user->id)
+                    ->where('photographer_portfolio_images.is_public', true);
+            }, 'images_count')
+            ->orderBy('display_order')
+            ->orderByDesc('created_at')
+            ->get();
+
+        $visibleCredits = PortfolioCredit::visibleOnProfile($user, 'photographer')
+            ->with(['creditable', 'owner'])
+            ->latest()
+            ->limit(40)
+            ->get();
+        $featuredAlbumCredits = $visibleCredits
+            ->filter(fn (PortfolioCredit $credit) => $credit->creditable instanceof PortfolioAlbum && $credit->creditable->is_public)
+            ->values();
+        $featuredImageCredits = $visibleCredits
+            ->filter(function (PortfolioCredit $credit) {
+                $image = $credit->creditable;
+
+                return ($image instanceof PortfolioImage || $image instanceof PhotographerPortfolioImage)
+                    && $image->is_public;
+            })
+            ->values();
+        $pendingCredits = (Auth::check() && Auth::id() === $user->id)
+            ? PortfolioCredit::awaitingResponse($user, 'photographer')->with(['creditable', 'owner'])->latest()->get()
+            : collect();
+
+        $portfolioMediaGroups = collect();
+
+        if (Auth::check() && Auth::id() === $user->id) {
+            $allPortfolioImages = PhotographerPortfolioImage::where('photographer_id', $user->id)
+                ->orderBy('display_order')
+                ->orderByDesc('uploaded_at')
+                ->orderByDesc('created_at')
+                ->get();
+
+            $ungroupedImages = $allPortfolioImages->whereNull('album_id')->values();
+
+            if ($ungroupedImages->isNotEmpty()) {
+                $portfolioMediaGroups->push([
+                    'id' => 'ungrouped',
+                    'label' => 'Ungrouped',
+                    'count' => $ungroupedImages->count(),
+                    'cover' => $ungroupedImages->first()->thumbnail_path,
+                    'images' => $ungroupedImages,
+                ]);
+            }
+
+            PortfolioAlbum::where('user_id', $user->id)
+                ->where('owner_role', 'photographer')
+                ->orderBy('display_order')
+                ->orderBy('name')
+                ->get()
+                ->each(function (PortfolioAlbum $album) use ($portfolioMediaGroups, $allPortfolioImages) {
+                    $images = $allPortfolioImages->where('album_id', $album->id)->values();
+
+                    if ($images->isEmpty()) {
+                        return;
+                    }
+
+                    $coverImage = $images->firstWhere('id', $album->cover_image_id) ?: $images->first();
+
+                    $portfolioMediaGroups->push([
+                        'id' => 'album-' . $album->id,
+                        'label' => $album->name,
+                        'count' => $images->count(),
+                        'cover' => $coverImage?->thumbnail_path,
+                        'images' => $images,
+                    ]);
+                });
+        }
+
         return view('photographers.show', [
             'user' => $user,
             'profile' => $profile,
             'featuredImages' => $featuredImages,
             'portfolioImages' => $portfolioImages,
+            'publicGalleries' => $publicGalleries,
+            'taggedImages' => $featuredImageCredits,
+            'featuredAlbumCredits' => $featuredAlbumCredits,
+            'featuredImageCredits' => $featuredImageCredits,
+            'pendingCredits' => $pendingCredits,
+            'portfolioMediaGroups' => $portfolioMediaGroups,
+            'ownerCanManage' => Auth::check() && Auth::id() === $user->id,
         ]);
     }
 
@@ -141,6 +235,8 @@ class PhotographerProfileController extends Controller
             'gender' => ['nullable', 'in:male,female,other'],
             'date_of_birth' => ['required', 'date', 'before:today'],
             'professional_name' => ['nullable', 'string', 'max:255'],
+            'display_name_format' => ['nullable', 'in:professional_name,first_name_last_initial,first_name,initials,full_name'],
+            'show_company_on_profile' => ['nullable', 'boolean'],
             'location_city' => ['nullable', 'string', 'max:255'],
             'location_country' => ['nullable', 'string', 'max:255'],
             'location_geoname_id' => ['nullable', 'integer', 'exists:geonames_locations,geoname_id'],
@@ -288,6 +384,18 @@ class PhotographerProfileController extends Controller
         if (isset($validated['available_for_travel'])) {
             $validated['available_for_travel'] = filter_var($validated['available_for_travel'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
         }
+
+        $verifiedOnlyDisplayFormats = ['full_name', 'professional_name'];
+        if (
+            in_array($validated['display_name_format'] ?? '', $verifiedOnlyDisplayFormats, true) &&
+            !$profile->isVerified()
+        ) {
+            $validated['display_name_format'] = 'first_name_last_initial';
+        }
+
+        $validated['show_company_on_profile'] = $profile->isVerified()
+            ? $request->boolean('show_company_on_profile')
+            : false;
         
         // Explicitly handle date_of_birth to ensure it's saved correctly
         // Laravel's date cast will handle the conversion, but we ensure it's set
@@ -386,6 +494,187 @@ class PhotographerProfileController extends Controller
             ->with('status', 'Profile updated successfully.');
     }
 
+    public function updateBio(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (!$user->is_photographer) {
+            abort(403, 'Only photographers can have photographer profiles.');
+        }
+
+        $validated = $request->validate([
+            'bio' => ['nullable', 'string', 'max:1200'],
+        ]);
+
+        $profile = $user->photographerProfile;
+
+        if (!$profile) {
+            abort(404, 'Photographer profile not found.');
+        }
+
+        $profile->bio = $this->cleanProfileBio($validated['bio'] ?? null);
+        $profile->save();
+
+        return response()->json([
+            'message' => 'Bio updated.',
+            'bio' => $profile->bio,
+        ]);
+    }
+
+    public function updateProfessionalQuick(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (!$user->is_photographer) {
+            abort(403, 'Only photographers can have photographer profiles.');
+        }
+
+        $profile = $user->photographerProfile;
+
+        if (!$profile) {
+            abort(404, 'Photographer profile not found.');
+        }
+
+        $specialtyOptions = \App\Helpers\PhotographerOptions::specialties('photographer');
+        $serviceOptions = \App\Helpers\PhotographerOptions::services();
+
+        $validated = $request->validate([
+            'experience_level' => ['nullable', 'string', 'max:50'],
+            'experience_start_year' => ['nullable', 'integer', 'min:1900', 'max:' . date('Y')],
+            'studio_location' => ['nullable', 'string', 'max:255'],
+            'available_for_travel' => ['nullable', 'boolean'],
+            'specialties' => ['nullable', 'array'],
+            'specialties.*' => ['string', 'max:100'],
+            'services_offered' => ['nullable', 'array'],
+            'services_offered.*' => ['string', 'max:100'],
+        ]);
+
+        $profile->experience_level = $validated['experience_level'] ?? null;
+        $profile->experience_start_year = $validated['experience_start_year'] ?? null;
+        $profile->studio_location = $validated['studio_location'] ?? null;
+        $profile->available_for_travel = $request->boolean('available_for_travel');
+        $profile->specialties = array_values(array_intersect($validated['specialties'] ?? [], array_keys($specialtyOptions)));
+        $profile->services_offered = array_values(array_intersect($validated['services_offered'] ?? [], array_keys($serviceOptions)));
+        $profile->save();
+
+        return response()->json([
+            'message' => 'Profile details updated.',
+        ]);
+    }
+
+    public function updateMedia(Request $request): RedirectResponse|JsonResponse
+    {
+        $user = Auth::user();
+
+        if (!$user->is_photographer) {
+            abort(403, 'Only photographers can have photographer profiles.');
+        }
+
+        $profile = $user->photographerProfile;
+
+        if (!$profile) {
+            abort(404, 'Photographer profile not found.');
+        }
+
+        $validated = $request->validate([
+            'profile_photo_upload' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
+            'cover_photo_upload' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:10240'],
+            'profile_photo_image_id' => ['nullable', 'integer', 'exists:photographer_portfolio_images,id'],
+            'cover_photo_image_id' => ['nullable', 'integer', 'exists:photographer_portfolio_images,id'],
+            'profile_photo_crop_data' => ['nullable', 'string'],
+            'cover_photo_crop_data' => ['nullable', 'string'],
+        ]);
+
+        $profileCrop = $this->parseProfileCropData($validated['profile_photo_crop_data'] ?? null);
+        $coverCrop = $this->parseProfileCropData($validated['cover_photo_crop_data'] ?? null);
+        $previousProfilePhoto = $profile->profile_photo_path;
+        $previousCoverPhoto = $profile->cover_photo_path;
+        $mediaWasChanged = false;
+
+        if ($request->hasFile('profile_photo_upload')) {
+            $profile->profile_photo_path = $this->storePhotographerMediaUpload(
+                $request->file('profile_photo_upload'),
+                $user->id,
+                'profile',
+                $profileCrop
+            );
+            $mediaWasChanged = true;
+        } elseif (!empty($validated['profile_photo_image_id'])) {
+            $portfolioImage = PhotographerPortfolioImage::where('id', $validated['profile_photo_image_id'])
+                ->where('photographer_id', $user->id)
+                ->first();
+
+            if ($portfolioImage) {
+                $profile->profile_photo_path = $this->storePhotographerMediaFromPortfolioImage($portfolioImage, $user->id, 'profile', $profileCrop);
+                $mediaWasChanged = true;
+            }
+        } elseif ($profileCrop && $previousProfilePhoto && File::exists(public_path($previousProfilePhoto))) {
+            $profile->profile_photo_path = $this->storeCroppedPhotographerProfileImage(
+                public_path($previousProfilePhoto),
+                $user->id,
+                $profileCrop
+            );
+            $mediaWasChanged = true;
+        }
+
+        if ($request->hasFile('cover_photo_upload')) {
+            $profile->cover_photo_path = $this->storePhotographerMediaUpload(
+                $request->file('cover_photo_upload'),
+                $user->id,
+                'cover',
+                $coverCrop
+            );
+            $mediaWasChanged = true;
+        } elseif (!empty($validated['cover_photo_image_id'])) {
+            $portfolioImage = PhotographerPortfolioImage::where('id', $validated['cover_photo_image_id'])
+                ->where('photographer_id', $user->id)
+                ->first();
+
+            if ($portfolioImage) {
+                $profile->cover_photo_path = $this->storePhotographerMediaFromPortfolioImage($portfolioImage, $user->id, 'cover', $coverCrop);
+                $mediaWasChanged = true;
+            }
+        } elseif ($coverCrop && $previousCoverPhoto && File::exists(public_path($previousCoverPhoto))) {
+            $profile->cover_photo_path = $this->storeCroppedPhotographerCoverImage(
+                public_path($previousCoverPhoto),
+                $user->id,
+                $coverCrop
+            );
+            $mediaWasChanged = true;
+        }
+
+        if (!$mediaWasChanged) {
+            return response()->json([
+                'message' => 'No profile or cover image change was received.',
+                'errors' => [
+                    'profile_photo_upload' => ['Choose an image or adjust the crop and try again.'],
+                ],
+            ], 422);
+        }
+
+        if ($previousProfilePhoto && $previousProfilePhoto !== $profile->profile_photo_path) {
+            $this->deletePhotographerMediaIfOwned($previousProfilePhoto, $user->id);
+        }
+
+        if ($previousCoverPhoto && $previousCoverPhoto !== $profile->cover_photo_path) {
+            $this->deletePhotographerMediaIfOwned($previousCoverPhoto, $user->id);
+        }
+
+        $profile->save();
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'message' => 'Profile media updated successfully.',
+                'profile_photo_path' => $profile->profile_photo_path,
+                'profile_photo_url' => $profile->profile_photo_path ? asset($profile->profile_photo_path) . '?v=' . $profile->updated_at?->timestamp : null,
+                'cover_photo_path' => $profile->cover_photo_path,
+                'cover_photo_url' => $profile->cover_photo_path ? asset($profile->cover_photo_path) . '?v=' . $profile->updated_at?->timestamp : null,
+            ]);
+        }
+
+        return back()->with('status', 'Profile media updated successfully.');
+    }
+
     /**
      * Show the photo/logo upload page after wizard completion.
      */
@@ -408,6 +697,21 @@ class PhotographerProfileController extends Controller
             'user' => $user,
             'profile' => $profile,
         ]);
+    }
+
+    private function cleanProfileBio(?string $bio): ?string
+    {
+        if ($bio === null) {
+            return null;
+        }
+
+        $bio = strip_tags($bio);
+        $bio = str_replace(["\r\n", "\r"], "\n", $bio);
+        $bio = preg_replace("/[ \t]+\n/", "\n", $bio);
+        $bio = preg_replace("/\n{3,}/", "\n\n", $bio);
+        $bio = trim($bio);
+
+        return $bio === '' ? null : $bio;
     }
 
     /**
@@ -472,7 +776,177 @@ class PhotographerProfileController extends Controller
 
         $profile->save();
 
-        return redirect()->route('photographers.portfolio.create')
+        return redirect()->route('portfolio.create')
             ->with('status', 'Photos uploaded successfully! Now create your portfolio.');
+    }
+
+    private function storePhotographerMediaUpload(UploadedFile $file, int $userId, string $type, ?array $crop = null): string
+    {
+        if ($type === 'profile') {
+            return $this->storeCroppedPhotographerProfileImage($file->getRealPath(), $userId, $crop);
+        }
+
+        return $this->storeCroppedPhotographerCoverImage($file->getRealPath(), $userId, $crop);
+    }
+
+    private function storePhotographerMediaFromPortfolioImage(PhotographerPortfolioImage $image, int $userId, string $type, ?array $crop = null): string
+    {
+        $sourcePath = $image->full_path ?: $image->medium_path ?: $image->thumbnail_path;
+
+        if (!$sourcePath || !File::exists(public_path($sourcePath))) {
+            return '';
+        }
+
+        if ($type === 'profile') {
+            return $this->storeCroppedPhotographerProfileImage(public_path($sourcePath), $userId, $crop);
+        }
+
+        return $this->storeCroppedPhotographerCoverImage(public_path($sourcePath), $userId, $crop);
+    }
+
+    private function storeCroppedPhotographerProfileImage(string $sourcePath, int $userId, ?array $crop = null): string
+    {
+        return $this->storeCroppedPhotographerMediaImage($sourcePath, $userId, 'profile', 900, 900, $crop);
+    }
+
+    private function storeCroppedPhotographerCoverImage(string $sourcePath, int $userId, ?array $crop = null): string
+    {
+        return $this->storeCroppedPhotographerMediaImage($sourcePath, $userId, 'cover', 1800, 600, $crop);
+    }
+
+    private function storeCroppedPhotographerMediaImage(string $sourcePath, int $userId, string $type, int $targetWidth, int $targetHeight, ?array $crop = null): string
+    {
+        $folder = public_path("uploads/photographers/{$userId}/{$type}");
+
+        if (!File::exists($folder)) {
+            File::makeDirectory($folder, 0755, true);
+        }
+
+        $sourceImage = $this->loadGdImage($sourcePath);
+
+        if (!$sourceImage) {
+            throw new \RuntimeException('Unable to load photographer media image for cropping.');
+        }
+
+        $sourceWidth = imagesx($sourceImage);
+        $sourceHeight = imagesy($sourceImage);
+        $sourceCropX = 0;
+        $sourceCropY = 0;
+        $sourceCropWidth = $sourceWidth;
+        $sourceCropHeight = $sourceHeight;
+
+        if ($crop) {
+            $sourceCropX = (int) floor(max(0, min($sourceWidth - 1, $crop['x'])));
+            $sourceCropY = (int) floor(max(0, min($sourceHeight - 1, $crop['y'])));
+            $sourceCropWidth = (int) floor(max(1, min($sourceWidth - $sourceCropX, $crop['width'])));
+            $sourceCropHeight = (int) floor(max(1, min($sourceHeight - $sourceCropY, $crop['height'])));
+        } else {
+            $targetRatio = $targetWidth / $targetHeight;
+            $sourceRatio = $sourceWidth / $sourceHeight;
+
+            if ($sourceRatio > $targetRatio) {
+                $sourceCropHeight = $sourceHeight;
+                $sourceCropWidth = (int) floor($sourceHeight * $targetRatio);
+                $sourceCropX = (int) floor(($sourceWidth - $sourceCropWidth) / 2);
+            } else {
+                $sourceCropWidth = $sourceWidth;
+                $sourceCropHeight = (int) floor($sourceWidth / $targetRatio);
+                $sourceCropY = (int) floor(($sourceHeight - $sourceCropHeight) / 2);
+            }
+        }
+
+        $destinationImage = imagecreatetruecolor($targetWidth, $targetHeight);
+        $white = imagecolorallocate($destinationImage, 255, 255, 255);
+        imagefill($destinationImage, 0, 0, $white);
+
+        imagecopyresampled(
+            $destinationImage,
+            $sourceImage,
+            0,
+            0,
+            $sourceCropX,
+            $sourceCropY,
+            $targetWidth,
+            $targetHeight,
+            $sourceCropWidth,
+            $sourceCropHeight
+        );
+
+        $filename = "{$type}_" . uniqid() . '.jpg';
+        $path = "uploads/photographers/{$userId}/{$type}/{$filename}";
+
+        imagejpeg($destinationImage, public_path($path), 90);
+        imagedestroy($sourceImage);
+        imagedestroy($destinationImage);
+
+        return $path;
+    }
+
+    private function parseProfileCropData(?string $cropData): ?array
+    {
+        if (!$cropData) {
+            return null;
+        }
+
+        $decoded = json_decode($cropData, true);
+
+        if (
+            !is_array($decoded) ||
+            !isset($decoded['x'], $decoded['y'], $decoded['width'], $decoded['height']) ||
+            (float) $decoded['width'] <= 0 ||
+            (float) $decoded['height'] <= 0
+        ) {
+            return null;
+        }
+
+        return [
+            'x' => (float) $decoded['x'],
+            'y' => (float) $decoded['y'],
+            'width' => (float) $decoded['width'],
+            'height' => (float) $decoded['height'],
+        ];
+    }
+
+    private function loadGdImage(string $path): mixed
+    {
+        $mime = function_exists('mime_content_type') ? mime_content_type($path) : null;
+
+        return match ($mime) {
+            'image/jpeg' => imagecreatefromjpeg($path),
+            'image/png' => imagecreatefrompng($path),
+            'image/webp' => function_exists('imagecreatefromwebp') ? imagecreatefromwebp($path) : false,
+            default => $this->loadGdImageByExtension($path),
+        };
+    }
+
+    private function loadGdImageByExtension(string $path): mixed
+    {
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        return match ($extension) {
+            'jpg', 'jpeg' => imagecreatefromjpeg($path),
+            'png' => imagecreatefrompng($path),
+            'webp' => function_exists('imagecreatefromwebp') ? imagecreatefromwebp($path) : false,
+            default => false,
+        };
+    }
+
+    private function deletePhotographerMediaIfOwned(?string $path, int $userId): void
+    {
+        if (!$path) {
+            return;
+        }
+
+        $ownedPrefixes = [
+            "uploads/photographers/{$userId}/profile/",
+            "uploads/photographers/{$userId}/cover/",
+        ];
+
+        foreach ($ownedPrefixes as $prefix) {
+            if (str_starts_with($path, $prefix)) {
+                \App\Services\ImageProcessingService::deleteImage($path);
+                break;
+            }
+        }
     }
 }

@@ -8,8 +8,15 @@
         } elseif (isset($user->is_photographer) && $user->is_photographer) {
             $userType = 'photographer';
         }
+        $creditNotificationCount = \App\Models\PortfolioCredit::awaitingResponse($user, $user->is_photographer ? 'photographer' : 'model')->count();
+        $otherNotificationCount = \App\Models\SiteNotification::where('user_id', $user->id)
+            ->where('type', '!=', 'credit_pending')
+            ->whereNull('read_at')
+            ->count();
+        $notificationCount = $creditNotificationCount + $otherNotificationCount;
     } else {
         $userType = 'guest';
+        $notificationCount = 0;
     }
 @endphp
 
@@ -31,10 +38,16 @@
                     <a href="{{ route('register') }}" class="bg-black text-white px-4 py-2 rounded hover:bg-gray-800 text-sm font-medium transition">Register</a>
                 @elseif($userType === 'model')
                     <a href="{{ route('dashboard') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Dashboard</a>
-                    <a href="{{ route('profile.model.edit') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">My Profile</a>
+                    <a href="{{ $user->hasCompletedModelProfile() ? route('models.show', $user->id) : route('profile.model.edit') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">My Profile</a>
                     <a href="{{ route('portfolio.index') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Portfolio</a>
-                    <a href="{{ route('albums.index') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Albums</a>
+                    <a href="{{ route('portfolio.galleries.index') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Galleries</a>
                     <a href="{{ route('messages.index') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Messages</a>
+                    <a href="{{ route('notifications.index') }}" class="relative text-black hover:bg-gray-100 px-3 py-2 rounded-md text-sm font-medium transition" title="Notifications">
+                        <i class="fas fa-bell"></i>
+                        @if($notificationCount > 0)
+                            <span class="absolute -right-1 -top-1 min-w-5 rounded-full bg-black px-1.5 py-0.5 text-center text-[10px] font-bold text-white">{{ $notificationCount > 9 ? '9+' : $notificationCount }}</span>
+                        @endif
+                    </a>
                     <div class="relative" x-data="{ open: false }">
                         <button @click="open = !open" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition flex items-center">
                             <span>{{ $user->name }}</span>
@@ -43,6 +56,7 @@
                             </svg>
                         </button>
                         <div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-48 bg-white border-2 border-black rounded-md shadow-lg z-50">
+                            <a href="{{ route('profile.model.edit') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Edit Profile</a>
                             <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Settings</a>
                             <form method="POST" action="{{ route('logout') }}">
                                 @csrf
@@ -52,9 +66,16 @@
                     </div>
                 @elseif($userType === 'photographer')
                     <a href="{{ route('dashboard') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Dashboard</a>
+                    <a href="{{ $user->photographerProfile ? route('photographers.show', $user->id) : route('photographers.profile.edit') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">My Profile</a>
                     <a href="{{ route('models.browse') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Browse Models</a>
-                    <a href="{{ route('photographers.portfolio.index') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">My Portfolio</a>
+                    <a href="{{ route('portfolio.index') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">My Portfolio</a>
                     <a href="{{ route('messages.index') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Messages</a>
+                    <a href="{{ route('notifications.index') }}" class="relative text-black hover:bg-gray-100 px-3 py-2 rounded-md text-sm font-medium transition" title="Notifications">
+                        <i class="fas fa-bell"></i>
+                        @if($notificationCount > 0)
+                            <span class="absolute -right-1 -top-1 min-w-5 rounded-full bg-black px-1.5 py-0.5 text-center text-[10px] font-bold text-white">{{ $notificationCount > 9 ? '9+' : $notificationCount }}</span>
+                        @endif
+                    </a>
                     <div class="relative" x-data="{ open: false }">
                         <button @click="open = !open" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition flex items-center">
                             <span>{{ $user->name }}</span>
@@ -74,6 +95,12 @@
                 @elseif($userType === 'admin')
                     <a href="{{ route('models.browse') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Models</a>
                     <a href="{{ route('photographers.browse') }}" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Photographers</a>
+                    <a href="{{ route('notifications.index') }}" class="relative text-black hover:bg-gray-100 px-3 py-2 rounded-md text-sm font-medium transition" title="Notifications">
+                        <i class="fas fa-bell"></i>
+                        @if($notificationCount > 0)
+                            <span class="absolute -right-1 -top-1 min-w-5 rounded-full bg-black px-1.5 py-0.5 text-center text-[10px] font-bold text-white">{{ $notificationCount > 9 ? '9+' : $notificationCount }}</span>
+                        @endif
+                    </a>
                     <a href="#" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition">Support</a>
                     <div class="relative" x-data="{ open: false }">
                         <button @click="open = !open" class="text-black hover:bg-gray-100 px-4 py-2 rounded-md text-sm font-medium transition flex items-center">
@@ -88,6 +115,7 @@
                             <a href="{{ route('admin.verification.index') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Verifications</a>
                             <a href="{{ url('/admin/photographer-options/specialties') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Specialties</a>
                             <a href="{{ url('/admin/photographer-options/services') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Services</a>
+                            <a href="{{ url('/admin/model-options/appearance') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Model Attributes</a>
                             <a href="{{ route('admin.settings') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Settings</a>
                             <div class="border-t-2 border-gray-200 my-1"></div>
                             <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Account Settings</a>
@@ -122,10 +150,12 @@
                     <a href="{{ route('register') }}" class="block bg-black text-white px-3 py-2 rounded-md text-base font-medium">Register</a>
                 @elseif($userType === 'model')
                     <a href="{{ route('dashboard') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Dashboard</a>
-                    <a href="{{ route('profile.model.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">My Profile</a>
+                    <a href="{{ $user->hasCompletedModelProfile() ? route('models.show', $user->id) : route('profile.model.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">My Profile</a>
+                    <a href="{{ route('profile.model.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Edit Profile</a>
                     <a href="{{ route('portfolio.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Portfolio</a>
-                    <a href="{{ route('albums.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Albums</a>
+                    <a href="{{ route('portfolio.galleries.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Galleries</a>
                     <a href="{{ route('messages.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Messages</a>
+                    <a href="{{ route('notifications.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Notifications{{ $notificationCount > 0 ? ' (' . $notificationCount . ')' : '' }}</a>
                     <a href="{{ route('profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Settings</a>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
@@ -133,9 +163,11 @@
                     </form>
                 @elseif($userType === 'photographer')
                     <a href="{{ route('dashboard') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Dashboard</a>
+                    <a href="{{ $user->photographerProfile ? route('photographers.show', $user->id) : route('photographers.profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">My Profile</a>
                     <a href="{{ route('models.browse') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Browse Models</a>
-                    <a href="{{ route('photographers.portfolio.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">My Portfolio</a>
+                    <a href="{{ route('portfolio.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">My Portfolio</a>
                     <a href="{{ route('messages.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Messages</a>
+                    <a href="{{ route('notifications.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Notifications{{ $notificationCount > 0 ? ' (' . $notificationCount . ')' : '' }}</a>
                     <a href="{{ route('photographers.profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Edit Profile</a>
                     <a href="{{ route('profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Settings</a>
                     <form method="POST" action="{{ route('logout') }}">
@@ -145,6 +177,7 @@
                 @elseif($userType === 'admin')
                     <a href="{{ route('models.browse') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Models</a>
                     <a href="{{ route('photographers.browse') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Photographers</a>
+                    <a href="{{ route('notifications.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Notifications{{ $notificationCount > 0 ? ' (' . $notificationCount . ')' : '' }}</a>
                     <a href="#" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Support</a>
                     <div class="border-t-2 border-gray-200 my-2"></div>
                     <p class="px-3 py-2 text-sm font-semibold text-gray-500 uppercase">Admin</p>
@@ -153,6 +186,7 @@
                     <a href="{{ route('admin.verification.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Verifications</a>
                     <a href="{{ url('/admin/photographer-options/specialties') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Specialties</a>
                     <a href="{{ url('/admin/photographer-options/services') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Services</a>
+                    <a href="{{ url('/admin/model-options/appearance') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Model Attributes</a>
                     <a href="{{ route('admin.settings') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Settings</a>
                     <div class="border-t-2 border-gray-200 my-2"></div>
                     <a href="{{ route('profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Account Settings</a>

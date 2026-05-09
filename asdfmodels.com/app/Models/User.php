@@ -18,6 +18,8 @@ class User extends Authenticatable implements MustVerifyEmail
      * @var list<string>
      */
     protected $fillable = [
+        'first_name',
+        'last_name',
         'name',
         'email',
         'password',
@@ -57,6 +59,64 @@ class User extends Authenticatable implements MustVerifyEmail
             'two_factor_confirmed_at' => 'datetime',
             'two_factor_email_code_expires_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Get the user's full legal name.
+     */
+    public function getFullNameAttribute(): string
+    {
+        return trim(implode(' ', array_filter([
+            $this->first_name,
+            $this->last_name,
+        ])));
+    }
+
+    /**
+     * Keep the legacy name field as a redacted public alias.
+     */
+    public function getNameAttribute($value): string
+    {
+        return $value ?: $this->formatPublicName($this->first_name, $this->last_name);
+    }
+
+    /**
+     * Split an assigned name into first and last name parts.
+     */
+    public function setNameAttribute($value): void
+    {
+        $value = trim((string) $value);
+        $parts = preg_split('/\s+/', $value) ?: [];
+        $firstName = trim((string) array_shift($parts));
+        $lastName = trim(implode(' ', $parts));
+
+        $this->attributes['first_name'] = $firstName !== '' ? $firstName : null;
+        $this->attributes['last_name'] = $lastName !== '' ? $lastName : null;
+        $this->attributes['name'] = $this->formatPublicName($firstName, $lastName);
+    }
+
+    /**
+     * Get a compact public-facing version of the name.
+     */
+    public function getDisplayNameAttribute(): string
+    {
+        return $this->formatPublicName($this->first_name, $this->last_name);
+    }
+
+    private function formatPublicName(?string $firstName, ?string $lastName): string
+    {
+        $firstName = trim((string) $firstName);
+        $lastName = trim((string) $lastName);
+
+        if ($firstName === '') {
+            return $lastName;
+        }
+
+        if ($lastName === '') {
+            return $firstName;
+        }
+
+        return $firstName . ' ' . mb_substr($lastName, 0, 1) . '.';
     }
 
     /**
@@ -115,12 +175,32 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasOne(PhotographerProfile::class);
     }
 
+    public function hasCompletedModelProfile(): bool
+    {
+        return (bool) $this->modelProfile?->isComplete();
+    }
+
     /**
      * Get photographer portfolio images (own portfolio).
      */
     public function photographerPortfolioImages()
     {
         return $this->hasMany(PhotographerPortfolioImage::class, 'photographer_id');
+    }
+
+    public function portfolioCredits()
+    {
+        return $this->hasMany(PortfolioCredit::class, 'credited_user_id');
+    }
+
+    public function createdPortfolioCredits()
+    {
+        return $this->hasMany(PortfolioCredit::class, 'created_by_user_id');
+    }
+
+    public function siteNotifications()
+    {
+        return $this->hasMany(SiteNotification::class);
     }
 
     /**

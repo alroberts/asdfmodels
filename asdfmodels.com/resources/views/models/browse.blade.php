@@ -59,14 +59,14 @@
                     @foreach($models as $model)
                         <a href="{{ route('models.show', $model->user_id) }}" class="bg-white shadow sm:rounded-lg overflow-hidden border-2 border-black hover:shadow-xl transition-shadow">
                             @if($model->profile_photo_path)
-                                <img src="{{ asset($model->profile_photo_path) }}" alt="{{ $model->user->name }}" class="w-full aspect-square object-cover">
+                                <img src="{{ asset($model->profile_photo_path) }}" alt="{{ $model->display_name }}" class="w-full aspect-square object-cover">
                             @else
                                 <div class="w-full aspect-square bg-gray-200 flex items-center justify-center">
-                                    <span class="text-4xl text-gray-600">{{ substr($model->user->name, 0, 1) }}</span>
+                                    <span class="text-4xl text-gray-600">{{ substr($model->display_name, 0, 1) }}</span>
                                 </div>
                             @endif
                             <div class="p-3">
-                                <h3 class="font-semibold text-black mb-1">{{ $model->user->name }}</h3>
+                                <h3 class="font-semibold text-black mb-1">{{ $model->display_name }}</h3>
                                 @if($model->location_city || $model->location_country)
                                     <p class="text-sm text-gray-600">{{ $model->location_city }}{{ $model->location_city && $model->location_country ? ', ' : '' }}{{ $model->location_country }}</p>
                                 @endif
@@ -91,4 +91,3 @@
         </div>
     </div>
 </x-app-layout>
-

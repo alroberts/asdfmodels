@@ -40,8 +40,8 @@ class VerifyEmailController extends Controller
                     ->with('status', 'Please complete your photographer profile to continue.');
             }
         } else {
-            // Model - check if profile exists
-            if (!$user->modelProfile) {
+            // Model - check if profile is complete
+            if (!$user->hasCompletedModelProfile()) {
                 return redirect()->route('profile.model.edit')
                     ->with('status', 'Please complete your model profile to continue.');
             }

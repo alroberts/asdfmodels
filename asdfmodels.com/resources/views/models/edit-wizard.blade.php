@@ -5,7 +5,7 @@
         </h2>
     </x-slot>
 
-    <div class="py-12" x-data="modelProfileWizard()" x-init="init()">
+    <div class="py-12" x-data="modelProfileWizard()" x-init="init()" @location-updated.window="handleLocationUpdate($event.detail)">
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
             <!-- Progress Indicator -->
             <div class="mb-8">
@@ -52,6 +52,26 @@
 
                 @php
                     $countriesData = config('countries');
+                    $measurementSystems = $measurementSystems ?? \App\Helpers\ModelProfileOptions::measurementSystems();
+                    $measurementSystemCountryDefaults = \App\Helpers\ModelProfileOptions::measurementSystemCountryDefaults();
+                    $displayNameFormats = \App\Helpers\ModelProfileOptions::displayNameFormatOptionsForNames(
+                        $user->first_name ?? '',
+                        $user->last_name ?? '',
+                        $profile?->isVerified() ?? false
+                    );
+                    $shoeSizeRegions = $shoeSizeRegions ?? \App\Helpers\ModelProfileOptions::shoeSizeRegions();
+                    $shoeSizes = $shoeSizes ?? \App\Helpers\ModelProfileOptions::shoeSizes();
+                    $dressSizeRegions = $dressSizeRegions ?? \App\Helpers\ModelProfileOptions::dressSizeRegions();
+                    $dressSizes = $dressSizes ?? \App\Helpers\ModelProfileOptions::dressSizes();
+                    $hairColors = $hairColors ?? \App\Helpers\ModelProfileOptions::hairColors();
+                    $eyeColors = $eyeColors ?? \App\Helpers\ModelProfileOptions::eyeColors();
+                    $initialSocialLinks = collect($profile->social_links ?? [])->values()->map(function ($link, $index) {
+                        return [
+                            'uid' => 'existing-' . $index,
+                            'platform' => $link['platform'] ?? '',
+                            'url' => $link['url'] ?? '',
+                        ];
+                    })->all();
                 @endphp
 
                 <!-- Step 1: Basic Information -->
@@ -62,9 +82,64 @@
                     </div>
 
                     <div class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <x-input-label for="first_name" :value="__('First Name')" />
+                                <x-text-input id="first_name" name="first_name" type="text" x-model="formData.first_name" class="block mt-1 w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 text-gray-900 placeholder-gray-400" placeholder="First name" autocomplete="given-name" />
+                                <p class="mt-1 text-xs text-gray-500">This is the public-facing first name used across the platform.</p>
+                                <x-input-error :messages="$errors->get('first_name')" class="mt-2" />
+                            </div>
+
+                            <div>
+                                <x-input-label for="last_name" :value="__('Last Name')" />
+                                <x-text-input id="last_name" name="last_name" type="text" x-model="formData.last_name" class="block mt-1 w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 text-gray-900 placeholder-gray-400" placeholder="Last name" autocomplete="family-name" />
+                                <p class="mt-1 text-xs text-gray-500">The last name is stored separately so it can be hidden from public display.</p>
+                                <x-input-error :messages="$errors->get('last_name')" class="mt-2" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <x-input-label for="display_name_format" :value="__('Display Name As')" />
+                            <div class="relative mt-1" @click.outside="displayNameDropdownOpen = false">
+                                <input type="hidden" name="display_name_format" x-model="formData.display_name_format" />
+                                <button type="button" @click="displayNameDropdownOpen = !displayNameDropdownOpen" class="flex w-full items-center justify-between rounded-md border-2 border-gray-800 bg-white px-3 py-2 text-left shadow-sm transition hover:border-gray-700 focus:border-black focus:outline-none focus:ring-2 focus:ring-gray-300">
+                                    <span x-text="displayNameFormatLabel()" :class="formData.display_name_format ? 'text-gray-900' : 'text-gray-400'"></span>
+                                    <i class="fas fa-chevron-down text-xs text-gray-500"></i>
+                                </button>
+                                <div x-show="displayNameDropdownOpen" x-cloak x-transition x-init="$watch('displayNameDropdownOpen', value => { if (value) { setTimeout(() => { window.positionFloatingDropdown($el); }, 10); } });" class="absolute z-50 w-full overflow-y-auto rounded-md border-2 border-gray-800 bg-white shadow-xl">
+                                    <template x-for="(option, index) in displayNameFormats" :key="index">
+                                        <button
+                                            type="button"
+                                            @mousedown.prevent="selectDisplayNameFormat(option.value)"
+                                            @click.prevent
+                                            class="flex w-full cursor-pointer items-start gap-3 border-b border-gray-200 px-4 py-2.5 text-left last:border-b-0 hover:bg-gray-50"
+                                            :class="formData.display_name_format === option.value ? 'bg-gray-800 text-white' : option.locked ? 'bg-gray-50 text-gray-400' : 'text-gray-900'"
+                                        >
+                                            <span class="mt-0.5 shrink-0">
+                                                <i x-show="option.locked" class="fas fa-lock text-xs text-gray-400"></i>
+                                            </span>
+                                            <span class="min-w-0 flex-1">
+                                                <span class="block font-medium" x-text="option.label"></span>
+                                                <span x-show="option.description" class="block text-xs text-gray-400" x-text="option.description"></span>
+                                            </span>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">The full-name option stays visible for clarity, but only verified members can actually select it.</p>
+                            <x-input-error :messages="$errors->get('display_name_format')" class="mt-2" />
+                        </div>
+
                         <div>
                             <x-input-label for="bio" :value="__('Bio')" />
-                            <textarea id="bio" name="bio" rows="4" x-model="formData.bio" class="block mt-1 w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 text-gray-900 placeholder-gray-400 resize-y" placeholder="Tell us about yourself, your experience, and what makes you unique..."></textarea>
+                            <x-textarea
+                                id="bio"
+                                name="bio"
+                                rows="4"
+                                x-model="formData.bio"
+                                class="block mt-1 w-full"
+                                placeholder="Tell us about yourself, your experience, and what makes you unique..."
+                            ></x-textarea>
                             <x-input-error :messages="$errors->get('bio')" class="mt-2" />
                         </div>
 
@@ -101,23 +176,7 @@
                                             $watch('showDropdown', value => {
                                                 if (value) {
                                                     setTimeout(() => {
-                                                        const dropdown = $el;
-                                                        const input = dropdown.previousElementSibling.querySelector('input');
-                                                        const rect = input.getBoundingClientRect();
-                                                        const viewportHeight = window.innerHeight;
-                                                        const spaceBelow = viewportHeight - rect.bottom;
-                                                        const spaceAbove = rect.top;
-                                                        
-                                                        if (spaceBelow < 200 && spaceAbove > spaceBelow) {
-                                                            dropdown.classList.add('bottom-full');
-                                                            dropdown.classList.remove('mt-1');
-                                                            dropdown.classList.add('mb-1');
-                                                            dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
-                                                        } else {
-                                                            dropdown.classList.remove('bottom-full', 'mb-1');
-                                                            dropdown.classList.add('mt-1');
-                                                            dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
-                                                        }
+                                                        window.positionFloatingDropdown($el);
                                                     }, 10);
                                                 }
                                             });
@@ -165,23 +224,7 @@
                                             $watch('showSuggestions', value => {
                                                 if (value) {
                                                     setTimeout(() => {
-                                                        const dropdown = $el;
-                                                        const input = dropdown.previousElementSibling.previousElementSibling;
-                                                        const rect = input.getBoundingClientRect();
-                                                        const viewportHeight = window.innerHeight;
-                                                        const spaceBelow = viewportHeight - rect.bottom;
-                                                        const spaceAbove = rect.top;
-                                                        
-                                                        if (spaceBelow < 200 && spaceAbove > spaceBelow) {
-                                                            dropdown.classList.add('bottom-full');
-                                                            dropdown.classList.remove('mt-1');
-                                                            dropdown.classList.add('mb-1');
-                                                            dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
-                                                        } else {
-                                                            dropdown.classList.remove('bottom-full', 'mb-1');
-                                                            dropdown.classList.add('mt-1');
-                                                            dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
-                                                        }
+                                                        window.positionFloatingDropdown($el);
                                                     }, 10);
                                                 }
                                             });
@@ -230,23 +273,7 @@
                                             $watch('showDropdown', value => {
                                                 if (value) {
                                                     setTimeout(() => {
-                                                        const dropdown = $el;
-                                                        const input = dropdown.previousElementSibling.previousElementSibling;
-                                                        const rect = input.getBoundingClientRect();
-                                                        const viewportHeight = window.innerHeight;
-                                                        const spaceBelow = viewportHeight - rect.bottom;
-                                                        const spaceAbove = rect.top;
-                                                        
-                                                        if (spaceBelow < 200 && spaceAbove > spaceBelow) {
-                                                            dropdown.classList.add('bottom-full');
-                                                            dropdown.classList.remove('mt-1');
-                                                            dropdown.classList.add('mb-1');
-                                                            dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
-                                                        } else {
-                                                            dropdown.classList.remove('bottom-full', 'mb-1');
-                                                            dropdown.classList.add('mt-1');
-                                                            dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
-                                                        }
+                                                        window.positionFloatingDropdown($el);
                                                     }, 10);
                                                 }
                                             });
@@ -290,85 +317,354 @@
                     </div>
 
                     <div class="space-y-6">
-                        <!-- Common Fields -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <x-input-label for="height" :value="__('Height')" />
-                                <x-text-input id="height" name="height" type="text" x-model="formData.height" class="block mt-1 w-full" placeholder="e.g., 5'10&quot; or 178cm" />
-                                <x-input-error :messages="$errors->get('height')" class="mt-2" />
+                        <div class="rounded-2xl border-2 border-gray-200 bg-gray-50 p-5">
+                            <div class="mb-4">
+                                <h4 class="text-lg font-semibold text-black">Measurement System</h4>
+                                <p class="text-sm text-gray-600">We default this from the selected country, but you can override it any time.</p>
                             </div>
-
-                            <div>
-                                <x-input-label for="weight" :value="__('Weight')" />
-                                <x-text-input id="weight" name="weight" type="text" x-model="formData.weight" class="block mt-1 w-full" placeholder="e.g., 70kg or 154lbs" />
-                                <x-input-error :messages="$errors->get('weight')" class="mt-2" />
+                            <div class="mb-4 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
+                                Suggested from your selected profile country:
+                                <span class="font-semibold" x-text="measurementSystemLabels[getCountryDefaultMeasurementSystem(formData.locationCountryCode)] || 'Metric'"></span>.
                             </div>
-                        </div>
-
-                        <!-- Male Fields -->
-                        <div x-show="formData.gender === 'male'" x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <x-input-label for="chest" :value="__('Chest')" />
-                                <x-text-input id="chest" name="chest" type="text" x-model="formData.chest" class="block mt-1 w-full" />
-                                <x-input-error :messages="$errors->get('chest')" class="mt-2" />
-                            </div>
-                            <div>
-                                <x-input-label for="waist" :value="__('Waist')" />
-                                <x-text-input id="waist" name="waist" type="text" x-model="formData.waist" class="block mt-1 w-full" />
-                                <x-input-error :messages="$errors->get('waist')" class="mt-2" />
-                            </div>
-                            <div>
-                                <x-input-label for="inseam" :value="__('Inseam')" />
-                                <x-text-input id="inseam" name="inseam" type="text" x-model="formData.inseam" class="block mt-1 w-full" />
-                                <x-input-error :messages="$errors->get('inseam')" class="mt-2" />
-                            </div>
-                            <div>
-                                <x-input-label for="suit_size" :value="__('Suit Size')" />
-                                <x-text-input id="suit_size" name="suit_size" type="text" x-model="formData.suit_size" class="block mt-1 w-full" />
-                                <x-input-error :messages="$errors->get('suit_size')" class="mt-2" />
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <template x-for="systemKey in availableMeasurementSystems()" :key="systemKey">
+                                    <label class="flex items-start gap-3 rounded-xl border-2 px-4 py-3 cursor-pointer transition"
+                                           :class="formData.measurement_system === systemKey ? 'border-black bg-white shadow-sm' : 'border-gray-300 bg-white hover:border-gray-500'">
+                                        <input type="radio" name="measurement_system_choice" :value="systemKey" :checked="formData.measurement_system === systemKey" @change="setMeasurementSystem(systemKey)" class="mt-1 border-gray-400 text-black focus:ring-black">
+                                        <span class="text-sm font-medium text-gray-800" x-text="measurementSystemLabels[systemKey]"></span>
+                                    </label>
+                                </template>
                             </div>
                         </div>
 
-                        <!-- Female Fields -->
-                        <div x-show="formData.gender === 'female'" x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <x-input-label for="bust" :value="__('Bust')" />
-                                <x-text-input id="bust" name="bust" type="text" x-model="formData.bust" class="block mt-1 w-full" />
-                                <x-input-error :messages="$errors->get('bust')" class="mt-2" />
+                        <div class="rounded-2xl border-2 border-gray-200 p-5">
+                            <div class="mb-4">
+                                <h4 class="text-lg font-semibold text-black">Measurements</h4>
+                                <p class="text-sm text-gray-600">Keep the core stats clean and standardized for the public profile.</p>
                             </div>
-                            <div>
-                                <x-input-label for="waist" :value="__('Waist')" />
-                                <x-text-input id="waist" name="waist" type="text" x-model="formData.waist" class="block mt-1 w-full" />
-                                <x-input-error :messages="$errors->get('waist')" class="mt-2" />
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div x-show="usesMetricHeight()">
+                                    <x-input-label for="height_metric" :value="__('Height (cm)')" />
+                                    <x-text-input id="height_metric" type="number" x-model="formData.height_display" @input="updateCanonicalMeasurements()" class="block mt-1 w-full" min="100" max="250" step="1" placeholder="e.g. 175" />
+                                    <p class="mt-1 text-xs text-gray-500">Example: 175 cm</p>
+                                    <x-input-error :messages="$errors->get('height_cm')" class="mt-2" />
+                                </div>
+                                <div x-show="!usesMetricHeight()" class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <x-input-label for="height_feet" :value="__('Height (ft)')" />
+                                        <x-text-input id="height_feet" type="number" x-model="formData.height_feet" @input="updateCanonicalMeasurements()" class="block mt-1 w-full" min="3" max="8" step="1" placeholder="e.g. 5" />
+                                    </div>
+                                    <div>
+                                        <x-input-label for="height_inches" :value="__('Height (in)')" />
+                                        <x-text-input id="height_inches" type="number" x-model="formData.height_inches" @input="updateCanonicalMeasurements()" class="block mt-1 w-full" min="0" max="11" step="1" placeholder="e.g. 9" />
+                                    </div>
+                                    <div class="col-span-2">
+                                        <p class="text-xs text-gray-500">Example: 5 ft 9 in</p>
+                                        <x-input-error :messages="$errors->get('height_cm')" class="mt-2" />
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <x-input-label for="hips" :value="__('Hips')" />
-                                <x-text-input id="hips" name="hips" type="text" x-model="formData.hips" class="block mt-1 w-full" />
-                                <x-input-error :messages="$errors->get('hips')" class="mt-2" />
+                            <div class="mt-6">
+                                <h5 class="text-base font-semibold text-black">Body Measurements</h5>
+                                <p class="mt-1 text-sm text-gray-600">Shown according to the profile gender where relevant.</p>
                             </div>
-                            <div>
-                                <x-input-label for="dress_size" :value="__('Dress Size')" />
-                                <x-text-input id="dress_size" name="dress_size" type="text" x-model="formData.dress_size" class="block mt-1 w-full" />
-                                <x-input-error :messages="$errors->get('dress_size')" class="mt-2" />
+                            <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div x-show="isMale()">
+                                    <label for="chest_display" class="block font-medium text-sm text-gray-700">
+                                        <span x-text="bodyMeasurementLabel('Chest')"></span>
+                                    </label>
+                                    <x-text-input id="chest_display" type="number" x-model="formData.chest_display" @input="updateCanonicalMeasurements()" class="block mt-1 w-full" min="20" max="200" step="0.1" ::placeholder="bodyMeasurementPlaceholder('Chest')" />
+                                    <p class="mt-1 text-xs text-gray-500" x-text="bodyMeasurementExample('Chest')"></p>
+                                    <x-input-error :messages="$errors->get('chest_cm')" class="mt-2" />
+                                </div>
+                                <div x-show="isFemale()">
+                                    <label for="bust_display" class="block font-medium text-sm text-gray-700">
+                                        <span x-text="bodyMeasurementLabel('Bust')"></span>
+                                    </label>
+                                    <x-text-input id="bust_display" type="number" x-model="formData.bust_display" @input="updateCanonicalMeasurements()" class="block mt-1 w-full" min="20" max="200" step="0.1" ::placeholder="bodyMeasurementPlaceholder('Bust')" />
+                                    <p class="mt-1 text-xs text-gray-500" x-text="bodyMeasurementExample('Bust')"></p>
+                                    <x-input-error :messages="$errors->get('bust_cm')" class="mt-2" />
+                                </div>
+
+                                <div>
+                                    <label for="waist_display" class="block font-medium text-sm text-gray-700">
+                                        <span x-text="bodyMeasurementLabel('Waist')"></span>
+                                    </label>
+                                    <x-text-input id="waist_display" type="number" x-model="formData.waist_display" @input="updateCanonicalMeasurements()" class="block mt-1 w-full" min="20" max="200" step="0.1" ::placeholder="bodyMeasurementPlaceholder('Waist')" />
+                                    <p class="mt-1 text-xs text-gray-500" x-text="bodyMeasurementExample('Waist')"></p>
+                                    <x-input-error :messages="$errors->get('waist_cm')" class="mt-2" />
+                                </div>
+
+                                <div x-show="isMale()">
+                                    <label for="inseam_display" class="block font-medium text-sm text-gray-700">
+                                        <span x-text="bodyMeasurementLabel('Inseam')"></span>
+                                    </label>
+                                    <x-text-input id="inseam_display" type="number" x-model="formData.inseam_display" @input="updateCanonicalMeasurements()" class="block mt-1 w-full" min="20" max="150" step="0.1" ::placeholder="bodyMeasurementPlaceholder('Inseam')" />
+                                    <p class="mt-1 text-xs text-gray-500" x-text="bodyMeasurementExample('Inseam')"></p>
+                                    <x-input-error :messages="$errors->get('inseam_cm')" class="mt-2" />
+                                </div>
+
+                                <div x-show="isFemale()">
+                                    <label for="hips_display" class="block font-medium text-sm text-gray-700">
+                                        <span x-text="bodyMeasurementLabel('Hips')"></span>
+                                    </label>
+                                    <x-text-input id="hips_display" type="number" x-model="formData.hips_display" @input="updateCanonicalMeasurements()" class="block mt-1 w-full" min="20" max="200" step="0.1" ::placeholder="bodyMeasurementPlaceholder('Hips')" />
+                                    <p class="mt-1 text-xs text-gray-500" x-text="bodyMeasurementExample('Hips')"></p>
+                                    <x-input-error :messages="$errors->get('hips_cm')" class="mt-2" />
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Common Fields -->
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                                <x-input-label for="shoe_size" :value="__('Shoe Size')" />
-                                <x-text-input id="shoe_size" name="shoe_size" type="text" x-model="formData.shoe_size" class="block mt-1 w-full" />
-                                <x-input-error :messages="$errors->get('shoe_size')" class="mt-2" />
+                        <div class="rounded-2xl border-2 border-gray-200 p-5">
+                            <div class="mb-4">
+                                <h4 class="text-lg font-semibold text-black">Clothing & Appearance</h4>
+                                <p class="text-sm text-gray-600">Sizing follows the selected country by default, with an override only if needed.</p>
                             </div>
-                            <div>
-                                <x-input-label for="hair_color" :value="__('Hair Color')" />
-                                <x-text-input id="hair_color" name="hair_color" type="text" x-model="formData.hair_color" class="block mt-1 w-full" />
-                                <x-input-error :messages="$errors->get('hair_color')" class="mt-2" />
-                            </div>
-                            <div>
-                                <x-input-label for="eye_color" :value="__('Eye Color')" />
-                                <x-text-input id="eye_color" name="eye_color" type="text" x-model="formData.eye_color" class="block mt-1 w-full" />
-                                <x-input-error :messages="$errors->get('eye_color')" class="mt-2" />
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div x-show="isMale()">
+                                    <x-input-label for="suit_size" :value="__('Suit Size')" />
+                                    <x-text-input id="suit_size" name="suit_size" type="text" x-model="formData.suit_size" class="block mt-1 w-full" placeholder="e.g. 38R" />
+                                    <x-input-error :messages="$errors->get('suit_size')" class="mt-2" />
+                                </div>
+
+                                <div x-show="isFemale()" class="rounded-xl border border-gray-200 p-4">
+                                    <x-input-label for="dress_size_region" :value="__('Dress Size')" />
+                                    <div class="mt-2 space-y-3">
+                                        <div class="text-xs text-gray-500" x-show="!formData.dress_size_region_override">
+                                            Using <span class="font-semibold" x-text="dressSizeRegions[formData.dress_size_region] || 'default region'"></span>
+                                            based on the selected profile country.
+                                        </div>
+                                        <label class="flex items-center text-sm text-gray-700">
+                                            <input type="checkbox" x-model="formData.dress_size_region_override" @change="applyLocationBasedSizeRegions()" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                                            <span class="ml-2">Use a different dress size region</span>
+                                        </label>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div x-show="formData.dress_size_region_override"
+                                                 class="relative mt-1"
+                                                 x-data="customSelect({
+                                                    options: dressRegionOptions(),
+                                                    selectedValue: formData.dress_size_region || '',
+                                                    onSelect: (value) => {
+                                                        formData.dress_size_region = value;
+                                                        formData.dress_size_value = '';
+                                                    }
+                                                 })"
+                                                 x-init="init()"
+                                                 x-effect="setOptions(dressRegionOptions()); syncFromExternal(formData.dress_size_region || '')">
+                                                <input type="hidden" name="dress_size_region_ui" x-model="selectedValue" />
+                                                <div @click="showDropdown = !showDropdown"
+                                                     @click.outside="showDropdown = false"
+                                                     class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
+                                                    <span x-text="selectedLabel || 'Region'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                                </div>
+                                                <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
+                                                    <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                                </div>
+                                                <div x-show="showDropdown"
+                                                     x-cloak
+                                                     x-transition
+                                                     x-init="$watch('showDropdown', value => { if (value) { setTimeout(() => { window.positionFloatingDropdown($el); }, 10); } });"
+                                                     class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                                     style="max-height: 240px;">
+                                                    <template x-for="(option, index) in options" :key="`dress-region-${option.value}`">
+                                                        <div @click="selectOption(option.value)"
+                                                             @mouseenter="highlightedIndex = index"
+                                                             :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === option.value, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== option.value }"
+                                                             class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                            <div class="font-medium" x-text="option.label"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                            <div class="relative mt-1" :class="formData.dress_size_region_override ? 'col-span-1' : 'col-span-2'"
+                                                 x-data="customSelect({
+                                                    options: dressSizeValueOptions(),
+                                                    selectedValue: formData.dress_size_value || '',
+                                                    onSelect: (value) => { formData.dress_size_value = value; }
+                                                 })"
+                                                 x-init="init()"
+                                                 x-effect="setOptions(dressSizeValueOptions()); syncFromExternal(formData.dress_size_value || '')">
+                                                <input type="hidden" name="dress_size_value_ui" x-model="selectedValue" />
+                                                <div @click="showDropdown = !showDropdown"
+                                                     @click.outside="showDropdown = false"
+                                                     class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
+                                                    <span x-text="selectedLabel || 'Size'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                                </div>
+                                                <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
+                                                    <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                                </div>
+                                                <div x-show="showDropdown"
+                                                     x-cloak
+                                                     x-transition
+                                                     x-init="$watch('showDropdown', value => { if (value) { setTimeout(() => { window.positionFloatingDropdown($el); }, 10); } });"
+                                                     class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                                     style="max-height: 240px;">
+                                                    <template x-for="(option, index) in options" :key="`dress-size-${option.value}`">
+                                                        <div @click="selectOption(option.value)"
+                                                             @mouseenter="highlightedIndex = index"
+                                                             :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === option.value, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== option.value }"
+                                                             class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                            <div class="font-medium" x-text="option.label"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <x-input-error :messages="$errors->get('dress_size_value')" class="mt-2" />
+                                </div>
+
+                                <div class="rounded-xl border border-gray-200 p-4">
+                                    <x-input-label for="shoe_size_region" :value="__('Shoe Size')" />
+                                    <div class="mt-2 space-y-3">
+                                        <div class="text-xs text-gray-500" x-show="!formData.shoe_size_region_override">
+                                            Using <span class="font-semibold" x-text="shoeSizeRegions[formData.shoe_size_region] || 'default region'"></span>
+                                            based on the selected profile country.
+                                        </div>
+                                        <label class="flex items-center text-sm text-gray-700">
+                                            <input type="checkbox" x-model="formData.shoe_size_region_override" @change="applyLocationBasedSizeRegions()" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                                            <span class="ml-2">Use a different shoe size region</span>
+                                        </label>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div x-show="formData.shoe_size_region_override"
+                                                 class="relative mt-1"
+                                                 x-data="customSelect({
+                                                    options: shoeRegionOptions(),
+                                                    selectedValue: formData.shoe_size_region || '',
+                                                    onSelect: (value) => {
+                                                        formData.shoe_size_region = value;
+                                                        formData.shoe_size_value = '';
+                                                    }
+                                                 })"
+                                                 x-init="init()"
+                                                 x-effect="setOptions(shoeRegionOptions()); syncFromExternal(formData.shoe_size_region || '')">
+                                                <input type="hidden" name="shoe_size_region_ui" x-model="selectedValue" />
+                                                <div @click="showDropdown = !showDropdown"
+                                                     @click.outside="showDropdown = false"
+                                                     class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
+                                                    <span x-text="selectedLabel || 'Region'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                                </div>
+                                                <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
+                                                    <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                                </div>
+                                                <div x-show="showDropdown"
+                                                     x-cloak
+                                                     x-transition
+                                                     x-init="$watch('showDropdown', value => { if (value) { setTimeout(() => { window.positionFloatingDropdown($el); }, 10); } });"
+                                                     class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                                     style="max-height: 240px;">
+                                                    <template x-for="(option, index) in options" :key="`shoe-region-${option.value}`">
+                                                        <div @click="selectOption(option.value)"
+                                                             @mouseenter="highlightedIndex = index"
+                                                             :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === option.value, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== option.value }"
+                                                             class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                            <div class="font-medium" x-text="option.label"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                            <div class="relative mt-1" :class="formData.shoe_size_region_override ? 'col-span-1' : 'col-span-2'"
+                                                 x-data="customSelect({
+                                                    options: shoeSizeValueOptions(),
+                                                    selectedValue: formData.shoe_size_value || '',
+                                                    onSelect: (value) => { formData.shoe_size_value = value; }
+                                                 })"
+                                                 x-init="init()"
+                                                 x-effect="setOptions(shoeSizeValueOptions()); syncFromExternal(formData.shoe_size_value || '')">
+                                                <input type="hidden" name="shoe_size_value_ui" x-model="selectedValue" />
+                                                <div @click="showDropdown = !showDropdown"
+                                                     @click.outside="showDropdown = false"
+                                                     class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
+                                                    <span x-text="selectedLabel || 'Size'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                                </div>
+                                                <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
+                                                    <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                                </div>
+                                                <div x-show="showDropdown"
+                                                     x-cloak
+                                                     x-transition
+                                                     x-init="$watch('showDropdown', value => { if (value) { setTimeout(() => { window.positionFloatingDropdown($el); }, 10); } });"
+                                                     class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                                     style="max-height: 240px;">
+                                                    <template x-for="(option, index) in options" :key="`shoe-size-${option.value}`">
+                                                        <div @click="selectOption(option.value)"
+                                                             @mouseenter="highlightedIndex = index"
+                                                             :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === option.value, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== option.value }"
+                                                             class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                            <div class="font-medium" x-text="option.label"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <x-input-error :messages="$errors->get('shoe_size_value')" class="mt-2" />
+                                </div>
+
+                                <div class="relative mt-1" x-data="customSelect({
+                                    options: simpleOptions(hairColorValues),
+                                    selectedValue: formData.hair_color || '',
+                                    onSelect: (value) => { formData.hair_color = value; }
+                                })" x-init="init()" x-effect="setOptions(simpleOptions(hairColorValues)); syncFromExternal(formData.hair_color || '')">
+                                    <x-input-label for="hair_color" :value="__('Hair Colour')" />
+                                    <input type="hidden" name="hair_color_ui" x-model="selectedValue" />
+                                    <div @click="showDropdown = !showDropdown"
+                                         @click.outside="showDropdown = false"
+                                         class="block w-full mt-1 border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
+                                        <span x-text="selectedLabel || 'Select...'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                    </div>
+                                    <div class="absolute right-0 flex items-center pointer-events-none" style="top: calc(50% + 14px); transform: translateY(-50%); right: 12px;">
+                                        <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                    </div>
+                                    <div x-show="showDropdown"
+                                         x-cloak
+                                         x-transition
+                                         x-init="$watch('showDropdown', value => { if (value) { setTimeout(() => { window.positionFloatingDropdown($el); }, 10); } });"
+                                         class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                         style="max-height: 240px;">
+                                        <template x-for="(option, index) in options" :key="`hair-${option.value}`">
+                                            <div @click="selectOption(option.value)"
+                                                 @mouseenter="highlightedIndex = index"
+                                                 :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === option.value, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== option.value }"
+                                                 class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                <div class="font-medium" x-text="option.label"></div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <x-input-error :messages="$errors->get('hair_color')" class="mt-2" />
+                                </div>
+                                <div class="relative mt-1" x-data="customSelect({
+                                    options: simpleOptions(eyeColorValues),
+                                    selectedValue: formData.eye_color || '',
+                                    onSelect: (value) => { formData.eye_color = value; }
+                                })" x-init="init()" x-effect="setOptions(simpleOptions(eyeColorValues)); syncFromExternal(formData.eye_color || '')">
+                                    <x-input-label for="eye_color" :value="__('Eye Colour')" />
+                                    <input type="hidden" name="eye_color_ui" x-model="selectedValue" />
+                                    <div @click="showDropdown = !showDropdown"
+                                         @click.outside="showDropdown = false"
+                                         class="block w-full mt-1 border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
+                                        <span x-text="selectedLabel || 'Select...'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                    </div>
+                                    <div class="absolute right-0 flex items-center pointer-events-none" style="top: calc(50% + 14px); transform: translateY(-50%); right: 12px;">
+                                        <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                    </div>
+                                    <div x-show="showDropdown"
+                                         x-cloak
+                                         x-transition
+                                         x-init="$watch('showDropdown', value => { if (value) { setTimeout(() => { window.positionFloatingDropdown($el); }, 10); } });"
+                                         class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                         style="max-height: 240px;">
+                                        <template x-for="(option, index) in options" :key="`eye-${option.value}`">
+                                            <div @click="selectOption(option.value)"
+                                                 @mouseenter="highlightedIndex = index"
+                                                 :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === option.value, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== option.value }"
+                                                 class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                <div class="font-medium" x-text="option.label"></div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <x-input-error :messages="$errors->get('eye_color')" class="mt-2" />
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -410,23 +706,7 @@
                                         $watch('showDropdown', value => {
                                             if (value) {
                                                 setTimeout(() => {
-                                                    const dropdown = $el;
-                                                    const input = dropdown.previousElementSibling.previousElementSibling;
-                                                    const rect = input.getBoundingClientRect();
-                                                    const viewportHeight = window.innerHeight;
-                                                    const spaceBelow = viewportHeight - rect.bottom;
-                                                    const spaceAbove = rect.top;
-                                                    
-                                                    if (spaceBelow < 200 && spaceAbove > spaceBelow) {
-                                                        dropdown.classList.add('bottom-full');
-                                                        dropdown.classList.remove('mt-1');
-                                                        dropdown.classList.add('mb-1');
-                                                        dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
-                                                    } else {
-                                                        dropdown.classList.remove('bottom-full', 'mb-1');
-                                                        dropdown.classList.add('mt-1');
-                                                        dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
-                                                    }
+                                                    window.positionFloatingDropdown($el);
                                                 }, 10);
                                             }
                                         });
@@ -451,19 +731,19 @@
                             <p class="text-sm text-gray-600 mb-4">Select the types of modeling you specialize in</p>
                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 @php
-                                    $specialties = ['fashion', 'commercial', 'beauty', 'editorial', 'runway', 'fitness', 'artistic', 'portrait', 'lifestyle', 'glamour'];
+                                    $specialtiesOptions = \App\Helpers\PhotographerOptions::specialties('model');
                                 @endphp
-                                @foreach($specialties as $specialty)
+                                @foreach($specialtiesOptions as $specialtyKey => $specialtyLabel)
                                     <label class="flex items-start cursor-pointer p-4 border-2 rounded-lg hover:border-black hover:shadow-md transition-all duration-200 group"
-                                           :class="formData.specialties.includes('{{ $specialty }}') ? 'border-black bg-black text-white shadow-lg' : 'border-gray-300 bg-white'">
+                                           :class="formData.specialties.includes('{{ $specialtyKey }}') ? 'border-black bg-black text-white shadow-lg' : 'border-gray-300 bg-white'">
                                         <input type="checkbox" 
                                                name="specialties[]" 
-                                               value="{{ $specialty }}"
+                                               value="{{ $specialtyKey }}"
                                                x-model="formData.specialties"
                                                class="mt-0.5 w-5 h-5 rounded border-2 border-gray-400 text-black focus:ring-2 focus:ring-black focus:ring-offset-2 cursor-pointer transition-all"
-                                               :class="formData.specialties.includes('{{ $specialty }}') ? 'border-white bg-white' : ''">
-                                        <span class="ml-3 text-sm font-medium flex-1 capitalize"
-                                              :class="formData.specialties.includes('{{ $specialty }}') ? 'text-white' : 'text-gray-700 group-hover:text-black'">{{ $specialty }}</span>
+                                               :class="formData.specialties.includes('{{ $specialtyKey }}') ? 'border-white bg-white' : ''">
+                                        <span class="ml-3 text-sm font-medium flex-1"
+                                              :class="formData.specialties.includes('{{ $specialtyKey }}') ? 'text-white' : 'text-gray-700 group-hover:text-black'">{{ $specialtyLabel }}</span>
                                     </label>
                                 @endforeach
                             </div>
@@ -476,28 +756,87 @@
                 <div x-show="currentStep === 3" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-x-4" x-transition:enter-end="opacity-100 transform translate-x-0" class="bg-white shadow-lg sm:rounded-lg p-6 md:p-8 border-2 border-gray-800">
                     <div class="mb-6">
                         <h3 class="text-2xl font-bold text-black mb-2">Contact & Social Links</h3>
-                        <p class="text-gray-600">How can people reach you?</p>
+                        <p class="text-gray-600">Choose where member enquiries and profile link-outs should go.</p>
                     </div>
 
                     <div class="space-y-6">
                         <div>
-                            <x-input-label for="public_email" :value="__('Public Email')" />
+                            <x-input-label for="public_email" :value="__('Professional Contact Email')" />
                             <x-text-input id="public_email" name="public_email" type="email" x-model="formData.public_email" class="block mt-1 w-full" placeholder="your@email.com" />
-                            <p class="mt-1 text-xs text-gray-500">This will be visible on your public profile</p>
+                            <p class="mt-1 text-xs text-gray-500">Messages from members will be sent through the website messaging system, and a copy will be sent to this email as a notification. Your actual email address will not be shown publicly.</p>
                             <x-input-error :messages="$errors->get('public_email')" class="mt-2" />
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <x-input-label for="instagram" :value="__('Instagram')" />
-                                <x-text-input id="instagram" name="instagram" type="text" x-model="formData.instagram" class="block mt-1 w-full" placeholder="@username" />
-                                <x-input-error :messages="$errors->get('instagram')" class="mt-2" />
+                        <div class="rounded-2xl border-2 border-gray-200 p-5">
+                            <div class="flex items-center justify-between gap-4 mb-4">
+                                <div>
+                                    <h4 class="text-lg font-semibold text-black">Social Links</h4>
+                                    <p class="text-sm text-gray-600">Add the platforms you want shown on your profile.</p>
+                                </div>
+                                <button type="button" @click="addSocialLink()" class="inline-flex items-center rounded-lg border-2 border-black px-4 py-2 text-sm font-semibold text-black hover:bg-black hover:text-white transition">
+                                    <i class="fas fa-plus mr-2"></i> Add Link
+                                </button>
                             </div>
 
-                            <div>
-                                <x-input-label for="portfolio_website" :value="__('Portfolio Website')" />
-                                <x-text-input id="portfolio_website" name="portfolio_website" type="url" x-model="formData.portfolio_website" class="block mt-1 w-full" placeholder="https://yourportfolio.com" />
-                                <x-input-error :messages="$errors->get('portfolio_website')" class="mt-2" />
+                            <div class="space-y-4" x-show="formData.social_links.length > 0">
+                                <template x-for="(link, index) in formData.social_links" :key="link.uid">
+                                    <div class="rounded-xl border border-gray-200 p-4">
+                                        <div class="grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)_auto] gap-4 items-start">
+                                            <div class="relative mt-1"
+                                                 x-data="customSelect({
+                                                    options: socialPlatformOptions(),
+                                                    selectedValue: link.platform || '',
+                                                    onSelect: (value) => { formData.social_links[index].platform = value; }
+                                                 })"
+                                                 x-init="init()"
+                                                 x-effect="setOptions(socialPlatformOptions()); syncFromExternal(link.platform || '')">
+                                                <x-input-label :value="__('Platform')" />
+                                                <input type="hidden" name="social_platform_ui" x-model="selectedValue" />
+                                                <div @click="showDropdown = !showDropdown"
+                                                     @click.outside="showDropdown = false"
+                                                     class="block w-full mt-1 border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
+                                                    <span x-text="selectedLabel || 'Select...'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                                </div>
+                                                <div class="absolute right-0 flex items-center pointer-events-none" style="top: calc(50% + 14px); transform: translateY(-50%); right: 12px;">
+                                                    <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+                                                </div>
+                                                <div x-show="showDropdown"
+                                                     x-cloak
+                                                     x-transition
+                                                     x-init="$watch('showDropdown', value => { if (value) { setTimeout(() => { window.positionFloatingDropdown($el); }, 10); } });"
+                                                     class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
+                                                     style="max-height: 240px;">
+                                                    <template x-for="(option, optionIndex) in options" :key="`social-platform-${option.value}`">
+                                                        <div @click="selectOption(option.value)"
+                                                             @mouseenter="highlightedIndex = optionIndex"
+                                                             :class="{ 'bg-gray-800 text-white': optionIndex === highlightedIndex || selectedValue === option.value, 'bg-white text-gray-900 hover:bg-gray-50': optionIndex !== highlightedIndex && selectedValue !== option.value }"
+                                                             class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
+                                                            <div class="font-medium" x-text="option.label"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <x-input-label :value="__('URL')" />
+                                                <x-text-input type="url"
+                                                    x-model="formData.social_links[index].url"
+                                                    class="block mt-1 w-full"
+                                                    ::placeholder="socialUrlPlaceholder(link.platform)" />
+                                            </div>
+
+                                            <div class="pt-7">
+                                                <button type="button" @click="removeSocialLink(index)" class="inline-flex items-center rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 transition">
+                                                    <i class="fas fa-trash mr-2"></i> Remove
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <div x-show="formData.social_links.length === 0" class="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500 text-center">
+                                No social links added yet.
                             </div>
                         </div>
                     </div>
@@ -534,16 +873,18 @@
                 <input type="hidden" name="gender" x-model="formData.gender" />
                 <input type="hidden" name="experience_start_year" x-model="formData.experience_start_year" />
                 <input type="hidden" name="date_of_birth" x-model="formData.date_of_birth" />
-                <input type="hidden" name="height" x-model="formData.height" />
-                <input type="hidden" name="weight" x-model="formData.weight" />
-                <input type="hidden" name="chest" x-model="formData.chest" />
-                <input type="hidden" name="waist" x-model="formData.waist" />
-                <input type="hidden" name="inseam" x-model="formData.inseam" />
+                <input type="hidden" name="measurement_system" x-model="formData.measurement_system" />
+                <input type="hidden" name="height_cm" x-model="formData.height_cm" />
+                <input type="hidden" name="chest_cm" x-model="formData.chest_cm" />
+                <input type="hidden" name="waist_cm" x-model="formData.waist_cm" />
+                <input type="hidden" name="inseam_cm" x-model="formData.inseam_cm" />
                 <input type="hidden" name="suit_size" x-model="formData.suit_size" />
-                <input type="hidden" name="bust" x-model="formData.bust" />
-                <input type="hidden" name="hips" x-model="formData.hips" />
-                <input type="hidden" name="dress_size" x-model="formData.dress_size" />
-                <input type="hidden" name="shoe_size" x-model="formData.shoe_size" />
+                <input type="hidden" name="bust_cm" x-model="formData.bust_cm" />
+                <input type="hidden" name="hips_cm" x-model="formData.hips_cm" />
+                <input type="hidden" name="dress_size_region" x-model="formData.dress_size_region" />
+                <input type="hidden" name="dress_size_value" x-model="formData.dress_size_value" />
+                <input type="hidden" name="shoe_size_region" x-model="formData.shoe_size_region" />
+                <input type="hidden" name="shoe_size_value" x-model="formData.shoe_size_value" />
                 <input type="hidden" name="hair_color" x-model="formData.hair_color" />
                 <input type="hidden" name="eye_color" x-model="formData.eye_color" />
                 <input type="hidden" name="experience_level" x-model="formData.experience_level" />
@@ -551,8 +892,12 @@
                     <input type="hidden" name="specialties[]" :value="specialty" />
                 </template>
                 <input type="hidden" name="public_email" x-model="formData.public_email" />
-                <input type="hidden" name="instagram" x-model="formData.instagram" />
-                <input type="hidden" name="portfolio_website" x-model="formData.portfolio_website" />
+                <template x-for="(link, index) in formData.social_links" :key="`social-hidden-${link.uid}`">
+                    <div>
+                        <input type="hidden" :name="`social_links[${index}][platform]`" :value="link.platform">
+                        <input type="hidden" :name="`social_links[${index}][url]`" :value="link.url">
+                    </div>
+                </template>
                 <input type="hidden" name="is_public" :value="formData.is_public ? 1 : 0" />
                 <input type="hidden" name="contains_nudity" :value="formData.contains_nudity ? 1 : 0" />
             </form>
@@ -596,64 +941,150 @@
             ],
             formData: {
                 bio: '',
+                first_name: '',
+                last_name: '',
+                display_name_format: 'first_name_last_initial',
                 locationCountryCode: '',
                 locationCity: '',
                 locationGeonameId: null,
                 gender: '',
+                measurement_system: 'metric',
                 experience_start_year: '',
                 date_of_birth: '',
-                height: '',
-                weight: '',
-                chest: '',
-                waist: '',
-                inseam: '',
+                height_cm: '',
+                weight_kg: '',
+                chest_cm: '',
+                waist_cm: '',
+                inseam_cm: '',
                 suit_size: '',
-                bust: '',
-                hips: '',
-                dress_size: '',
-                shoe_size: '',
+                bust_cm: '',
+                hips_cm: '',
+                dress_size_region: '',
+                dress_size_value: '',
+                dress_size_region_override: false,
+                shoe_size_region: '',
+                shoe_size_value: '',
+                shoe_size_region_override: false,
                 hair_color: '',
                 eye_color: '',
+                height_display: '',
+                height_feet: '',
+                height_inches: '',
+                weight_display: '',
+                weight_stone: '',
+                weight_pounds: '',
+                chest_display: '',
+                waist_display: '',
+                inseam_display: '',
+                bust_display: '',
+                hips_display: '',
                 experience_level: '',
                 specialties: [],
                 public_email: '',
                 instagram: '',
                 portfolio_website: '',
+                social_links: [],
                 is_public: true,
                 contains_nudity: false
             },
+            measurementSystemLabels: @json($measurementSystems),
+            measurementSystemCountryDefaults: @json($measurementSystemCountryDefaults),
+            displayNameFormats: @json($displayNameFormats),
+            displayNameDropdownOpen: false,
+            shoeSizeRegions: @json($shoeSizeRegions),
+            shoeSizes: @json($shoeSizes),
+            dressSizeRegions: @json($dressSizeRegions),
+            dressSizes: @json($dressSizes),
+            hairColorValues: @json($hairColors),
+            eyeColorValues: @json($eyeColors),
             init() {
                 // Load existing profile data
                 @if(isset($profile))
                     this.formData = {
                         bio: @json($profile->bio ?? ''),
+                        first_name: @json($user->first_name ?? ''),
+                        last_name: @json($user->last_name ?? ''),
+                        display_name_format: @json(($profile->display_name_format && !($profile->display_name_format === 'full_name' && !($profile?->isVerified() ?? false))) ? $profile->display_name_format : (($profile?->isVerified() ?? false) ? 'full_name' : 'first_name_last_initial')),
                         locationCountryCode: @json($profile->location_country_code ?? ''),
                         locationCity: @json($profile->location_city ?? ''),
                         locationGeonameId: @json($profile->location_geoname_id ?? null),
                         gender: @json($profile->gender ?? ''),
+                        measurement_system: @json(($profile->measurement_system ?? 'metric') === 'imperial' ? 'us_customary' : ($profile->measurement_system ?? 'metric')),
                         experience_start_year: @json($profile->experience_start_year ?? ''),
                         date_of_birth: @json($profile->date_of_birth ? $profile->date_of_birth->format('Y-m-d') : ''),
-                        height: @json($profile->height ?? ''),
-                        weight: @json($profile->weight ?? ''),
-                        chest: @json($profile->chest ?? ''),
-                        waist: @json($profile->waist ?? ''),
-                        inseam: @json($profile->inseam ?? ''),
+                        height_cm: @json($profile->height_cm ?? ''),
+                        weight_kg: @json($profile->weight_kg ?? ''),
+                        chest_cm: @json($profile->chest_cm ?? ''),
+                        waist_cm: @json($profile->waist_cm ?? ''),
+                        inseam_cm: @json($profile->inseam_cm ?? ''),
                         suit_size: @json($profile->suit_size ?? ''),
-                        bust: @json($profile->bust ?? ''),
-                        hips: @json($profile->hips ?? ''),
-                        dress_size: @json($profile->dress_size ?? ''),
-                        shoe_size: @json($profile->shoe_size ?? ''),
+                        bust_cm: @json($profile->bust_cm ?? ''),
+                        hips_cm: @json($profile->hips_cm ?? ''),
+                        dress_size_region: @json($profile->dress_size_region ?? ''),
+                        dress_size_value: @json($profile->dress_size_value ?? ''),
+                        dress_size_region_override: false,
+                        shoe_size_region: @json($profile->shoe_size_region ?? ''),
+                        shoe_size_value: @json($profile->shoe_size_value ?? ''),
+                        shoe_size_region_override: false,
                         hair_color: @json($profile->hair_color ?? ''),
                         eye_color: @json($profile->eye_color ?? ''),
+                        height_display: '',
+                        height_feet: '',
+                        height_inches: '',
+                        weight_display: '',
+                        weight_stone: '',
+                        weight_pounds: '',
+                        chest_display: '',
+                        waist_display: '',
+                        inseam_display: '',
+                        bust_display: '',
+                        hips_display: '',
                         experience_level: @json($profile->experience_level ?? ''),
                         specialties: @json($profile->specialties ?? []),
-                        public_email: @json($profile->public_email ?? ''),
+                        public_email: @json($profile->public_email ?? $user->email),
                         instagram: @json($profile->instagram ?? ''),
                         portfolio_website: @json($profile->portfolio_website ?? ''),
+                        social_links: @json($initialSocialLinks),
                         is_public: @json($profile->is_public ?? true),
                         contains_nudity: @json($profile->contains_nudity ?? false)
                     };
                 @endif
+                if (!this.formData.public_email) {
+                    this.formData.public_email = @json($user->email);
+                }
+                if (this.formData.social_links.length === 0) {
+                    if (this.formData.instagram) {
+                        this.formData.social_links.push({
+                            uid: `legacy-instagram`,
+                            platform: 'instagram',
+                            url: this.normaliseLegacySocialUrl('instagram', this.formData.instagram),
+                        });
+                    }
+                    if (this.formData.portfolio_website) {
+                        this.formData.social_links.push({
+                            uid: `legacy-website`,
+                            platform: 'website',
+                            url: this.formData.portfolio_website,
+                        });
+                    }
+                }
+                this.syncMeasurementDisplaysFromCanonical();
+                this.initialiseSizeRegionOverrides();
+                this.applyLocationBasedMeasurementSystem();
+                this.applyLocationBasedSizeRegions();
+            },
+            displayNameFormatLabel() {
+                const selected = this.displayNameFormats.find((option) => option.value === this.formData.display_name_format);
+                return selected ? selected.label : 'Choose display format...';
+            },
+            selectDisplayNameFormat(value) {
+                const selected = this.displayNameFormats.find((option) => option.value === value);
+                if (selected && selected.locked) {
+                    return;
+                }
+
+                this.formData.display_name_format = value;
+                this.displayNameDropdownOpen = false;
             },
             nextStep() {
                 if (this.currentStep < this.steps.length - 1) {
@@ -691,20 +1122,351 @@
                 });
             },
             saveProfile() {
+                this.updateCanonicalMeasurements();
                 document.getElementById('profileForm').submit();
             },
             updateGenderFields() {
                 // Clear gender-specific fields when gender changes
-                if (this.formData.gender !== 'male') {
-                    this.formData.chest = '';
-                    this.formData.inseam = '';
+                if (!this.isMale()) {
+                    this.formData.chest_cm = '';
+                    this.formData.chest_display = '';
+                    this.formData.inseam_cm = '';
+                    this.formData.inseam_display = '';
                     this.formData.suit_size = '';
                 }
-                if (this.formData.gender !== 'female') {
-                    this.formData.bust = '';
-                    this.formData.hips = '';
-                    this.formData.dress_size = '';
+                if (!this.isFemale()) {
+                    this.formData.bust_cm = '';
+                    this.formData.bust_display = '';
+                    this.formData.hips_cm = '';
+                    this.formData.hips_display = '';
+                    this.formData.dress_size_region = '';
+                    this.formData.dress_size_value = '';
+                    this.formData.dress_size_region_override = false;
                 }
+
+                this.applyLocationBasedSizeRegions();
+            },
+            handleLocationUpdate(detail) {
+                if (detail.country) {
+                    this.formData.locationCountryCode = detail.country;
+                }
+
+                if (detail.city) {
+                    this.formData.locationCity = detail.city;
+                }
+
+                if (detail.geonameId) {
+                    this.formData.locationGeonameId = detail.geonameId;
+                }
+
+                this.applyLocationBasedMeasurementSystem();
+                this.applyLocationBasedSizeRegions();
+            },
+            normalizedGender() {
+                return String(this.formData.gender || '').trim().toLowerCase();
+            },
+            isMale() {
+                return this.normalizedGender() === 'male';
+            },
+            isFemale() {
+                return this.normalizedGender() === 'female';
+            },
+            availableMeasurementSystems() {
+                const defaultSystem = this.getCountryDefaultMeasurementSystem(this.formData.locationCountryCode);
+
+                switch (defaultSystem) {
+                    case 'us_customary':
+                        return ['us_customary', 'metric'];
+                    case 'mixed_uk':
+                        return ['mixed_uk', 'metric'];
+                    case 'mixed_ca':
+                        return ['mixed_ca', 'metric'];
+                    case 'mixed_metric_default':
+                        return ['mixed_metric_default', 'us_customary'];
+                    default:
+                        return ['metric', 'us_customary'];
+                }
+            },
+            getCountryDefaultMeasurementSystem(countryCode) {
+                return this.measurementSystemCountryDefaults[countryCode] || 'metric';
+            },
+            applyLocationBasedMeasurementSystem() {
+                const defaultSystem = this.getCountryDefaultMeasurementSystem(this.formData.locationCountryCode);
+                if (defaultSystem && this.formData.measurement_system !== defaultSystem) {
+                    this.formData.measurement_system = defaultSystem;
+                    this.syncMeasurementDisplaysFromCanonical();
+                }
+            },
+            setMeasurementSystem(systemKey) {
+                this.formData.measurement_system = systemKey;
+                this.syncMeasurementDisplaysFromCanonical();
+            },
+            initialiseSizeRegionOverrides() {
+                const defaultShoeRegion = this.getDefaultShoeRegionForCountry(this.formData.locationCountryCode);
+                const defaultDressRegion = this.getDefaultDressRegionForCountry(this.formData.locationCountryCode);
+
+                this.formData.shoe_size_region_override = !!(this.formData.shoe_size_region && defaultShoeRegion && this.formData.shoe_size_region !== defaultShoeRegion);
+                this.formData.dress_size_region_override = !!(this.formData.dress_size_region && defaultDressRegion && this.formData.dress_size_region !== defaultDressRegion);
+            },
+            applyLocationBasedSizeRegions() {
+                if (!this.formData.shoe_size_region_override) {
+                    const defaultShoeRegion = this.getDefaultShoeRegionForCountry(this.formData.locationCountryCode);
+                    if (defaultShoeRegion) {
+                        this.formData.shoe_size_region = defaultShoeRegion;
+                    }
+                }
+
+                if (!this.formData.dress_size_region_override) {
+                    const defaultDressRegion = this.getDefaultDressRegionForCountry(this.formData.locationCountryCode);
+                    if (defaultDressRegion) {
+                        this.formData.dress_size_region = defaultDressRegion;
+                    }
+                }
+            },
+            getDefaultShoeRegionForCountry(countryCode) {
+                if (!countryCode) {
+                    return 'eu';
+                }
+
+                if (countryCode === 'GB' || countryCode === 'IE') {
+                    return 'uk';
+                }
+
+                if (countryCode === 'US' || countryCode === 'CA') {
+                    return this.isMale() ? 'us_men' : 'us_women';
+                }
+
+                return 'eu';
+            },
+            getDefaultDressRegionForCountry(countryCode) {
+                if (!countryCode) {
+                    return 'eu';
+                }
+
+                if (countryCode === 'GB' || countryCode === 'IE') {
+                    return 'uk';
+                }
+
+                if (countryCode === 'US' || countryCode === 'CA') {
+                    return 'us';
+                }
+
+                return 'eu';
+            },
+            usesMetricHeight() {
+                return ['metric', 'mixed_metric_default'].includes(this.formData.measurement_system);
+            },
+            usesMetricBodyMeasurements() {
+                return ['metric', 'mixed_metric_default'].includes(this.formData.measurement_system);
+            },
+            usesStoneWeight() {
+                return this.formData.measurement_system === 'mixed_uk';
+            },
+            usesPoundsWeight() {
+                return ['us_customary', 'mixed_ca'].includes(this.formData.measurement_system);
+            },
+            weightLabel() {
+                return this.usesPoundsWeight() ? 'Weight (lbs)' : 'Weight (kg)';
+            },
+            bodyMeasurementLabel(label) {
+                return `${label} (${this.usesMetricBodyMeasurements() ? 'cm' : 'in'})`;
+            },
+            bodyMeasurementPlaceholder(label) {
+                const metricExamples = {
+                    Chest: '96',
+                    Bust: '90',
+                    Waist: '66',
+                    Inseam: '81',
+                    Hips: '94',
+                };
+                const imperialExamples = {
+                    Chest: '38',
+                    Bust: '35.5',
+                    Waist: '26',
+                    Inseam: '32',
+                    Hips: '37',
+                };
+
+                return this.usesMetricBodyMeasurements()
+                    ? (metricExamples[label] || '90')
+                    : (imperialExamples[label] || '35');
+            },
+            bodyMeasurementExample(label) {
+                return this.usesMetricBodyMeasurements()
+                    ? `Example: ${this.bodyMeasurementPlaceholder(label)} ${label === 'Inseam' ? 'cm inseam' : 'cm'}`
+                    : `Example: ${this.bodyMeasurementPlaceholder(label)} ${label === 'Inseam' ? 'in inseam' : 'in'}`;
+            },
+            socialPlatformOptions() {
+                return [
+                    { value: 'instagram', label: 'Instagram' },
+                    { value: 'facebook', label: 'Facebook' },
+                    { value: 'x', label: 'X' },
+                    { value: 'tiktok', label: 'TikTok' },
+                    { value: 'youtube', label: 'YouTube' },
+                    { value: 'behance', label: 'Behance' },
+                    { value: 'linkedin', label: 'LinkedIn' },
+                    { value: 'website', label: 'Website / Portfolio' },
+                ];
+            },
+            socialUrlPlaceholder(platform) {
+                const placeholders = {
+                    instagram: 'https://instagram.com/yourusername',
+                    facebook: 'https://facebook.com/yourusername',
+                    x: 'https://x.com/yourusername',
+                    tiktok: 'https://tiktok.com/@yourusername',
+                    youtube: 'https://youtube.com/@yourchannel',
+                    behance: 'https://behance.net/yourname',
+                    linkedin: 'https://linkedin.com/in/yourname',
+                    website: 'https://yourportfolio.com',
+                };
+                return placeholders[platform] || 'https://example.com/your-profile';
+            },
+            normaliseLegacySocialUrl(platform, value) {
+                if (!value) {
+                    return '';
+                }
+                if (/^https?:\/\//i.test(value)) {
+                    return value;
+                }
+                const clean = String(value).replace(/^@/, '');
+                const prefixes = {
+                    instagram: 'https://instagram.com/',
+                    facebook: 'https://facebook.com/',
+                    x: 'https://x.com/',
+                };
+                return (prefixes[platform] || '') + clean;
+            },
+            addSocialLink() {
+                this.formData.social_links.push({
+                    uid: `social-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                    platform: '',
+                    url: '',
+                });
+            },
+            removeSocialLink(index) {
+                this.formData.social_links.splice(index, 1);
+            },
+            simpleOptions(values) {
+                return (values || []).map((value) => ({ value, label: value }));
+            },
+            mappedOptions(values) {
+                return Object.entries(values || {}).map(([value, label]) => ({ value, label }));
+            },
+            dressRegionOptions() {
+                return this.mappedOptions(this.dressSizeRegions);
+            },
+            dressSizeValueOptions() {
+                return this.simpleOptions(this.dressSizes[this.formData.dress_size_region] || []);
+            },
+            shoeRegionOptions() {
+                return this.mappedOptions(this.shoeSizeRegions);
+            },
+            shoeSizeValueOptions() {
+                return this.simpleOptions(this.shoeSizes[this.formData.shoe_size_region] || []);
+            },
+            syncMeasurementDisplaysFromCanonical() {
+                const system = this.formData.measurement_system || 'metric';
+                const heightCm = Number(this.formData.height_cm || 0);
+
+                if (this.usesMetricHeight()) {
+                    this.formData.height_display = heightCm || '';
+                } else {
+                    if (heightCm) {
+                        const totalInches = Math.round(heightCm / 2.54);
+                        this.formData.height_feet = Math.floor(totalInches / 12);
+                        this.formData.height_inches = totalInches % 12;
+                    } else {
+                        this.formData.height_feet = '';
+                        this.formData.height_inches = '';
+                    }
+                }
+
+                if (this.usesStoneWeight()) {
+                    if (this.formData.weight_kg) {
+                        const totalPounds = Math.round(Number(this.formData.weight_kg) * 2.20462);
+                        this.formData.weight_stone = Math.floor(totalPounds / 14);
+                        this.formData.weight_pounds = totalPounds % 14;
+                    } else {
+                        this.formData.weight_stone = '';
+                        this.formData.weight_pounds = '';
+                    }
+                    this.formData.weight_display = '';
+                } else if (this.usesPoundsWeight()) {
+                    this.formData.weight_display = this.formData.weight_kg ? this.roundToSingleDecimal(Number(this.formData.weight_kg) * 2.20462) : '';
+                    this.formData.weight_stone = '';
+                    this.formData.weight_pounds = '';
+                } else {
+                    this.formData.weight_display = this.formData.weight_kg || '';
+                    this.formData.weight_stone = '';
+                    this.formData.weight_pounds = '';
+                }
+
+                if (this.usesMetricBodyMeasurements()) {
+                    this.formData.chest_display = this.formData.chest_cm || '';
+                    this.formData.waist_display = this.formData.waist_cm || '';
+                    this.formData.inseam_display = this.formData.inseam_cm || '';
+                    this.formData.bust_display = this.formData.bust_cm || '';
+                    this.formData.hips_display = this.formData.hips_cm || '';
+                } else {
+                    this.formData.chest_display = this.formData.chest_cm ? this.roundToSingleDecimal(Number(this.formData.chest_cm) / 2.54) : '';
+                    this.formData.waist_display = this.formData.waist_cm ? this.roundToSingleDecimal(Number(this.formData.waist_cm) / 2.54) : '';
+                    this.formData.inseam_display = this.formData.inseam_cm ? this.roundToSingleDecimal(Number(this.formData.inseam_cm) / 2.54) : '';
+                    this.formData.bust_display = this.formData.bust_cm ? this.roundToSingleDecimal(Number(this.formData.bust_cm) / 2.54) : '';
+                    this.formData.hips_display = this.formData.hips_cm ? this.roundToSingleDecimal(Number(this.formData.hips_cm) / 2.54) : '';
+                }
+            },
+            updateCanonicalMeasurements() {
+                if (this.usesMetricHeight()) {
+                    this.formData.height_cm = this.toNullableInteger(this.formData.height_display);
+                } else {
+                    const feet = Number(this.formData.height_feet || 0);
+                    const inches = Number(this.formData.height_inches || 0);
+                    this.formData.height_cm = feet || inches ? Math.round(((feet * 12) + inches) * 2.54) : '';
+                }
+
+                if (this.usesStoneWeight()) {
+                    const stones = Number(this.formData.weight_stone || 0);
+                    const pounds = Number(this.formData.weight_pounds || 0);
+                    const totalPounds = stones * 14 + pounds;
+                    this.formData.weight_kg = totalPounds ? this.roundToSingleDecimal(totalPounds * 0.453592) : '';
+                } else if (this.usesPoundsWeight()) {
+                    this.formData.weight_kg = this.convertToMetric(this.formData.weight_display, 0.453592);
+                } else {
+                    this.formData.weight_kg = this.toNullableDecimal(this.formData.weight_display);
+                }
+
+                if (this.usesMetricBodyMeasurements()) {
+                    this.formData.chest_cm = this.toNullableDecimal(this.formData.chest_display);
+                    this.formData.waist_cm = this.toNullableDecimal(this.formData.waist_display);
+                    this.formData.inseam_cm = this.toNullableDecimal(this.formData.inseam_display);
+                    this.formData.bust_cm = this.toNullableDecimal(this.formData.bust_display);
+                    this.formData.hips_cm = this.toNullableDecimal(this.formData.hips_display);
+                    return;
+                }
+                this.formData.chest_cm = this.convertToMetric(this.formData.chest_display, 2.54);
+                this.formData.waist_cm = this.convertToMetric(this.formData.waist_display, 2.54);
+                this.formData.inseam_cm = this.convertToMetric(this.formData.inseam_display, 2.54);
+                this.formData.bust_cm = this.convertToMetric(this.formData.bust_display, 2.54);
+                this.formData.hips_cm = this.convertToMetric(this.formData.hips_display, 2.54);
+            },
+            convertToMetric(value, multiplier) {
+                const numeric = Number(value);
+                if (!value || Number.isNaN(numeric)) {
+                    return '';
+                }
+
+                return this.roundToSingleDecimal(numeric * multiplier);
+            },
+            toNullableInteger(value) {
+                const numeric = Number(value);
+                return !value || Number.isNaN(numeric) ? '' : Math.round(numeric);
+            },
+            toNullableDecimal(value) {
+                const numeric = Number(value);
+                return !value || Number.isNaN(numeric) ? '' : this.roundToSingleDecimal(numeric);
+            },
+            roundToSingleDecimal(value) {
+                return Math.round(value * 10) / 10;
             }
         };
     }
@@ -718,17 +1480,34 @@
             highlightedIndex: -1,
             
             init() {
-                // Find selected option and set label
+                this.syncSelectedLabel();
+            },
+
+            syncSelectedLabel() {
                 const selected = this.options.find(opt => opt.value === this.selectedValue);
-                if (selected) {
-                    this.selectedLabel = selected.label;
+                this.selectedLabel = selected ? selected.label : '';
+            },
+
+            setOptions(options) {
+                this.options = options || [];
+                this.syncSelectedLabel();
+            },
+
+            syncFromExternal(value) {
+                if (this.selectedValue !== value) {
+                    this.selectedValue = value;
                 }
+                this.syncSelectedLabel();
             },
             
             selectOption(value) {
+                const selected = this.options.find((option) => option.value === value);
+                if (selected && selected.locked) {
+                    return;
+                }
+
                 this.selectedValue = value;
-                const selected = this.options.find(opt => opt.value === value);
-                this.selectedLabel = selected ? selected.label : '';
+                this.syncSelectedLabel();
                 this.showDropdown = false;
                 if (config.onSelect) {
                     config.onSelect(value);
@@ -736,6 +1515,39 @@
             }
         };
     }
+
+    window.positionFloatingDropdown = function positionFloatingDropdown(dropdown) {
+        if (!dropdown) {
+            return;
+        }
+
+        const container = dropdown.parentElement;
+        const trigger = container ? container.querySelector('input[type=\"text\"], .cursor-pointer') : null;
+
+        if (!trigger || typeof trigger.getBoundingClientRect !== 'function') {
+            dropdown.classList.remove('bottom-full', 'mb-1');
+            dropdown.classList.add('mt-1');
+            dropdown.style.maxHeight = '240px';
+            return;
+        }
+
+        const rect = trigger.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const spaceBelow = viewportHeight - rect.bottom;
+        const spaceAbove = rect.top;
+
+        if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+            dropdown.classList.add('bottom-full');
+            dropdown.classList.remove('mt-1');
+            dropdown.classList.add('mb-1');
+            dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
+            return;
+        }
+
+        dropdown.classList.remove('bottom-full', 'mb-1');
+        dropdown.classList.add('mt-1');
+        dropdown.style.maxHeight = Math.min(Math.max(spaceBelow - 20, 120), 240) + 'px';
+    };
     
     function searchableDropdown() {
         return {
@@ -890,4 +1702,3 @@
         };
     }
 </script>
-

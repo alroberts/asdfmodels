@@ -96,6 +96,24 @@
                 $locationCountryCode = old('location_country_code', $profile->location_country_code ?? null);
                 $locationCity = old('location_city', $profile->location_city ?? null);
                 $locationGeonameId = old('location_geoname_id', $profile->location_geoname_id ?? null);
+                $firstName = trim((string) ($user->first_name ?: explode(' ', $user->name)[0] ?? ''));
+                $lastName = trim((string) ($user->last_name ?? ''));
+                $lastInitial = $lastName !== '' ? mb_substr($lastName, 0, 1) . '.' : '';
+                $firstInitial = $firstName !== '' ? mb_substr($firstName, 0, 1) . '.' : '';
+                $companyName = old('professional_name', $profile->professional_name ?? '');
+                $isVerifiedProfile = $profile->isVerified();
+                $verifiedOnlyDisplayFormats = ['professional_name', 'full_name'];
+                $initialDisplayNameFormat = old('display_name_format', $profile->display_name_format ?: 'first_name_last_initial');
+                if (!$isVerifiedProfile && in_array($initialDisplayNameFormat, $verifiedOnlyDisplayFormats, true)) {
+                    $initialDisplayNameFormat = 'first_name_last_initial';
+                }
+                $displayNameFormatOptions = [
+                    'professional_name' => $companyName ? 'Company: ' . $companyName : 'Company / professional name',
+                    'first_name_last_initial' => trim($firstName . ' ' . $lastInitial) ?: 'First name + last initial',
+                    'first_name' => $firstName ?: 'First name only',
+                    'initials' => trim($firstInitial . $lastInitial) ?: 'Initials',
+                    'full_name' => trim($firstName . ' ' . $lastName) ?: 'Full name',
+                ];
                 
                 $initialData = [
                     'specialties' => $oldSpecialties,
@@ -128,7 +146,10 @@
             </div>
 
             <!-- Tabbed Interface -->
-            <div x-data="{ activeTab: 'basic' }" class="bg-white shadow-lg rounded-xl overflow-hidden">
+            <div
+                x-data="{ activeTab: ['professional', 'equipment', 'contact', 'settings'].includes(window.location.hash.replace('#', '')) ? window.location.hash.replace('#', '') : 'basic' }"
+                class="bg-white shadow-lg rounded-xl overflow-hidden"
+            >
                 <!-- Tab Navigation -->
                 <div class="border-b-2 border-gray-200 bg-gray-50">
                     <div class="flex overflow-x-auto">
@@ -274,27 +295,67 @@
                                                 </div>
                                             </div>
 
-                                            <!-- Company Name -->
-                                            <div class="group relative" 
-                                                 x-data="{ editing: false, value: @js(old('professional_name', $profile->professional_name ?? '')) }"
-                                                 x-init="originalValue = value">
-                                                <div x-show="!editing" 
-                                                     @click="editing = true"
-                                                     class="cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
-                                                    <div class="text-xs text-gray-500 mb-1">Company</div>
-                                                    <div class="text-lg font-semibold text-gray-700" x-text="value || 'Click to add company name'"></div>
+                                            <div
+                                                x-data="{
+                                                    companyName: @js(old('professional_name', $profile->professional_name ?? '')),
+                                                    displayNameFormat: @js($initialDisplayNameFormat),
+                                                    showCompany: @js($isVerifiedProfile && (bool) old('show_company_on_profile', $profile->show_company_on_profile ?? false)),
+                                                    isVerified: @js($isVerifiedProfile),
+                                                }"
+                                                class="space-y-4"
+                                            >
+                                                <!-- Company Name -->
+                                                <div class="group relative" x-data="{ editing: false }">
+                                                    <div x-show="!editing"
+                                                         @click="editing = true"
+                                                         class="cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
+                                                        <div class="text-xs text-gray-500 mb-1">Company</div>
+                                                        <div class="text-lg font-semibold text-gray-700" x-text="companyName || 'Click to add company name'"></div>
+                                                    </div>
+                                                    <div x-show="editing" x-transition class="relative">
+                                                        <x-text-input
+                                                            type="text"
+                                                            x-model="companyName"
+                                                            @blur="editing = false"
+                                                            @keydown.enter="editing = false"
+                                                            @keydown.escape="editing = false"
+                                                            class="block w-full text-lg font-semibold"
+                                                            placeholder="Company name"
+                                                            autofocus />
+                                                        <input type="hidden" name="professional_name" x-model="companyName" />
+                                                    </div>
                                                 </div>
-                                                <div x-show="editing" x-transition class="relative">
-                                                    <x-text-input 
-                                                        type="text" 
-                                                        x-model="value"
-                                                        @blur="editing = false"
-                                                        @keydown.enter="editing = false"
-                                                        @keydown.escape="editing = false; value = originalValue"
-                                                        class="block w-full text-lg font-semibold" 
-                                                        placeholder="Company name"
-                                                        autofocus />
-                                                    <input type="hidden" name="professional_name" x-model="value" />
+
+                                                <!-- Display Name -->
+                                                <div>
+                                                    <div class="text-xs text-gray-500 mb-1">Display Name As</div>
+                                                    <select name="display_name_format" x-model="displayNameFormat" class="block w-full rounded-md border-2 border-gray-800 bg-white px-3 py-2 text-sm shadow-sm focus:border-black focus:outline-none focus:ring-2 focus:ring-gray-300">
+                                                        <option value="professional_name" :disabled="!isVerified" x-text="companyName ? `Company: ${companyName}${isVerified ? '' : ' (verified profiles only)'}` : `Company / professional name${isVerified ? '' : ' (verified profiles only)'}`"></option>
+                                                        @foreach(collect($displayNameFormatOptions)->except('professional_name') as $key => $label)
+                                                            <option value="{{ $key }}" @disabled(!$isVerifiedProfile && $key === 'full_name')>{{ $label }}{{ !$isVerifiedProfile && $key === 'full_name' ? ' (verified profiles only)' : '' }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                    <p class="mt-1 text-xs text-gray-500">Choose whether the public profile leads with your personal name or company/professional name.</p>
+                                                    <div class="mt-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                                                        <p class="m-0">
+                                                            <span class="font-semibold text-gray-800">Company name:</span>
+                                                            <span x-text="companyName || 'Not set yet'"></span>
+                                                        </p>
+                                                        <label class="mt-2 flex items-start gap-2" :class="isVerified ? 'text-gray-700' : 'text-gray-400'">
+                                                            <input
+                                                                type="checkbox"
+                                                                name="show_company_on_profile"
+                                                                value="1"
+                                                                x-model="showCompany"
+                                                                :disabled="!isVerified"
+                                                                class="mt-0.5 rounded border-gray-300 text-gray-900 focus:ring-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+                                                            >
+                                                            <span>
+                                                                <span class="font-semibold">Show company name on profile</span>
+                                                                <span class="block" x-text="isVerified ? 'When your personal name is the main display name, the company appears directly beneath it.' : 'Available for verified photographer profiles.'"></span>
+                                                            </span>
+                                                        </label>
+                                                    </div>
                                                 </div>
                                             </div>
 

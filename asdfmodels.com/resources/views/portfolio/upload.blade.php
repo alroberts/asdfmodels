@@ -8,6 +8,18 @@
     <div class="py-12">
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
             <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
+                @if($selectedGalleryId)
+                    @php
+                        $selectedGallery = $galleries->firstWhere('id', $selectedGalleryId);
+                    @endphp
+                    @if($selectedGallery)
+                        <div class="mb-6 rounded-lg border-2 border-green-200 bg-green-50 p-4">
+                            <p class="text-sm font-medium text-green-800">You are adding images to <span class="font-semibold">{{ $selectedGallery->name }}</span>.</p>
+                            <p class="mt-1 text-sm text-green-700">Upload your images below and they will be added to this gallery automatically.</p>
+                        </div>
+                    @endif
+                @endif
+
                 <form method="POST" action="{{ route('portfolio.store') }}" enctype="multipart/form-data" x-data="{ files: [], isPolaroid: false, containsNudity: false }">
                     @csrf
 
@@ -39,6 +51,18 @@
 
                     <!-- Options -->
                     <div class="mb-6 space-y-4">
+                        <div>
+                            <x-input-label for="album_id" :value="__('Gallery (optional)')" />
+                            <select id="album_id" name="album_id" class="block mt-1 w-full border-2 border-black rounded-md shadow-sm focus:border-gray-500 focus:ring focus:ring-gray-200 focus:ring-opacity-50">
+                                <option value="">No gallery yet</option>
+                                @foreach($galleries as $gallery)
+                                    <option value="{{ $gallery->id }}" {{ (string) old('album_id', $selectedGalleryId) === (string) $gallery->id ? 'selected' : '' }}>{{ $gallery->name }}</option>
+                                @endforeach
+                            </select>
+                            <p class="mt-2 text-sm text-gray-600">Assign these images to an existing gallery while uploading.</p>
+                            <x-input-error :messages="$errors->get('album_id')" class="mt-2" />
+                        </div>
+
                         <div>
                             <label class="flex items-center">
                                 <input 
@@ -96,9 +120,6 @@
                             <x-input-label for="photographer_id" :value="__('Photographer (optional)')" />
                             <select id="photographer_id" name="photographer_id" class="block mt-1 w-full border-2 border-black rounded-md shadow-sm focus:border-gray-500 focus:ring focus:ring-gray-200 focus:ring-opacity-50">
                                 <option value="">None</option>
-                                @php
-                                    $photographers = \App\Models\User::where('is_photographer', true)->orderBy('name')->get();
-                                @endphp
                                 @foreach($photographers as $photographer)
                                     <option value="{{ $photographer->id }}">{{ $photographer->name }}</option>
                                 @endforeach
@@ -123,7 +144,7 @@
                     <div class="flex items-center justify-end space-x-4">
                         <a href="{{ route('portfolio.index') }}" class="text-gray-600 hover:text-gray-800">Cancel</a>
                         <x-primary-button>
-                            {{ __('Upload Images') }}
+                            {{ $selectedGalleryId ? __('Upload to Gallery') : __('Upload Images') }}
                         </x-primary-button>
                     </div>
                 </form>
@@ -131,4 +152,3 @@
         </div>
     </div>
 </x-app-layout>
-

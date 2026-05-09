@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class PortfolioImage extends Model
 {
@@ -71,6 +72,16 @@ class PortfolioImage extends Model
         return $this->hasMany(\App\Models\PhotographerImageTag::class, 'portfolio_image_id');
     }
 
+    public function credits(): MorphMany
+    {
+        return $this->morphMany(PortfolioCredit::class, 'creditable');
+    }
+
+    public function comments(): MorphMany
+    {
+        return $this->morphMany(PortfolioImageComment::class, 'imageable');
+    }
+
     /**
      * Get the URL for the thumbnail image.
      */
@@ -95,4 +106,3 @@ class PortfolioImage extends Model
         return asset('uploads/models/' . $this->model_id . '/portfolio/full/' . basename($this->full_path));
     }
 }
-

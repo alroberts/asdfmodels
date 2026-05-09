@@ -4,10 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Message;
 use App\Models\MessageThread;
+use App\Models\SiteNotification;
 use App\Models\User;
+use App\Services\MailConfigService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
 
 class MessageController extends Controller
@@ -170,6 +174,9 @@ class MessageController extends Controller
         // Update thread last message time
         $thread->update(['last_message_at' => now()]);
 
+        $this->sendNewMessageNotification($recipient, $user, $validated['body']);
+        SiteNotification::notifyMessage($recipient, $user, $thread);
+
         return redirect()->route('messages.show', $thread->id)
             ->with('status', 'Message sent.');
     }
@@ -192,5 +199,34 @@ class MessageController extends Controller
         return redirect()->route('messages.index')
             ->with('status', 'Conversation deleted.');
     }
-}
 
+    private function sendNewMessageNotification(User $recipient, User $sender, string $body): void
+    {
+        $recipientEmail = $recipient->modelProfile?->public_email
+            ?? $recipient->photographerProfile?->public_email
+            ?? $recipient->email;
+
+        if (!$recipientEmail) {
+            return;
+        }
+
+        try {
+            MailConfigService::configure();
+
+            $subject = 'New message on ASDF Models';
+            $preview = trim(mb_substr($body, 0, 300));
+            $messagesUrl = route('messages.index');
+
+            Mail::raw(
+                "You have a new message on ASDF Models from {$sender->name}.\n\n"
+                . ($preview !== '' ? "Message preview:\n{$preview}\n\n" : '')
+                . "View and reply here: {$messagesUrl}",
+                function ($message) use ($recipientEmail, $subject) {
+                    $message->to($recipientEmail)->subject($subject);
+                }
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Unable to send new message notification email: ' . $e->getMessage());
+        }
+    }
+}

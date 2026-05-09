@@ -8,7 +8,7 @@
     <div class="py-12">
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
             <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
-                <form method="POST" action="{{ route('photographers.portfolio.store') }}" enctype="multipart/form-data" x-data="{ files: [], containsNudity: false, isFeatured: false }">
+                <form method="POST" action="{{ route('portfolio.store') }}" enctype="multipart/form-data" x-data="{ files: [], containsNudity: false, isFeatured: false }">
                     @csrf
 
                     <!-- File Upload -->
@@ -107,7 +107,7 @@
                     </div>
 
                     <div class="flex items-center justify-end space-x-4">
-                        <a href="{{ route('photographers.portfolio.index') }}" class="text-gray-600 hover:text-gray-800">Cancel</a>
+                        <a href="{{ route('portfolio.index') }}" class="text-gray-600 hover:text-gray-800">Cancel</a>
                         <x-primary-button>
                             {{ __('Upload Images') }}
                         </x-primary-button>
@@ -117,4 +117,3 @@
         </div>
     </div>
 </x-app-layout>
-

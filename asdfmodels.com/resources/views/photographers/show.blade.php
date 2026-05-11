@@ -1388,7 +1388,14 @@
                                     <span class="photographer-pill">Connection requested</span>
                                 @endif
                             @elseif($viewerConnection->status === \App\Models\Connection::STATUS_ACCEPTED)
-                                <span class="photographer-pill">Connected</span>
+                                <form method="POST" action="{{ route('connections.destroy', $viewerConnection) }}">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="photographer-pill photographer-cancel-request" title="Remove connection">
+                                        <i class="fas fa-user-check"></i>
+                                        <span>Connected</span>
+                                    </button>
+                                </form>
                             @endif
                         @else
                             <a href="{{ route('login') }}" class="photographer-message">

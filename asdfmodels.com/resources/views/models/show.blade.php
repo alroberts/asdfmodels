@@ -114,6 +114,22 @@
                 top: 96px;
             }
 
+            .model-profile-header-card {
+                background: #fff;
+                border-radius: 16px;
+                box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06);
+                margin-bottom: 24px;
+                overflow: visible;
+            }
+
+            .model-profile-cover {
+                background: #f3f4f6;
+                border-radius: 16px 16px 0 0;
+                height: 260px;
+                overflow: hidden;
+                position: relative;
+            }
+
             .model-profile-card {
                 background: #fff;
                 border-radius: 16px;
@@ -233,6 +249,30 @@
 
             .model-hero-details {
                 padding-top: 14px;
+            }
+
+            .model-hero-title {
+                color: #050505;
+                font-size: clamp(30px, 4vw, 46px);
+                font-weight: 800;
+                letter-spacing: -0.04em;
+                line-height: 1;
+                margin: 0;
+            }
+
+            .model-hero-name-row {
+                align-items: center;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+                margin-bottom: 10px;
+            }
+
+            .model-hero-username {
+                color: #6b7280;
+                font-size: 16px;
+                font-weight: 700;
+                margin: 8px 0 0;
             }
 
             .model-hero-action-column {
@@ -649,11 +689,16 @@
                 border-radius: 16px;
                 box-shadow: 0 1px 3px rgba(15, 23, 42, 0.16), 0 1px 2px rgba(15, 23, 42, 0.08);
                 color: #fff;
+                margin-bottom: 24px;
                 overflow: hidden;
             }
 
             .model-snapshot-header {
+                align-items: center;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                display: flex;
+                gap: 16px;
+                justify-content: space-between;
                 padding: 20px;
             }
 
@@ -661,7 +706,7 @@
                 background: rgba(255, 255, 255, 0.12);
                 display: grid;
                 gap: 1px;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             }
 
             .model-snapshot-item {
@@ -687,6 +732,93 @@
                 object-fit: contain;
                 opacity: 0.95;
                 width: 24px;
+            }
+
+            .model-connections-strip {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            .model-connection-avatar {
+                position: relative;
+            }
+
+            .model-connection-trigger {
+                align-items: center;
+                background: #f3f4f6;
+                border: 2px solid #fff;
+                border-radius: 999px;
+                box-shadow: 0 1px 4px rgba(15, 23, 42, .12);
+                color: #4b5563;
+                display: flex;
+                font-size: 13px;
+                font-weight: 800;
+                height: 46px;
+                justify-content: center;
+                overflow: hidden;
+                text-decoration: none;
+                width: 46px;
+            }
+
+            .model-connection-trigger img {
+                display: block;
+                height: 100%;
+                object-fit: cover;
+                width: 100%;
+            }
+
+            .model-connection-card {
+                background: #fff;
+                border: 1px solid #e5e7eb;
+                border-radius: 16px;
+                bottom: calc(100% + 10px);
+                box-shadow: 0 18px 45px rgba(15, 23, 42, .18);
+                left: 50%;
+                min-width: 210px;
+                opacity: 0;
+                padding: 12px;
+                pointer-events: none;
+                position: absolute;
+                transform: translateX(-50%) translateY(6px);
+                transition: opacity .16s ease, transform .16s ease;
+                z-index: 60;
+            }
+
+            .model-connection-avatar:hover .model-connection-card,
+            .model-connection-avatar:focus-within .model-connection-card {
+                opacity: 1;
+                pointer-events: auto;
+                transform: translateX(-50%) translateY(0);
+            }
+
+            .model-connection-card-name {
+                color: #111827;
+                display: block;
+                font-size: 14px;
+                font-weight: 800;
+            }
+
+            .model-connection-card-meta {
+                color: #6b7280;
+                display: block;
+                font-size: 12px;
+                font-weight: 600;
+                margin-top: 2px;
+            }
+
+            .model-connection-card-link {
+                align-items: center;
+                background: #050505;
+                border-radius: 999px;
+                color: #fff;
+                display: inline-flex;
+                font-size: 12px;
+                font-weight: 700;
+                gap: 6px;
+                margin-top: 10px;
+                padding: 8px 10px;
+                text-decoration: none;
             }
 
             .model-polaroid-grid {
@@ -826,8 +958,16 @@
                     grid-template-columns: 1fr;
                 }
 
+                .model-profile-cover {
+                    height: 220px;
+                }
+
                 .model-hero-details {
                     padding-top: 0;
+                }
+
+                .model-hero-title {
+                    font-size: 34px;
                 }
 
                 .connection-popover[open]::before {
@@ -941,8 +1081,8 @@
     >
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <!-- Profile Header -->
-            <div class="bg-white shadow sm:rounded-lg mb-6 overflow-visible">
-                <div class="bg-gray-100 h-48 md:h-64 relative overflow-hidden sm:rounded-t-lg">
+            <div class="model-profile-header-card">
+                <div class="model-profile-cover">
                     @if($profile->cover_photo_path)
                         <img :src="coverPreview || @js(asset($profile->cover_photo_path))" alt="Cover" class="w-full h-full object-cover">
                     @else
@@ -994,15 +1134,15 @@
                             @endif
                         </div>
                         <div class="model-hero-details">
-                            <div class="mb-2 flex flex-wrap items-center gap-2">
-                                <h1 class="text-3xl font-bold text-black">{{ $profile->display_name }}</h1>
+                            <div class="model-hero-name-row">
+                                <h1 class="model-hero-title">{{ $profile->display_name }}</h1>
                                 @if($profile->isVerified())
                                     <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-green-500 text-white shadow-sm" title="Verified profile" aria-label="Verified profile">
                                         <i class="fas fa-check text-xs"></i>
                                     </span>
                                 @endif
                             </div>
-                            <p class="mb-3 text-sm font-semibold text-gray-500">{{ '@' . $user->username }}</p>
+                            <p class="model-hero-username">{{ '@' . $user->username }}</p>
                             <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
                                 @if($profile->location_city || $profile->location_country)
                                     <span>
@@ -1079,7 +1219,13 @@
                                             <span class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-600">Connection requested</span>
                                         @endif
                                     @elseif($viewerConnection->status === \App\Models\Connection::STATUS_ACCEPTED)
-                                        <span class="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700">Connected</span>
+                                        <form method="POST" action="{{ route('connections.destroy', $viewerConnection) }}">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 transition hover:border-red-300 hover:bg-white hover:text-red-700" title="Remove connection">
+                                                <i class="fas fa-user-check mr-2"></i>Connected
+                                            </button>
+                                        </form>
                                     @endif
                                 @else
                                     <a href="{{ route('login') }}" class="inline-flex items-center rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800">
@@ -1091,6 +1237,38 @@
                     </div>
                 </div>
             </div>
+
+            @if($snapshotItems->isNotEmpty() || $ownerCanManage)
+                <section class="model-snapshot-card">
+                    <div class="model-snapshot-header">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/55">Model Snapshot</p>
+                            <h2 class="mt-1 text-xl font-bold">Measurements & Appearance</h2>
+                        </div>
+                        @if($ownerCanManage)
+                            <button type="button" data-open-quick-modal="model-measurements" class="model-snapshot-action">
+                                <i class="fas fa-pen"></i>
+                                <span>Edit</span>
+                            </button>
+                        @endif
+                    </div>
+                    @if($snapshotItems->isNotEmpty())
+                        <div class="model-snapshot-grid">
+                            @foreach($snapshotItems as $item)
+                                <div class="model-snapshot-item">
+                                    <div class="model-snapshot-icon">
+                                        <img src="{{ asset($item['icon']) }}" alt="" aria-hidden="true">
+                                    </div>
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-white/45">{{ $item['label'] }}</p>
+                                    <p class="mt-1 text-sm font-semibold text-white">{{ $item['value'] }}</p>
+                                </div>
+                            @endforeach
+                        </div>
+                    @else
+                        <p class="p-5 text-sm leading-6 text-white/65">Add your measurements and appearance details so casting and creative teams can quickly understand your fit.</p>
+                    @endif
+                </section>
+            @endif
 
             <div class="model-profile-layout">
                 <main class="model-profile-main">
@@ -1125,52 +1303,6 @@
                             @endif
                         </section>
                     @endif
-
-                    <section class="model-profile-card">
-                        <div class="model-profile-card-header">
-                            <div>
-                                <p class="photographer-kicker">Network</p>
-                                <h2 class="text-2xl font-semibold text-black">Connections</h2>
-                            </div>
-                            <i class="fas fa-user-group text-gray-300"></i>
-                        </div>
-                        @if(($connections ?? collect())->isNotEmpty())
-                            <div class="space-y-5">
-                                @foreach($connections as $roleLabel => $roleConnections)
-                                    <div>
-                                        <h3 class="mb-3 text-sm font-bold text-gray-900">{{ $roleLabel }}</h3>
-                                        <div class="grid gap-3 sm:grid-cols-2">
-                                            @foreach($roleConnections as $connectedUser)
-                                                @php
-                                                    $connectedProfile = $connectedUser->is_photographer ? $connectedUser->photographerProfile : $connectedUser->modelProfile;
-                                                    $connectedName = $connectedProfile?->display_name ?: $connectedUser->display_name ?: $connectedUser->name;
-                                                    $connectedPhoto = $connectedProfile?->profile_photo_path;
-                                                    $connectedRoute = $connectedUser->is_photographer
-                                                        ? route('photographers.show', $connectedUser->profileRouteIdentifier())
-                                                        : route('models.show', $connectedUser->profileRouteIdentifier());
-                                                @endphp
-                                                <a href="{{ $connectedRoute }}" class="flex items-center gap-3 rounded-2xl border border-gray-200 p-3 transition hover:border-black">
-                                                    <span class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 font-bold text-gray-600">
-                                                        @if($connectedPhoto)
-                                                            <img src="{{ asset($connectedPhoto) }}" alt="" class="h-full w-full object-cover">
-                                                        @else
-                                                            {{ mb_substr($connectedName, 0, 1) }}
-                                                        @endif
-                                                    </span>
-                                                    <span>
-                                                        <strong class="block text-sm text-gray-900">{{ $connectedName }}</strong>
-                                                        <small class="font-semibold text-gray-500">{{ '@' . $connectedUser->username }}</small>
-                                                    </span>
-                                                </a>
-                                            @endforeach
-                                        </div>
-                                    </div>
-                                @endforeach
-                            </div>
-                        @else
-                            <p class="text-sm text-gray-500">No public connections yet.</p>
-                        @endif
-                    </section>
 
                     <section class="model-profile-card">
                         <div class="model-profile-card-header">
@@ -1314,37 +1446,56 @@
                 </main>
 
                 <aside class="model-profile-side">
-                    @if($snapshotItems->isNotEmpty() || $ownerCanManage)
-                        <section class="model-snapshot-card">
-                            <div class="model-snapshot-header">
-                                <div>
-                                    <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/55">Model Snapshot</p>
-                                    <h2 class="mt-1 text-xl font-bold">Measurements & Appearance</h2>
-                                </div>
-                                @if($ownerCanManage)
-                                    <button type="button" data-open-quick-modal="model-measurements" class="model-snapshot-action">
-                                        <i class="fas fa-pen"></i>
-                                        <span>Edit</span>
-                                    </button>
-                                @endif
+                    <section class="model-profile-card">
+                        <div class="model-profile-card-header">
+                            <div>
+                                <p class="photographer-kicker">Network</p>
+                                <h2 class="mt-1 text-xl font-semibold text-black">Connections</h2>
                             </div>
-                            @if($snapshotItems->isNotEmpty())
-                                <div class="model-snapshot-grid">
-                                    @foreach($snapshotItems as $item)
-                                        <div class="model-snapshot-item">
-                                            <div class="model-snapshot-icon">
-                                                <img src="{{ asset($item['icon']) }}" alt="" aria-hidden="true">
-                                            </div>
-                                            <p class="text-xs font-semibold uppercase tracking-wide text-white/45">{{ $item['label'] }}</p>
-                                            <p class="mt-1 text-sm font-semibold text-white">{{ $item['value'] }}</p>
+                            <i class="fas fa-user-group text-gray-300"></i>
+                        </div>
+                        @if(($connections ?? collect())->isNotEmpty())
+                            <div class="space-y-5">
+                                @foreach($connections as $roleLabel => $roleConnections)
+                                    <div>
+                                        <h3 class="mb-3 text-sm font-bold text-gray-900">{{ $roleLabel }}</h3>
+                                        <div class="model-connections-strip">
+                                            @foreach($roleConnections as $connectedUser)
+                                                @php
+                                                    $connectedProfile = $connectedUser->is_photographer ? $connectedUser->photographerProfile : $connectedUser->modelProfile;
+                                                    $connectedName = $connectedProfile?->display_name ?: $connectedUser->display_name ?: $connectedUser->name;
+                                                    $connectedPhoto = $connectedProfile?->profile_photo_path;
+                                                    $connectedRole = $connectedUser->is_photographer ? 'Photographer' : 'Model';
+                                                    $connectedRoute = $connectedUser->is_photographer
+                                                        ? route('photographers.show', $connectedUser->profileRouteIdentifier())
+                                                        : route('models.show', $connectedUser->profileRouteIdentifier());
+                                                @endphp
+                                                <div class="model-connection-avatar">
+                                                    <a href="{{ $connectedRoute }}" class="model-connection-trigger" aria-label="Open {{ $connectedName }} profile">
+                                                        @if($connectedPhoto)
+                                                            <img src="{{ asset($connectedPhoto) }}" alt="">
+                                                        @else
+                                                            {{ mb_substr($connectedName, 0, 1) }}
+                                                        @endif
+                                                    </a>
+                                                    <div class="model-connection-card">
+                                                        <strong class="model-connection-card-name">{{ $connectedName }}</strong>
+                                                        <span class="model-connection-card-meta">{{ $connectedRole }} · {{ '@' . $connectedUser->username }}</span>
+                                                        <a href="{{ $connectedRoute }}" class="model-connection-card-link">
+                                                            <span>View profile</span>
+                                                            <i class="fas fa-arrow-right text-[10px]"></i>
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            @endforeach
                                         </div>
-                                    @endforeach
-                                </div>
-                            @else
-                                <p class="mt-4 text-sm leading-6 text-white/65">Add your measurements and appearance details so casting and creative teams can quickly understand your fit.</p>
-                            @endif
-                        </section>
-                    @endif
+                                    </div>
+                                @endforeach
+                            </div>
+                        @else
+                            <p class="text-sm text-gray-500">No public connections yet.</p>
+                        @endif
+                    </section>
 
                     @if($polaroids->count() > 0 || $ownerCanManage)
                         <section class="model-profile-card">

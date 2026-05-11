@@ -217,12 +217,21 @@
             }
 
             .photographer-actions {
-                align-items: center;
+                align-items: flex-end;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                height: 100%;
+                justify-content: space-between;
+                min-width: 220px;
+            }
+
+            .photographer-social-actions,
+            .photographer-primary-actions {
                 display: flex;
                 flex-wrap: wrap;
                 gap: 8px;
                 justify-content: flex-end;
-                min-width: 220px;
             }
 
             .photographer-social,
@@ -1116,6 +1125,13 @@
                 }
 
                 .photographer-actions {
+                    align-items: flex-start;
+                    height: auto;
+                    justify-content: flex-start;
+                }
+
+                .photographer-social-actions,
+                .photographer-primary-actions {
                     justify-content: flex-start;
                 }
 
@@ -1304,48 +1320,52 @@
                 </div>
 
                 <div class="photographer-actions">
-                    @foreach($socialLinks as $link)
-                        <a href="{{ $link['url'] }}" target="_blank" rel="noopener noreferrer" class="photographer-social" aria-label="{{ $link['label'] }}" title="{{ $link['label'] }}">
-                            <i class="{{ $link['icon'] }}"></i>
-                        </a>
-                    @endforeach
+                    <div class="photographer-social-actions">
+                        @foreach($socialLinks as $link)
+                            <a href="{{ $link['url'] }}" target="_blank" rel="noopener noreferrer" class="photographer-social" aria-label="{{ $link['label'] }}" title="{{ $link['label'] }}">
+                                <i class="{{ $link['icon'] }}"></i>
+                            </a>
+                        @endforeach
+                    </div>
 
-                    @if($ownerCanManage)
-                        <a href="{{ route('photographers.profile.edit') }}" class="photographer-social photographer-edit" aria-label="Edit profile">
-                            <i class="fas fa-pen"></i>
-                            <span>Edit</span>
-                        </a>
-                    @elseif(auth()->check() && auth()->id() !== $user->id)
-                        <a href="{{ route('messages.create', ['user_id' => $user->id]) }}" class="photographer-message">
-                            <i class="fas fa-envelope"></i>
-                            <span>Message</span>
-                        </a>
-                        @if(!$viewerConnection)
-                            <details class="connection-popover">
-                                <summary class="photographer-social photographer-connect">
-                                    <i class="fas fa-user-plus"></i>
-                                    <span>Connect</span>
-                                </summary>
-                                <form method="POST" action="{{ route('connections.store', $user) }}" class="connection-request-box">
-                                    @csrf
-                                    <label class="text-sm font-bold text-gray-900" for="connection-message-photographer">Add a note</label>
-                                    <textarea id="connection-message-photographer" name="message" maxlength="125" placeholder="Optional, up to 125 characters"></textarea>
-                                    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
-                                        <button type="submit" style="background:#050505;color:#fff;">Send request</button>
-                                    </div>
-                                </form>
-                            </details>
-                        @elseif($viewerConnection->status === \App\Models\Connection::STATUS_PENDING)
-                            <span class="photographer-pill">Connection pending</span>
-                        @elseif($viewerConnection->status === \App\Models\Connection::STATUS_ACCEPTED)
-                            <span class="photographer-pill">Connected</span>
+                    <div class="photographer-primary-actions">
+                        @if($ownerCanManage)
+                            <a href="{{ route('photographers.profile.edit') }}" class="photographer-social photographer-edit" aria-label="Edit profile">
+                                <i class="fas fa-pen"></i>
+                                <span>Edit</span>
+                            </a>
+                        @elseif(auth()->check() && auth()->id() !== $user->id)
+                            <a href="{{ route('messages.create', ['user_id' => $user->id]) }}" class="photographer-message">
+                                <i class="fas fa-envelope"></i>
+                                <span>Message</span>
+                            </a>
+                            @if(!$viewerConnection)
+                                <details class="connection-popover">
+                                    <summary class="photographer-social photographer-connect">
+                                        <i class="fas fa-user-plus"></i>
+                                        <span>Connect</span>
+                                    </summary>
+                                    <form method="POST" action="{{ route('connections.store', $user) }}" class="connection-request-box">
+                                        @csrf
+                                        <label class="text-sm font-bold text-gray-900" for="connection-message-photographer">Add a note</label>
+                                        <textarea id="connection-message-photographer" name="message" maxlength="125" placeholder="Optional, up to 125 characters"></textarea>
+                                        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+                                            <button type="submit" style="background:#050505;color:#fff;">Send request</button>
+                                        </div>
+                                    </form>
+                                </details>
+                            @elseif($viewerConnection->status === \App\Models\Connection::STATUS_PENDING)
+                                <span class="photographer-pill">Connection pending</span>
+                            @elseif($viewerConnection->status === \App\Models\Connection::STATUS_ACCEPTED)
+                                <span class="photographer-pill">Connected</span>
+                            @endif
+                        @else
+                            <a href="{{ route('login') }}" class="photographer-message">
+                                <i class="fas fa-envelope"></i>
+                                <span>Log in to message</span>
+                            </a>
                         @endif
-                    @else
-                        <a href="{{ route('login') }}" class="photographer-message">
-                            <i class="fas fa-envelope"></i>
-                            <span>Log in to message</span>
-                        </a>
-                    @endif
+                    </div>
                 </div>
             </div>
         </section>

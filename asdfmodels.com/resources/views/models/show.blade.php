@@ -224,6 +224,34 @@
                 z-index: 80;
             }
 
+            .model-hero-content {
+                align-items: stretch;
+                display: grid;
+                gap: 24px;
+                grid-template-columns: auto minmax(0, 1fr) minmax(220px, auto);
+            }
+
+            .model-hero-details {
+                padding-top: 14px;
+            }
+
+            .model-hero-action-column {
+                align-items: flex-end;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                justify-content: space-between;
+                padding-top: 22px;
+            }
+
+            .model-hero-socials,
+            .model-hero-primary-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                justify-content: flex-end;
+            }
+
             .profile-bio-display {
                 color: #374151;
                 font-size: 16px;
@@ -773,12 +801,35 @@
                     grid-template-columns: 1fr;
                 }
 
+                .model-hero-content {
+                    grid-template-columns: auto minmax(0, 1fr);
+                }
+
+                .model-hero-action-column {
+                    align-items: flex-start;
+                    grid-column: 1 / -1;
+                    padding-top: 0;
+                }
+
+                .model-hero-socials,
+                .model-hero-primary-actions {
+                    justify-content: flex-start;
+                }
+
                 .model-profile-side {
                     position: static;
                 }
             }
 
             @media (max-width: 640px) {
+                .model-hero-content {
+                    grid-template-columns: 1fr;
+                }
+
+                .model-hero-details {
+                    padding-top: 0;
+                }
+
                 .connection-popover[open]::before {
                     background: rgba(15, 23, 42, .28);
                     content: "";
@@ -914,7 +965,7 @@
                     @endif
                 </div>
                 <div class="p-6 md:p-8">
-                    <div class="flex flex-col md:flex-row items-start md:items-center gap-6">
+                    <div class="model-hero-content">
                         <div class="relative -mt-16 md:-mt-20">
                             @if($profile->profile_photo_path)
                                 @if($ownerCanManage)
@@ -942,89 +993,89 @@
                                 @endif
                             @endif
                         </div>
-                        <div class="flex-1 mt-4 md:mt-0">
-                            <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                                <div>
-                                    <div class="mb-2 flex flex-wrap items-center gap-2">
-                                        <h1 class="text-3xl font-bold text-black">{{ $profile->display_name }}</h1>
-                                        @if($profile->isVerified())
-                                            <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-green-500 text-white shadow-sm" title="Verified profile" aria-label="Verified profile">
-                                                <i class="fas fa-check text-xs"></i>
-                                            </span>
-                                        @endif
-                                    </div>
-                                    <p class="mb-3 text-sm font-semibold text-gray-500">{{ '@' . $user->username }}</p>
-                                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
-                                        @if($profile->location_city || $profile->location_country)
-                                            <span>
-                                                <i class="fas fa-map-marker-alt mr-1.5"></i>
-                                                {{ $profile->location_city }}{{ $profile->location_city && $profile->location_country ? ', ' : '' }}{{ $profile->location_country }}
-                                            </span>
-                                        @endif
-                                        @if($profile->age)
-                                            <span>
-                                                <i class="fas fa-cake-candles mr-1.5"></i>
-                                                {{ $profile->age }} years old
-                                            </span>
-                                        @endif
-                                    </div>
-                                </div>
+                        <div class="model-hero-details">
+                            <div class="mb-2 flex flex-wrap items-center gap-2">
+                                <h1 class="text-3xl font-bold text-black">{{ $profile->display_name }}</h1>
+                                @if($profile->isVerified())
+                                    <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-green-500 text-white shadow-sm" title="Verified profile" aria-label="Verified profile">
+                                        <i class="fas fa-check text-xs"></i>
+                                    </span>
+                                @endif
+                            </div>
+                            <p class="mb-3 text-sm font-semibold text-gray-500">{{ '@' . $user->username }}</p>
+                            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
+                                @if($profile->location_city || $profile->location_country)
+                                    <span>
+                                        <i class="fas fa-map-marker-alt mr-1.5"></i>
+                                        {{ $profile->location_city }}{{ $profile->location_city && $profile->location_country ? ', ' : '' }}{{ $profile->location_country }}
+                                    </span>
+                                @endif
+                                @if($profile->age)
+                                    <span>
+                                        <i class="fas fa-cake-candles mr-1.5"></i>
+                                        {{ $profile->age }} years old
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
 
-                                <div class="flex flex-wrap items-center gap-2 lg:justify-end">
-                                    @if($socialLinks->isNotEmpty())
-                                        @foreach($socialLinks as $link)
-                                            @php
-                                                $meta = $platformMeta[$link['platform']] ?? [
-                                                    'label' => ucfirst($link['platform'] ?? 'Link'),
-                                                    'icon' => 'fas fa-link',
-                                                ];
-                                            @endphp
-                                            <a
-                                                href="{{ $link['url'] }}"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition hover:border-black hover:text-black"
-                                                aria-label="{{ $meta['label'] }}"
-                                                title="{{ $meta['label'] }}"
-                                            >
-                                                <i class="{{ $meta['icon'] }}"></i>
-                                            </a>
-                                        @endforeach
-                                    @endif
+                        <div class="model-hero-action-column">
+                            <div class="model-hero-socials">
+                                @if($socialLinks->isNotEmpty())
+                                    @foreach($socialLinks as $link)
+                                        @php
+                                            $meta = $platformMeta[$link['platform']] ?? [
+                                                'label' => ucfirst($link['platform'] ?? 'Link'),
+                                                'icon' => 'fas fa-link',
+                                            ];
+                                        @endphp
+                                        <a
+                                            href="{{ $link['url'] }}"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition hover:border-black hover:text-black"
+                                            aria-label="{{ $meta['label'] }}"
+                                            title="{{ $meta['label'] }}"
+                                        >
+                                            <i class="{{ $meta['icon'] }}"></i>
+                                        </a>
+                                    @endforeach
+                                @endif
+                            </div>
 
-                                    @if($ownerCanManage)
-                                        <a href="{{ route('profile.model.edit') }}" class="inline-flex items-center rounded-full border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-800 transition hover:border-black">
-                                            <i class="fas fa-pen mr-2"></i>Edit
-                                        </a>
-                                    @elseif(auth()->check() && auth()->id() !== $user->id)
-                                        <a href="{{ route('messages.create', ['user_id' => $user->id]) }}" class="inline-flex items-center rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800">
-                                            <i class="fas fa-envelope mr-2"></i>Message
-                                        </a>
-                                        @if(!$viewerConnection)
-                                            <details class="connection-popover">
-                                                <summary class="inline-flex cursor-pointer list-none items-center rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition hover:border-black">
-                                                    <i class="fas fa-user-plus mr-2"></i>Connect
-                                                </summary>
-                                                <form method="POST" action="{{ route('connections.store', $user) }}" class="connection-popover-panel">
-                                                    @csrf
-                                                    <label for="connection-message-model" class="text-sm font-bold text-gray-900">Add a note</label>
-                                                    <textarea id="connection-message-model" name="message" maxlength="125" class="mt-2 block min-h-20 w-full rounded-xl border-gray-300 text-sm shadow-sm focus:border-black focus:ring-black" placeholder="Optional, up to 125 characters"></textarea>
-                                                    <div class="mt-3 flex justify-end">
-                                                        <button type="submit" class="rounded-full bg-black px-4 py-2 text-xs font-bold text-white">Send request</button>
-                                                    </div>
-                                                </form>
-                                            </details>
-                                        @elseif($viewerConnection->status === \App\Models\Connection::STATUS_PENDING)
-                                            <span class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-600">Connection pending</span>
-                                        @elseif($viewerConnection->status === \App\Models\Connection::STATUS_ACCEPTED)
-                                            <span class="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700">Connected</span>
-                                        @endif
-                                    @else
-                                        <a href="{{ route('login') }}" class="inline-flex items-center rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800">
-                                            <i class="fas fa-envelope mr-2"></i>Log in to message
-                                        </a>
+                            <div class="model-hero-primary-actions">
+                                @if($ownerCanManage)
+                                    <a href="{{ route('profile.model.edit') }}" class="inline-flex items-center rounded-full border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-800 transition hover:border-black">
+                                        <i class="fas fa-pen mr-2"></i>Edit
+                                    </a>
+                                @elseif(auth()->check() && auth()->id() !== $user->id)
+                                    <a href="{{ route('messages.create', ['user_id' => $user->id]) }}" class="inline-flex items-center rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800">
+                                        <i class="fas fa-envelope mr-2"></i>Message
+                                    </a>
+                                    @if(!$viewerConnection)
+                                        <details class="connection-popover">
+                                            <summary class="inline-flex cursor-pointer list-none items-center rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition hover:border-black">
+                                                <i class="fas fa-user-plus mr-2"></i>Connect
+                                            </summary>
+                                            <form method="POST" action="{{ route('connections.store', $user) }}" class="connection-popover-panel">
+                                                @csrf
+                                                <label for="connection-message-model" class="text-sm font-bold text-gray-900">Add a note</label>
+                                                <textarea id="connection-message-model" name="message" maxlength="125" class="mt-2 block min-h-20 w-full rounded-xl border-gray-300 text-sm shadow-sm focus:border-black focus:ring-black" placeholder="Optional, up to 125 characters"></textarea>
+                                                <div class="mt-3 flex justify-end">
+                                                    <button type="submit" class="rounded-full bg-black px-4 py-2 text-xs font-bold text-white">Send request</button>
+                                                </div>
+                                            </form>
+                                        </details>
+                                    @elseif($viewerConnection->status === \App\Models\Connection::STATUS_PENDING)
+                                        <span class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-600">Connection pending</span>
+                                    @elseif($viewerConnection->status === \App\Models\Connection::STATUS_ACCEPTED)
+                                        <span class="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700">Connected</span>
                                     @endif
-                                </div>
+                                @else
+                                    <a href="{{ route('login') }}" class="inline-flex items-center rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800">
+                                        <i class="fas fa-envelope mr-2"></i>Log in to message
+                                    </a>
+                                @endif
                             </div>
                         </div>
                     </div>

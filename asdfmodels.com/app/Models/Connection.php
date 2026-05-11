@@ -11,6 +11,7 @@ class Connection extends Model
     public const STATUS_PENDING = 'pending';
     public const STATUS_ACCEPTED = 'accepted';
     public const STATUS_DECLINED = 'declined';
+    public const STATUS_BLOCKED = 'blocked';
 
     protected $fillable = [
         'requester_id',
@@ -19,10 +20,13 @@ class Connection extends Model
         'user_high_id',
         'status',
         'message',
+        'blocked_by_user_id',
+        'blocked_at',
         'responded_at',
     ];
 
     protected $casts = [
+        'blocked_at' => 'datetime',
         'responded_at' => 'datetime',
     ];
 
@@ -89,6 +93,18 @@ class Connection extends Model
     {
         $this->forceFill([
             'status' => self::STATUS_DECLINED,
+            'responded_at' => now(),
+        ])->save();
+    }
+
+    public function block(User|int $blockedBy): void
+    {
+        $blockedById = $blockedBy instanceof User ? $blockedBy->id : $blockedBy;
+
+        $this->forceFill([
+            'status' => self::STATUS_BLOCKED,
+            'blocked_by_user_id' => $blockedById,
+            'blocked_at' => now(),
             'responded_at' => now(),
         ])->save();
     }

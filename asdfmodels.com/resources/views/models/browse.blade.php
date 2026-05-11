@@ -44,6 +44,15 @@
         .browse-choice-grid { display: flex; flex-wrap: wrap; gap: 8px; }
         .browse-token { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #e5e7eb; border-radius: 999px; background: #fff; padding: 8px 10px; color: #374151; font-size: 13px; font-weight: 750; cursor: pointer; }
         .browse-token input { border-color: #9ca3af; color: #111827; }
+        .browse-measurement-group { grid-column: 1 / -1; }
+        .browse-range-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+        .browse-range-card { border: 1px solid #e5e7eb; border-radius: 18px; background: #fff; padding: 14px; }
+        .browse-range-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+        .browse-range-title { color: #111827; font-size: 13px; font-weight: 850; }
+        .browse-range-value { border-radius: 999px; background: #f3f4f6; color: #4b5563; padding: 5px 9px; font-size: 12px; font-weight: 800; }
+        .browse-range-controls { display: grid; gap: 8px; }
+        .browse-range-controls input[type="range"] { width: 100%; accent-color: #111827; }
+        .browse-range-labels { display: flex; justify-content: space-between; color: #94a3b8; font-size: 11px; font-weight: 800; }
         .browse-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; }
         .browse-checks { display: flex; flex-wrap: wrap; gap: 10px; }
         .browse-button-row { display: flex; gap: 10px; align-items: center; }
@@ -65,8 +74,8 @@
         .browse-pill { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; border-radius: 999px; background: #f3f4f6; color: #4b5563; padding: 5px 9px; font-size: 12px; font-weight: 750; }
         .browse-empty { border: 1px solid #e5e7eb; border-radius: 28px; background: #fff; padding: 48px 24px; text-align: center; color: #6b7280; box-shadow: 0 16px 35px rgba(15, 23, 42, .05); }
         .browse-pagination { margin-top: 28px; }
-        @media (max-width: 1120px) { .browse-filter-grid { grid-template-columns: 1fr 1fr; } }
-        @media (max-width: 640px) { .browse-shell { padding: 28px 16px 56px; } .browse-filter-grid { grid-template-columns: 1fr; } .browse-actions { align-items: stretch; flex-direction: column; } .browse-button-row { justify-content: space-between; width: 100%; } }
+        @media (max-width: 1120px) { .browse-filter-grid, .browse-range-grid { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 640px) { .browse-shell { padding: 28px 16px 56px; } .browse-filter-grid, .browse-option-panel, .browse-range-grid { grid-template-columns: 1fr; } .browse-actions { align-items: stretch; flex-direction: column; } .browse-button-row { justify-content: space-between; width: 100%; } }
     </style>
 
     <div class="browse-shell" x-data="browseFilters({
@@ -78,14 +87,30 @@
             ['value' => 'other', 'label' => 'Other'],
         ]),
         experienceOptions: @js(collect($experienceOptions)->map(fn ($label, $value) => ['value' => $value, 'label' => $label])->values()),
+        shoeRegionOptions: @js(collect($shoeSizeRegions)->map(fn ($label, $value) => ['value' => $value, 'label' => $label])->values()),
+        shoeSizes: @js($shoeSizes),
+        dressRegionOptions: @js(collect($dressSizeRegions)->map(fn ($label, $value) => ['value' => $value, 'label' => $label])->values()),
+        dressSizes: @js($dressSizes),
         sortOptions: @js([
             ['value' => 'newest', 'label' => 'Newest'],
             ['value' => 'oldest', 'label' => 'Oldest'],
             ['value' => 'name', 'label' => 'Name A-Z'],
         ]),
+        rangeFilters: @js([
+            'age' => ['min' => 18, 'max' => 80, 'step' => 1, 'valueMin' => $filters['age_min'] ?? null, 'valueMax' => $filters['age_max'] ?? null, 'suffix' => ' yrs'],
+            'height' => ['min' => 140, 'max' => 210, 'step' => 1, 'valueMin' => $filters['height_min'] ?? null, 'valueMax' => $filters['height_max'] ?? null, 'suffix' => ' cm'],
+            'body' => ['min' => 60, 'max' => 130, 'step' => 1, 'valueMin' => $filters['body_min'] ?? null, 'valueMax' => $filters['body_max'] ?? null, 'suffix' => ' cm'],
+            'waist' => ['min' => 45, 'max' => 120, 'step' => 1, 'valueMin' => $filters['waist_min'] ?? null, 'valueMax' => $filters['waist_max'] ?? null, 'suffix' => ' cm'],
+            'hips' => ['min' => 60, 'max' => 140, 'step' => 1, 'valueMin' => $filters['hips_min'] ?? null, 'valueMax' => $filters['hips_max'] ?? null, 'suffix' => ' cm'],
+            'inseam' => ['min' => 50, 'max' => 110, 'step' => 1, 'valueMin' => $filters['inseam_min'] ?? null, 'valueMax' => $filters['inseam_max'] ?? null, 'suffix' => ' cm'],
+            'shoe' => ['min' => 2, 'max' => 14, 'step' => 0.5, 'valueMin' => $filters['shoe_size_min'] ?? null, 'valueMax' => $filters['shoe_size_max'] ?? null, 'suffix' => ''],
+            'dress' => ['min' => 0, 'max' => 50, 'step' => 1, 'valueMin' => $filters['dress_size_min'] ?? null, 'valueMax' => $filters['dress_size_max'] ?? null, 'suffix' => ''],
+        ]),
         selectedCountry: @js($filters['country'] ?? ''),
         selectedGender: @js($filters['gender'] ?? ''),
         selectedExperience: @js($filters['experience_level'] ?? ''),
+        selectedShoeRegion: @js($filters['shoe_size_region'] ?? ''),
+        selectedDressRegion: @js($filters['dress_size_region'] ?? ''),
         selectedSort: @js($filters['sort'] ?? 'newest'),
         initialSearch: @js(old('search', $filters['search'] ?? '')),
         searchSuggestions: @js($searchSuggestions),
@@ -152,16 +177,63 @@
                 <button type="button" class="browse-advanced-toggle" @click="additionalOpen = !additionalOpen" :aria-expanded="additionalOpen.toString()">
                     <div>
                         Additional Filters
-                        <span>Gender, experience, specialties, polaroids, and verification.</span>
+                        <span>Measurements, appearance, specialties, polaroids, and verification.</span>
                     </div>
                     <i class="fas fa-chevron-down browse-advanced-icon"></i>
                 </button>
 
                 <div class="browse-option-panel" x-show="additionalOpen" x-cloak>
+                    <div class="browse-group browse-measurement-group">
+                        <span class="browse-group-title">Measurements & Attributes</span>
+                        <input type="hidden" name="age_min" :value="rangeValue('age', 'min')">
+                        <input type="hidden" name="age_max" :value="rangeValue('age', 'max')">
+                        <input type="hidden" name="height_min" :value="rangeValue('height', 'min')">
+                        <input type="hidden" name="height_max" :value="rangeValue('height', 'max')">
+                        <input type="hidden" name="body_min" :value="rangeValue('body', 'min')">
+                        <input type="hidden" name="body_max" :value="rangeValue('body', 'max')">
+                        <input type="hidden" name="waist_min" :value="rangeValue('waist', 'min')">
+                        <input type="hidden" name="waist_max" :value="rangeValue('waist', 'max')">
+                        <input type="hidden" name="hips_min" :value="rangeValue('hips', 'min')">
+                        <input type="hidden" name="hips_max" :value="rangeValue('hips', 'max')">
+                        <input type="hidden" name="inseam_min" :value="rangeValue('inseam', 'min')">
+                        <input type="hidden" name="inseam_max" :value="rangeValue('inseam', 'max')">
+                        <input type="hidden" name="shoe_size_min" :value="rangeValue('shoe', 'min')">
+                        <input type="hidden" name="shoe_size_max" :value="rangeValue('shoe', 'max')">
+                        <input type="hidden" name="dress_size_min" :value="rangeValue('dress', 'min')">
+                        <input type="hidden" name="dress_size_max" :value="rangeValue('dress', 'max')">
+                        <div class="browse-range-grid">
+                            <template x-for="range in [
+                                ['age', 'Age'],
+                                ['height', 'Height'],
+                                ['body', 'Bust / Chest'],
+                                ['waist', 'Waist'],
+                                ['hips', 'Hips'],
+                                ['inseam', 'Inseam']
+                            ]" :key="range[0]">
+                                <div class="browse-range-card">
+                                    <div class="browse-range-head">
+                                        <span class="browse-range-title" x-text="range[1]"></span>
+                                        <span class="browse-range-value" x-text="rangeLabel(range[0])"></span>
+                                    </div>
+                                    <div class="browse-range-controls">
+                                        <input type="range" :min="ranges[range[0]].min" :max="ranges[range[0]].max" :step="ranges[range[0]].step" x-model.number="ranges[range[0]].valueMin" @input="touchRange(range[0], 'min')">
+                                        <input type="range" :min="ranges[range[0]].min" :max="ranges[range[0]].max" :step="ranges[range[0]].step" x-model.number="ranges[range[0]].valueMax" @input="touchRange(range[0], 'max')">
+                                        <div class="browse-range-labels">
+                                            <span x-text="ranges[range[0]].min + ranges[range[0]].suffix"></span>
+                                            <span x-text="ranges[range[0]].max + ranges[range[0]].suffix"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
                     <div class="browse-group">
                         <span class="browse-group-title">Profile Details</span>
                         <input type="hidden" name="gender" :value="selects.gender.value">
                         <input type="hidden" name="experience_level" :value="selects.experience.value">
+                        <input type="hidden" name="shoe_size_region" :value="selects.shoeRegion.value">
+                        <input type="hidden" name="dress_size_region" :value="selects.dressRegion.value">
                         <div class="browse-field">
                             <label>Gender</label>
                             <button type="button" class="browse-select-button" @click="toggleSelect('gender')" :aria-expanded="selects.gender.open.toString()">
@@ -196,12 +268,74 @@
                             <label class="browse-token"><input type="checkbox" name="has_polaroids" value="1" @checked(($filters['has_polaroids'] ?? '') === '1')> Has polaroids</label>
                             <label class="browse-token"><input type="checkbox" name="verified" value="1" @checked(($filters['verified'] ?? '') === '1')> Verified only</label>
                         </div>
+                        <div class="browse-field" style="margin-top: 14px;">
+                            <label>Shoe Size Region</label>
+                            <button type="button" class="browse-select-button" @click="toggleSelect('shoeRegion')" :aria-expanded="selects.shoeRegion.open.toString()">
+                                <span class="browse-select-value" x-text="selectedLabel('shoeRegion', 'Any region')"></span>
+                                <i class="fas fa-chevron-down browse-select-icon"></i>
+                            </button>
+                            <div class="browse-select-menu" x-show="selects.shoeRegion.open" @click.outside="closeSelect('shoeRegion')" x-cloak>
+                                <div class="browse-select-options">
+                                    <button type="button" class="browse-select-option" :class="{ 'is-selected': selects.shoeRegion.value === '' }" @click="chooseOption('shoeRegion', '', 'Any region')">Any region</button>
+                                    <template x-for="option in filteredOptions('shoeRegion')" :key="option.value">
+                                        <button type="button" class="browse-select-option" :class="{ 'is-selected': selects.shoeRegion.value === option.value }" @click="chooseOption('shoeRegion', option.value, option.label)" x-text="option.label"></button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="browse-range-card" style="margin-top: 12px;">
+                            <div class="browse-range-head">
+                                <span class="browse-range-title">Shoe Size</span>
+                                <span class="browse-range-value" x-text="rangeLabel('shoe')"></span>
+                            </div>
+                            <div class="browse-range-controls">
+                                <input type="range" :min="ranges.shoe.min" :max="ranges.shoe.max" :step="ranges.shoe.step" x-model.number="ranges.shoe.valueMin" @input="touchRange('shoe', 'min')">
+                                <input type="range" :min="ranges.shoe.min" :max="ranges.shoe.max" :step="ranges.shoe.step" x-model.number="ranges.shoe.valueMax" @input="touchRange('shoe', 'max')">
+                            </div>
+                        </div>
+                        <div class="browse-field" style="margin-top: 14px;">
+                            <label>Dress Size Region</label>
+                            <button type="button" class="browse-select-button" @click="toggleSelect('dressRegion')" :aria-expanded="selects.dressRegion.open.toString()">
+                                <span class="browse-select-value" x-text="selectedLabel('dressRegion', 'Any region')"></span>
+                                <i class="fas fa-chevron-down browse-select-icon"></i>
+                            </button>
+                            <div class="browse-select-menu" x-show="selects.dressRegion.open" @click.outside="closeSelect('dressRegion')" x-cloak>
+                                <div class="browse-select-options">
+                                    <button type="button" class="browse-select-option" :class="{ 'is-selected': selects.dressRegion.value === '' }" @click="chooseOption('dressRegion', '', 'Any region')">Any region</button>
+                                    <template x-for="option in filteredOptions('dressRegion')" :key="option.value">
+                                        <button type="button" class="browse-select-option" :class="{ 'is-selected': selects.dressRegion.value === option.value }" @click="chooseOption('dressRegion', option.value, option.label)" x-text="option.label"></button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="browse-range-card" style="margin-top: 12px;">
+                            <div class="browse-range-head">
+                                <span class="browse-range-title">Dress Size</span>
+                                <span class="browse-range-value" x-text="rangeLabel('dress')"></span>
+                            </div>
+                            <div class="browse-range-controls">
+                                <input type="range" :min="ranges.dress.min" :max="ranges.dress.max" :step="ranges.dress.step" x-model.number="ranges.dress.valueMin" @input="touchRange('dress', 'min')">
+                                <input type="range" :min="ranges.dress.min" :max="ranges.dress.max" :step="ranges.dress.step" x-model.number="ranges.dress.valueMax" @input="touchRange('dress', 'max')">
+                            </div>
+                        </div>
                     </div>
                     <div class="browse-group">
                         <span class="browse-group-title">Specialties</span>
                         <div class="browse-choice-grid">
                             @foreach($specialtyOptions as $key => $label)
                                 <label class="browse-token"><input type="checkbox" name="specialties[]" value="{{ $key }}" @checked(in_array($key, $selectedSpecialties, true))> {{ $label }}</label>
+                            @endforeach
+                        </div>
+                        <span class="browse-group-title" style="margin-top: 18px;">Hair Colour</span>
+                        <div class="browse-choice-grid">
+                            @foreach($hairColorOptions as $label)
+                                <label class="browse-token"><input type="checkbox" name="hair_colors[]" value="{{ $label }}" @checked(in_array($label, $selectedHairColors, true))> {{ $label }}</label>
+                            @endforeach
+                        </div>
+                        <span class="browse-group-title" style="margin-top: 18px;">Eye Colour</span>
+                        <div class="browse-choice-grid">
+                            @foreach($eyeColorOptions as $label)
+                                <label class="browse-token"><input type="checkbox" name="eye_colors[]" value="{{ $label }}" @checked(in_array($label, $selectedEyeColors, true))> {{ $label }}</label>
                             @endforeach
                         </div>
                     </div>
@@ -277,15 +411,36 @@
                     country: { open: false, search: '', value: config.selectedCountry || '', label: '', options: config.countryOptions || [] },
                     gender: { open: false, search: '', value: config.selectedGender || '', label: '', options: config.genderOptions || [] },
                     experience: { open: false, search: '', value: config.selectedExperience || '', label: '', options: config.experienceOptions || [] },
+                    shoeRegion: { open: false, search: '', value: config.selectedShoeRegion || '', label: '', options: config.shoeRegionOptions || [] },
+                    dressRegion: { open: false, search: '', value: config.selectedDressRegion || '', label: '', options: config.dressRegionOptions || [] },
                     sort: { open: false, search: '', value: config.selectedSort || 'newest', label: '', options: config.sortOptions || [] },
                 },
+                ranges: {},
+                shoeSizes: config.shoeSizes || {},
+                dressSizes: config.dressSizes || {},
                 city: config.initialCity || '',
                 citySuggestions: [],
                 init() {
+                    this.ranges = Object.fromEntries(Object.entries(config.rangeFilters || {}).map(([key, range]) => {
+                        const hasMin = range.valueMin !== null && range.valueMin !== '';
+                        const hasMax = range.valueMax !== null && range.valueMax !== '';
+                        return [key, {
+                            min: Number(range.min),
+                            max: Number(range.max),
+                            step: Number(range.step || 1),
+                            valueMin: hasMin ? Number(range.valueMin) : Number(range.min),
+                            valueMax: hasMax ? Number(range.valueMax) : Number(range.max),
+                            suffix: range.suffix || '',
+                            dirty: hasMin || hasMax,
+                        }];
+                    }));
+
                     Object.keys(this.selects).forEach((key) => {
                         const selected = this.selects[key].options.find((option) => option.value === this.selects[key].value);
                         if (selected) this.selects[key].label = selected.label;
                     });
+                    this.syncSizeRange('shoe');
+                    this.syncSizeRange('dress');
                 },
                 toggleSelect(key) {
                     Object.keys(this.selects).forEach((selectKey) => {
@@ -302,6 +457,9 @@
                     this.selects[key].label = label;
                     this.selects[key].open = false;
                     this.selects[key].search = '';
+
+                    if (key === 'shoeRegion') this.syncSizeRange('shoe');
+                    if (key === 'dressRegion') this.syncSizeRange('dress');
                 },
                 selectedLabel(key, fallback) {
                     return this.selects[key].label || fallback;
@@ -325,6 +483,51 @@
                 selectSearch(match) {
                     this.search = match;
                     this.searchMatches = [];
+                },
+                touchRange(key, side) {
+                    this.ranges[key].dirty = true;
+
+                    if (Number(this.ranges[key].valueMin) > Number(this.ranges[key].valueMax)) {
+                        if (side === 'min') {
+                            this.ranges[key].valueMax = this.ranges[key].valueMin;
+                        } else {
+                            this.ranges[key].valueMin = this.ranges[key].valueMax;
+                        }
+                    }
+                },
+                rangeValue(key, side) {
+                    return this.ranges[key]?.dirty ? this.ranges[key][side === 'min' ? 'valueMin' : 'valueMax'] : '';
+                },
+                rangeLabel(key) {
+                    const range = this.ranges[key];
+                    if (!range) return '';
+                    return `${range.valueMin}${range.suffix} - ${range.valueMax}${range.suffix}`;
+                },
+                syncSizeRange(type) {
+                    const regionKey = type === 'shoe' ? 'shoeRegion' : 'dressRegion';
+                    const sizeMap = type === 'shoe' ? this.shoeSizes : this.dressSizes;
+                    const region = this.selects[regionKey]?.value;
+                    const values = (sizeMap[region] || [])
+                        .map((value) => Number(value))
+                        .filter((value) => !Number.isNaN(value));
+
+                    if (!this.ranges[type] || values.length === 0) {
+                        return;
+                    }
+
+                    const min = Math.min(...values);
+                    const max = Math.max(...values);
+                    this.ranges[type].min = min;
+                    this.ranges[type].max = max;
+
+                    if (!this.ranges[type].dirty) {
+                        this.ranges[type].valueMin = min;
+                        this.ranges[type].valueMax = max;
+                        return;
+                    }
+
+                    this.ranges[type].valueMin = Math.min(Math.max(Number(this.ranges[type].valueMin), min), max);
+                    this.ranges[type].valueMax = Math.min(Math.max(Number(this.ranges[type].valueMax), min), max);
                 },
                 async searchCities() {
                     if (!this.selects.country.value || this.city.length < 2) {

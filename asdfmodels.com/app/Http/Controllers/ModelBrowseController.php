@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Helpers\PhotographerOptions;
+use App\Helpers\ModelProfileOptions;
 use App\Models\ModelProfile;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -24,6 +25,28 @@ class ModelBrowseController extends Controller
             'specialties.*' => ['string', 'max:100'],
             'has_polaroids' => ['nullable', 'in:1'],
             'experience_level' => ['nullable', 'string', 'max:50'],
+            'age_min' => ['nullable', 'integer', 'min:18', 'max:100'],
+            'age_max' => ['nullable', 'integer', 'min:18', 'max:100'],
+            'height_min' => ['nullable', 'integer', 'min:100', 'max:250'],
+            'height_max' => ['nullable', 'integer', 'min:100', 'max:250'],
+            'body_min' => ['nullable', 'integer', 'min:20', 'max:200'],
+            'body_max' => ['nullable', 'integer', 'min:20', 'max:200'],
+            'waist_min' => ['nullable', 'integer', 'min:20', 'max:200'],
+            'waist_max' => ['nullable', 'integer', 'min:20', 'max:200'],
+            'hips_min' => ['nullable', 'integer', 'min:20', 'max:200'],
+            'hips_max' => ['nullable', 'integer', 'min:20', 'max:200'],
+            'inseam_min' => ['nullable', 'integer', 'min:20', 'max:150'],
+            'inseam_max' => ['nullable', 'integer', 'min:20', 'max:150'],
+            'shoe_size_region' => ['nullable', 'string', 'max:30'],
+            'shoe_size_min' => ['nullable', 'numeric', 'min:0', 'max:60'],
+            'shoe_size_max' => ['nullable', 'numeric', 'min:0', 'max:60'],
+            'dress_size_region' => ['nullable', 'string', 'max:30'],
+            'dress_size_min' => ['nullable', 'numeric', 'min:0', 'max:60'],
+            'dress_size_max' => ['nullable', 'numeric', 'min:0', 'max:60'],
+            'hair_colors' => ['nullable', 'array'],
+            'hair_colors.*' => ['string', 'max:60'],
+            'eye_colors' => ['nullable', 'array'],
+            'eye_colors.*' => ['string', 'max:60'],
             'verified' => ['nullable', 'in:1'],
             'sort' => ['nullable', 'in:newest,oldest,name'],
         ]);
@@ -34,7 +57,15 @@ class ModelBrowseController extends Controller
 
         $specialtyOptions = PhotographerOptions::specialties('model');
         $experienceOptions = $this->experienceOptions();
+        $hairColorOptions = ModelProfileOptions::hairColors();
+        $eyeColorOptions = ModelProfileOptions::eyeColors();
+        $shoeSizeRegions = ModelProfileOptions::shoeSizeRegions();
+        $shoeSizes = ModelProfileOptions::shoeSizes();
+        $dressSizeRegions = ModelProfileOptions::dressSizeRegions();
+        $dressSizes = ModelProfileOptions::dressSizes();
         $selectedSpecialties = array_values(array_intersect($filters['specialties'] ?? [], array_keys($specialtyOptions)));
+        $selectedHairColors = array_values(array_intersect($filters['hair_colors'] ?? [], $hairColorOptions));
+        $selectedEyeColors = array_values(array_intersect($filters['eye_colors'] ?? [], $eyeColorOptions));
 
         $query = ModelProfile::with('user')
             ->withCount(['portfolioImages as public_photos_count' => function ($q) {
@@ -71,6 +102,23 @@ class ModelBrowseController extends Controller
 
         if (!empty($filters['experience_level']) && array_key_exists($filters['experience_level'], $experienceOptions)) {
             $query->where('experience_level', $filters['experience_level']);
+        }
+
+        $this->applyAgeRange($query, $filters);
+        $this->applyNumericRange($query, 'height_cm', $filters['height_min'] ?? null, $filters['height_max'] ?? null);
+        $this->applyNumericRange($query, 'waist_cm', $filters['waist_min'] ?? null, $filters['waist_max'] ?? null);
+        $this->applyNumericRange($query, 'hips_cm', $filters['hips_min'] ?? null, $filters['hips_max'] ?? null);
+        $this->applyNumericRange($query, 'inseam_cm', $filters['inseam_min'] ?? null, $filters['inseam_max'] ?? null);
+        $this->applyBodyRange($query, $filters['body_min'] ?? null, $filters['body_max'] ?? null);
+        $this->applySizeRange($query, 'shoe_size', $filters['shoe_size_region'] ?? null, $filters['shoe_size_min'] ?? null, $filters['shoe_size_max'] ?? null, $shoeSizeRegions);
+        $this->applySizeRange($query, 'dress_size', $filters['dress_size_region'] ?? null, $filters['dress_size_min'] ?? null, $filters['dress_size_max'] ?? null, $dressSizeRegions);
+
+        if ($selectedHairColors !== []) {
+            $query->whereIn('hair_color', $selectedHairColors);
+        }
+
+        if ($selectedEyeColors !== []) {
+            $query->whereIn('eye_color', $selectedEyeColors);
         }
 
         foreach ($selectedSpecialties as $specialty) {
@@ -136,7 +184,15 @@ class ModelBrowseController extends Controller
             'countries' => config('countries', []),
             'specialtyOptions' => $specialtyOptions,
             'experienceOptions' => $experienceOptions,
+            'hairColorOptions' => $hairColorOptions,
+            'eyeColorOptions' => $eyeColorOptions,
+            'shoeSizeRegions' => $shoeSizeRegions,
+            'shoeSizes' => $shoeSizes,
+            'dressSizeRegions' => $dressSizeRegions,
+            'dressSizes' => $dressSizes,
             'selectedSpecialties' => $selectedSpecialties,
+            'selectedHairColors' => $selectedHairColors,
+            'selectedEyeColors' => $selectedEyeColors,
             'searchSuggestions' => $searchSuggestions,
         ]);
     }
@@ -161,5 +217,72 @@ class ModelBrowseController extends Controller
         $country = strtoupper((string) ($profile?->location_country_code ?? ''));
 
         return preg_match('/^[A-Z]{2}$/', $country) ? $country : null;
+    }
+
+    private function applyNumericRange($query, string $column, mixed $min, mixed $max): void
+    {
+        if ($min !== null && $min !== '') {
+            $query->where($column, '>=', $min);
+        }
+
+        if ($max !== null && $max !== '') {
+            $query->where($column, '<=', $max);
+        }
+    }
+
+    private function applyAgeRange($query, array $filters): void
+    {
+        if (!empty($filters['age_min'])) {
+            $query->whereDate('date_of_birth', '<=', now()->subYears((int) $filters['age_min'])->toDateString());
+        }
+
+        if (!empty($filters['age_max'])) {
+            $query->whereDate('date_of_birth', '>=', now()->subYears(((int) $filters['age_max']) + 1)->addDay()->toDateString());
+        }
+    }
+
+    private function applyBodyRange($query, mixed $min, mixed $max): void
+    {
+        if (($min === null || $min === '') && ($max === null || $max === '')) {
+            return;
+        }
+
+        $query->where(function ($rangeQuery) use ($min, $max) {
+            foreach (['bust_cm', 'chest_cm'] as $column) {
+                $rangeQuery->orWhere(function ($columnQuery) use ($column, $min, $max) {
+                    if ($min !== null && $min !== '') {
+                        $columnQuery->where($column, '>=', $min);
+                    }
+
+                    if ($max !== null && $max !== '') {
+                        $columnQuery->where($column, '<=', $max);
+                    }
+                });
+            }
+        });
+    }
+
+    private function applySizeRange($query, string $field, ?string $region, mixed $min, mixed $max, array $validRegions): void
+    {
+        if (!array_key_exists((string) $region, $validRegions)) {
+            return;
+        }
+
+        $hasMin = $min !== null && $min !== '';
+        $hasMax = $max !== null && $max !== '';
+
+        if (!$hasMin && !$hasMax) {
+            return;
+        }
+
+        $query->where("{$field}_region", $region);
+
+        if ($hasMin) {
+            $query->whereRaw("CAST({$field}_value AS DECIMAL(6,2)) >= ?", [(float) $min]);
+        }
+
+        if ($hasMax) {
+            $query->whereRaw("CAST({$field}_value AS DECIMAL(6,2)) <= ?", [(float) $max]);
+        }
     }
 }

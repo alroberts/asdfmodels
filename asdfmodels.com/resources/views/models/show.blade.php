@@ -1067,7 +1067,17 @@
                                             </form>
                                         </details>
                                     @elseif($viewerConnection->status === \App\Models\Connection::STATUS_PENDING)
-                                        <span class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-600">Connection pending</span>
+                                        @if((int) $viewerConnection->requester_id === (int) auth()->id())
+                                            <form method="POST" action="{{ route('connections.destroy', $viewerConnection) }}">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="inline-flex items-center rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-red-300 hover:text-red-700">
+                                                    <i class="fas fa-xmark mr-2"></i>Cancel request
+                                                </button>
+                                            </form>
+                                        @else
+                                            <span class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-600">Connection requested</span>
+                                        @endif
                                     @elseif($viewerConnection->status === \App\Models\Connection::STATUS_ACCEPTED)
                                         <span class="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700">Connected</span>
                                     @endif

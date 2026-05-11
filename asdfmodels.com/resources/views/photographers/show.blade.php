@@ -254,6 +254,13 @@
                 width: 40px;
             }
 
+            .photographer-edit,
+            .photographer-connect {
+                height: auto;
+                min-height: 40px;
+                width: auto;
+            }
+
             .photographer-pill {
                 background: #f3f4f6;
                 color: #4b5563;
@@ -261,6 +268,18 @@
                 letter-spacing: 0.08em;
                 padding: 10px 13px;
                 text-transform: uppercase;
+            }
+
+            .photographer-cancel-request {
+                border: 1px solid #d1d5db;
+                cursor: pointer;
+                text-transform: none;
+            }
+
+            .photographer-cancel-request:hover {
+                background: #fff;
+                border-color: #fecaca;
+                color: #b91c1c;
             }
 
             .photographer-message {
@@ -274,7 +293,8 @@
                 border: 1px solid #d1d5db;
                 color: #111827;
                 cursor: pointer;
-                padding: 10px 14px;
+                padding: 10px 16px;
+                white-space: nowrap;
             }
 
             .connection-popover {
@@ -1355,7 +1375,18 @@
                                     </form>
                                 </details>
                             @elseif($viewerConnection->status === \App\Models\Connection::STATUS_PENDING)
-                                <span class="photographer-pill">Connection pending</span>
+                                @if((int) $viewerConnection->requester_id === (int) auth()->id())
+                                    <form method="POST" action="{{ route('connections.destroy', $viewerConnection) }}">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="photographer-pill photographer-cancel-request">
+                                            <i class="fas fa-xmark"></i>
+                                            <span>Cancel request</span>
+                                        </button>
+                                    </form>
+                                @else
+                                    <span class="photographer-pill">Connection requested</span>
+                                @endif
                             @elseif($viewerConnection->status === \App\Models\Connection::STATUS_ACCEPTED)
                                 <span class="photographer-pill">Connected</span>
                             @endif

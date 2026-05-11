@@ -2,7 +2,7 @@
     @push('styles')
         <style>
             .connections-page {
-                background: #f6f3ee;
+                background: #fff;
                 min-height: calc(100vh - 66px);
                 padding: 46px 24px 64px;
             }
@@ -21,9 +21,9 @@
             }
 
             .connections-kicker {
-                color: #6b5f52;
+                color: #6b7280;
                 font-size: 12px;
-                font-weight: 850;
+                font-weight: 700;
                 letter-spacing: .24em;
                 margin: 0 0 8px;
                 text-transform: uppercase;
@@ -31,10 +31,10 @@
 
             .connections-title {
                 color: #050505;
-                font-size: clamp(34px, 5vw, 58px);
-                font-weight: 900;
-                letter-spacing: -.06em;
-                line-height: .95;
+                font-size: clamp(30px, 4vw, 42px);
+                font-weight: 800;
+                letter-spacing: -.03em;
+                line-height: 1.05;
                 margin: 0;
             }
 
@@ -54,12 +54,12 @@
 
             .connections-tab {
                 background: #fff;
-                border: 1px solid #ded8cf;
+                border: 1px solid #d1d5db;
                 border-radius: 999px;
                 color: #111827;
                 display: inline-flex;
                 font-size: 13px;
-                font-weight: 850;
+                font-weight: 700;
                 gap: 8px;
                 padding: 10px 14px;
                 text-decoration: none;
@@ -67,16 +67,16 @@
 
             .connections-section {
                 background: #fff;
-                border: 1px solid #e5e0d8;
-                border-radius: 24px;
-                box-shadow: 0 18px 45px rgba(58, 48, 38, .08);
+                border: 1px solid #e5e7eb;
+                border-radius: 18px;
+                box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06);
                 margin-top: 18px;
                 overflow: hidden;
             }
 
             .connections-section-header {
                 align-items: center;
-                border-bottom: 1px solid #eee9e2;
+                border-bottom: 1px solid #e5e7eb;
                 display: flex;
                 gap: 16px;
                 justify-content: space-between;
@@ -86,7 +86,7 @@
             .connections-section-title {
                 color: #050505;
                 font-size: 20px;
-                font-weight: 900;
+                font-weight: 700;
                 margin: 0;
             }
 
@@ -95,7 +95,7 @@
                 border-radius: 999px;
                 color: #fff;
                 font-size: 12px;
-                font-weight: 850;
+                font-weight: 700;
                 padding: 7px 10px;
             }
 
@@ -128,7 +128,7 @@
                 color: #fff;
                 display: flex;
                 flex: 0 0 auto;
-                font-weight: 900;
+                font-weight: 800;
                 height: 54px;
                 justify-content: center;
                 overflow: hidden;
@@ -144,14 +144,14 @@
             .connection-name {
                 color: #050505;
                 font-size: 16px;
-                font-weight: 900;
+                font-weight: 700;
                 margin: 0;
             }
 
             .connection-meta {
                 color: #6b7280;
                 font-size: 13px;
-                font-weight: 700;
+                font-weight: 500;
                 margin-top: 3px;
             }
 
@@ -175,7 +175,7 @@
                 border-radius: 999px;
                 display: inline-flex;
                 font-size: 12px;
-                font-weight: 850;
+                font-weight: 700;
                 gap: 7px;
                 padding: 9px 11px;
                 text-decoration: none;

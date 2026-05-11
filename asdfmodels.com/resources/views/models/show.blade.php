@@ -275,6 +275,33 @@
                 margin: 8px 0 0;
             }
 
+            .model-hero-meta {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                margin-top: 10px;
+            }
+
+            .model-hero-meta-item {
+                align-items: center;
+                background: #f9fafb;
+                border: 1px solid #e5e7eb;
+                border-radius: 999px;
+                color: #4b5563;
+                display: inline-flex;
+                font-size: 13px;
+                font-weight: 650;
+                gap: 7px;
+                line-height: 1;
+                padding: 8px 11px;
+                white-space: nowrap;
+            }
+
+            .model-hero-meta-item i {
+                color: #6b7280;
+                font-size: 12px;
+            }
+
             .model-hero-action-column {
                 align-items: flex-end;
                 display: flex;
@@ -1149,28 +1176,28 @@
                                 @endif
                             </div>
                             <p class="model-hero-username">{{ '@' . $user->username }}</p>
-                            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
+                            <div class="model-hero-meta">
                                 @if($profile->location_city || $profile->location_country)
-                                    <span>
-                                        <i class="fas fa-map-marker-alt mr-1.5"></i>
+                                    <span class="model-hero-meta-item">
+                                        <i class="fas fa-map-marker-alt"></i>
                                         {{ $profile->location_city }}{{ $profile->location_city && $profile->location_country ? ', ' : '' }}{{ $profile->location_country }}
                                     </span>
                                 @endif
                                 @if($profile->age)
-                                    <span>
-                                        <i class="fas fa-cake-candles mr-1.5"></i>
+                                    <span class="model-hero-meta-item">
+                                        <i class="fas fa-cake-candles"></i>
                                         {{ $profile->age }} years old
                                     </span>
                                 @endif
                                 @if($modelExperienceLabel)
-                                    <span>
-                                        <i class="fas fa-briefcase mr-1.5"></i>
+                                    <span class="model-hero-meta-item">
+                                        <i class="fas fa-briefcase"></i>
                                         {{ $modelExperienceLabel }}
                                     </span>
                                 @endif
                                 @if($profile->experience_start_year)
-                                    <span>
-                                        <i class="fas fa-calendar mr-1.5"></i>
+                                    <span class="model-hero-meta-item">
+                                        <i class="fas fa-calendar"></i>
                                         Modelling since {{ $profile->experience_start_year }}
                                     </span>
                                 @endif

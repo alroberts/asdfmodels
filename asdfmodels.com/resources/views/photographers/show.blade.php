@@ -13,12 +13,14 @@
                 border-radius: 16px;
                 box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06);
                 margin-bottom: 24px;
-                overflow: hidden;
+                overflow: visible;
             }
 
             .photographer-cover {
                 background: #f3f4f6;
+                border-radius: 16px 16px 0 0;
                 height: 260px;
+                overflow: hidden;
                 position: relative;
             }
 
@@ -266,14 +268,31 @@
                 padding: 10px 14px;
             }
 
+            .connection-popover {
+                position: relative;
+                z-index: 70;
+            }
+
+            .connection-popover > summary {
+                list-style: none;
+            }
+
+            .connection-popover > summary::-webkit-details-marker {
+                display: none;
+            }
+
             .connection-request-box {
                 background: #fff;
                 border: 1px solid #e5e7eb;
                 border-radius: 16px;
                 box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
-                margin-top: 10px;
+                margin-top: 0;
                 padding: 14px;
+                position: absolute;
+                right: 0;
+                top: calc(100% + 10px);
                 width: min(320px, 90vw);
+                z-index: 90;
             }
 
             .connection-request-box textarea {
@@ -1110,6 +1129,24 @@
                     padding: 28px 16px;
                 }
 
+                .connection-popover[open]::before {
+                    background: rgba(15, 23, 42, .28);
+                    content: "";
+                    inset: 0;
+                    position: fixed;
+                    z-index: 89;
+                }
+
+                .connection-request-box {
+                    bottom: 20px;
+                    left: 16px;
+                    position: fixed;
+                    right: 16px;
+                    top: auto;
+                    width: auto;
+                    z-index: 90;
+                }
+
                 .photographer-card {
                     padding: 20px;
                 }
@@ -1284,8 +1321,8 @@
                             <span>Message</span>
                         </a>
                         @if(!$viewerConnection)
-                            <details style="position: relative;">
-                                <summary class="photographer-social photographer-connect" style="list-style: none;">
+                            <details class="connection-popover">
+                                <summary class="photographer-social photographer-connect">
                                     <i class="fas fa-user-plus"></i>
                                     <span>Connect</span>
                                 </summary>

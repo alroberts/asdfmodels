@@ -197,6 +197,33 @@
                 color: #fff;
             }
 
+            .connection-popover {
+                position: relative;
+                z-index: 70;
+            }
+
+            .connection-popover > summary {
+                list-style: none;
+            }
+
+            .connection-popover > summary::-webkit-details-marker {
+                display: none;
+            }
+
+            .connection-popover-panel {
+                background: #fff;
+                border: 1px solid #e5e7eb;
+                border-radius: 18px;
+                box-shadow: 0 22px 60px rgba(15, 23, 42, .2);
+                margin-top: 10px;
+                padding: 16px;
+                position: absolute;
+                right: 0;
+                top: 100%;
+                width: min(320px, calc(100vw - 32px));
+                z-index: 80;
+            }
+
             .profile-bio-display {
                 color: #374151;
                 font-size: 16px;
@@ -752,6 +779,25 @@
             }
 
             @media (max-width: 640px) {
+                .connection-popover[open]::before {
+                    background: rgba(15, 23, 42, .28);
+                    content: "";
+                    inset: 0;
+                    position: fixed;
+                    z-index: 79;
+                }
+
+                .connection-popover-panel {
+                    bottom: 20px;
+                    left: 16px;
+                    margin-top: 0;
+                    position: fixed;
+                    right: 16px;
+                    top: auto;
+                    width: auto;
+                    z-index: 80;
+                }
+
                 .model-profile-card {
                     padding: 20px;
                 }
@@ -844,8 +890,8 @@
     >
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <!-- Profile Header -->
-            <div class="bg-white shadow sm:rounded-lg mb-6 overflow-hidden">
-                <div class="bg-gray-100 h-48 md:h-64 relative">
+            <div class="bg-white shadow sm:rounded-lg mb-6 overflow-visible">
+                <div class="bg-gray-100 h-48 md:h-64 relative overflow-hidden sm:rounded-t-lg">
                     @if($profile->cover_photo_path)
                         <img :src="coverPreview || @js(asset($profile->cover_photo_path))" alt="Cover" class="w-full h-full object-cover">
                     @else
@@ -955,11 +1001,11 @@
                                             <i class="fas fa-envelope mr-2"></i>Message
                                         </a>
                                         @if(!$viewerConnection)
-                                            <details class="relative">
+                                            <details class="connection-popover">
                                                 <summary class="inline-flex cursor-pointer list-none items-center rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition hover:border-black">
                                                     <i class="fas fa-user-plus mr-2"></i>Connect
                                                 </summary>
-                                                <form method="POST" action="{{ route('connections.store', $user) }}" class="absolute right-0 z-40 mt-2 w-80 rounded-2xl border border-gray-200 bg-white p-4 shadow-xl">
+                                                <form method="POST" action="{{ route('connections.store', $user) }}" class="connection-popover-panel">
                                                     @csrf
                                                     <label for="connection-message-model" class="text-sm font-bold text-gray-900">Add a note</label>
                                                     <textarea id="connection-message-model" name="message" maxlength="125" class="mt-2 block min-h-20 w-full rounded-xl border-gray-300 text-sm shadow-sm focus:border-black focus:ring-black" placeholder="Optional, up to 125 characters"></textarea>

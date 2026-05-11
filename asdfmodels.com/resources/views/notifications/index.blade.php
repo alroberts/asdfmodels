@@ -320,6 +320,41 @@
         <section class="notification-section">
             <div class="notification-section-head">
                 <div>
+                    <h2>Connection Requests</h2>
+                    <p>Accept requests from members you want to keep in your network.</p>
+                </div>
+            </div>
+
+            @if(($connectionRequests ?? collect())->isNotEmpty())
+                <div class="notification-list">
+                    @foreach($connectionRequests as $connection)
+                        @php($requester = $connection->requester)
+                        <div class="notification-row is-unread">
+                            <div>
+                                <strong>{{ $requester?->display_name ?: $requester?->name ?: 'A member' }}</strong>
+                                <span>{{ $connection->message ?: 'Wants to connect with you.' }}</span>
+                            </div>
+                            <div class="credit-actions">
+                                <form method="POST" action="{{ route('connections.accept', $connection) }}">
+                                    @csrf
+                                    <button type="submit" class="primary">Accept</button>
+                                </form>
+                                <form method="POST" action="{{ route('connections.decline', $connection) }}">
+                                    @csrf
+                                    <button type="submit" class="secondary">Decline</button>
+                                </form>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @else
+                <div class="notifications-empty">No connection requests waiting for review.</div>
+            @endif
+        </section>
+
+        <section class="notification-section">
+            <div class="notification-section-head">
+                <div>
                     <h2>Messages & Account</h2>
                     <p>Messages, site updates, and future admin announcements will appear here.</p>
                 </div>

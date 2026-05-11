@@ -359,8 +359,8 @@
                                     <label class="flex items-start gap-3 rounded-xl border border-gray-200 px-4 py-4 {{ !$isVerifiedProfile ? 'opacity-60' : '' }}">
                                         <input type="checkbox" name="show_company_on_profile" value="1" @checked(old('show_company_on_profile', $profile->show_company_on_profile)) @disabled(!$isVerifiedProfile) class="mt-1 rounded border-gray-300 text-black shadow-sm focus:ring-black">
                                         <span>
-                                            <span class="block text-sm font-medium text-gray-900">Show company name on profile</span>
-                                            <span class="block text-sm text-gray-500">{{ $isVerifiedProfile ? 'Display your company name directly beneath your profile name.' : 'Company display is available to verified profiles.' }}</span>
+                                            <span class="block text-sm font-medium text-gray-900" x-text="companyDisplayLabel()"></span>
+                                            <span class="block text-sm text-gray-500" x-text="companyDisplayHelp()"></span>
                                         </span>
                                     </label>
                                 </div>
@@ -855,6 +855,22 @@
             displayNameFormatLabel() {
                 const selected = this.displayNameFormatOptions.find((option) => option.value === this.displayNameFormat);
                 return selected ? selected.label : 'Choose display format...';
+            },
+
+            companyDisplayLabel() {
+                return this.displayNameFormat === 'professional_name'
+                    ? 'Show your name on profile'
+                    : 'Show company name on profile';
+            },
+
+            companyDisplayHelp() {
+                if (!@json($isVerifiedProfile)) {
+                    return 'This display option is available to verified profiles.';
+                }
+
+                return this.displayNameFormat === 'professional_name'
+                    ? 'Show your personal display name beneath your company name, before your @username.'
+                    : 'Show your company name beside your @username beneath your profile name.';
             },
 
             selectDisplayNameFormat(value) {

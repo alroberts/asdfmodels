@@ -52,10 +52,28 @@
                 <div class="asdf-notification-empty">Checking for updates...</div>
             </template>
 
-            <template x-if="!loading && credits.length === 0 && notifications.length === 0">
+            <template x-if="!loading && credits.length === 0 && connections.length === 0 && notifications.length === 0">
                 <div class="asdf-notification-empty">
                     <i class="fas fa-check-circle"></i>
                     <span>Nothing new right now.</span>
+                </div>
+            </template>
+
+            <template x-if="connections.length > 0">
+                <div class="asdf-notification-section">
+                    <div class="asdf-notification-section-title">
+                        <span>Connection requests</span>
+                        <strong x-text="connectionCount"></strong>
+                    </div>
+                    <template x-for="connection in connections" :key="connection.id">
+                        <a class="asdf-notification-card is-credit" :href="connection.url">
+                            <span class="asdf-notification-card-icon"><i class="fas fa-user-plus"></i></span>
+                            <span>
+                                <strong x-text="connection.title"></strong>
+                                <small x-text="connection.body"></small>
+                            </span>
+                        </a>
+                    </template>
                 </div>
             </template>
 
@@ -451,9 +469,12 @@
             hasLoaded: false,
             creditCount: 0,
             credits: [],
+            connectionCount: 0,
+            connections: [],
             notifications: [],
             toasts: [],
             knownCreditKeys: new Set(),
+            knownConnectionIds: new Set(),
             knownNotificationIds: new Set(),
             pollTimer: null,
             init() {
@@ -485,12 +506,16 @@
                     const data = await response.json();
                     const nextCount = Number(data.unread_count || 0);
                     const previousCreditCount = this.creditCount;
+                    const previousConnectionCount = this.connectionCount;
 
                     this.creditCount = Number(data.credit_count || 0);
                     this.credits = data.credits || [];
+                    this.connectionCount = Number(data.connection_count || 0);
+                    this.connections = data.connections || [];
                     this.notifications = data.notifications || [];
 
                     this.handleFreshCredits(shouldToast, previousCreditCount);
+                    this.handleFreshConnections(shouldToast, previousConnectionCount);
                     this.handleFreshNotifications(shouldToast);
 
                     this.previousCount = this.count;
@@ -560,6 +585,30 @@
 
                 this.knownCreditKeys = currentKeys;
             },
+            handleFreshConnections(shouldToast, previousConnectionCount) {
+                const currentIds = new Set((this.connections || []).map((item) => item.id).filter(Boolean));
+
+                if (!this.hasLoaded) {
+                    this.knownConnectionIds = currentIds;
+                    return;
+                }
+
+                const fresh = (this.connections || []).filter((item) => item.id && !this.knownConnectionIds.has(item.id));
+                const hasMoreConnections = this.connectionCount > Number(previousConnectionCount || 0);
+
+                if (shouldToast && (fresh.length > 0 || hasMoreConnections)) {
+                    const first = fresh[0] || {};
+                    this.pushToast({
+                        title: 'New connection request',
+                        body: first.body || 'Someone wants to connect with you.',
+                        type: 'connection_request',
+                        url: config.notificationsUrl,
+                    });
+                    this.playSound('doorbell');
+                }
+
+                this.knownConnectionIds = currentIds;
+            },
             pushToast(notification = null) {
                 const toast = notification || {
                     title: 'New notification',
@@ -588,6 +637,10 @@
 
                 if (type === 'credit_pending') {
                     return 'fas fa-user-tag';
+                }
+
+                if (type === 'connection_request') {
+                    return 'fas fa-user-plus';
                 }
 
                 return 'fas fa-bell';

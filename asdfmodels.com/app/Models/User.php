@@ -192,6 +192,21 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(UsernameHistory::class);
     }
 
+    public function sentConnections(): HasMany
+    {
+        return $this->hasMany(Connection::class, 'requester_id');
+    }
+
+    public function receivedConnections(): HasMany
+    {
+        return $this->hasMany(Connection::class, 'recipient_id');
+    }
+
+    public function acceptedConnections()
+    {
+        return Connection::acceptedFor($this);
+    }
+
     public function profileRouteIdentifier(): string
     {
         return (string) $this->username;

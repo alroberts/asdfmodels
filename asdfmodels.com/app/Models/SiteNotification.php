@@ -104,4 +104,32 @@ class SiteNotification extends Model
             ],
         ]);
     }
+
+    public static function notifyConnectionRequest(Connection $connection): self
+    {
+        $requester = $connection->requester;
+        $recipient = $connection->recipient;
+        $actorName = $requester?->display_name ?: $requester?->name ?: 'A member';
+
+        return static::updateOrCreate(
+            [
+                'user_id' => $connection->recipient_id,
+                'type' => 'connection_request',
+                'group_key' => 'connection:' . $connection->id,
+            ],
+            [
+                'actor_user_id' => $connection->requester_id,
+                'title' => 'New connection request',
+                'body' => "{$actorName} wants to connect with you.",
+                'action_url' => route('notifications.index'),
+                'data' => [
+                    'connection_id' => $connection->id,
+                    'message' => $connection->message,
+                    'requester_username' => $requester?->username,
+                    'recipient_username' => $recipient?->username,
+                ],
+                'read_at' => null,
+            ]
+        );
+    }
 }

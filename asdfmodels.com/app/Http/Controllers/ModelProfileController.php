@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Helpers\ModelProfileOptions;
+use App\Models\Connection;
 use App\Models\ModelProfile;
 use App\Models\PortfolioAlbum;
 use App\Models\PortfolioCredit;
@@ -89,6 +90,10 @@ class ModelProfileController extends Controller
         $pendingCredits = ($viewer && $viewer->id === $user->id)
             ? PortfolioCredit::awaitingResponse($user, 'model')->with(['creditable', 'owner'])->latest()->get()
             : collect();
+        $connections = $this->profileConnections($user);
+        $viewerConnection = $viewer && $viewer->id !== $user->id
+            ? Connection::with(['requester', 'recipient'])->between($viewer->id, $user->id)->first()
+            : null;
 
         if ($viewer && $viewer->id === $user->id) {
             $portfolioImages = $user->portfolioImages()
@@ -165,7 +170,20 @@ class ModelProfileController extends Controller
             'featuredAlbumCredits' => $featuredAlbumCredits,
             'featuredImageCredits' => $featuredImageCredits,
             'pendingCredits' => $pendingCredits,
+            'connections' => $connections,
+            'viewerConnection' => $viewerConnection,
         ]);
+    }
+
+    private function profileConnections(User $user): \Illuminate\Support\Collection
+    {
+        return Connection::acceptedFor($user)
+            ->with(['requester.modelProfile', 'requester.photographerProfile', 'recipient.modelProfile', 'recipient.photographerProfile'])
+            ->latest('responded_at')
+            ->get()
+            ->map(fn (Connection $connection) => $connection->otherUser($user))
+            ->filter()
+            ->groupBy(fn (User $connectedUser) => $connectedUser->is_photographer ? 'Photographers' : 'Models');
     }
 
     /**

@@ -193,6 +193,10 @@ Route::middleware(['auth', 'profile.complete'])->group(function () {
     Route::post('/notifications/credits', [\App\Http\Controllers\NotificationController::class, 'updateCreditStatus'])->name('notifications.credits.update');
     Route::post('/notifications/read-all', [\App\Http\Controllers\NotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::get('/notifications/{notification}/open', [\App\Http\Controllers\NotificationController::class, 'markRead'])->name('notifications.open');
+    Route::post('/connections/{user}', [\App\Http\Controllers\ConnectionController::class, 'store'])->name('connections.store');
+    Route::post('/connections/{connection}/accept', [\App\Http\Controllers\ConnectionController::class, 'accept'])->name('connections.accept');
+    Route::post('/connections/{connection}/decline', [\App\Http\Controllers\ConnectionController::class, 'decline'])->name('connections.decline');
+    Route::delete('/connections/{connection}', [\App\Http\Controllers\ConnectionController::class, 'destroy'])->name('connections.destroy');
     Route::post('/galleries/images/comments', [\App\Http\Controllers\PublicGalleryController::class, 'comment'])->name('public.galleries.comments.store');
     
     // Browse Models

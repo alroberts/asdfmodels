@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PortfolioCredit;
+use App\Models\Connection;
 use App\Models\SiteNotification;
 use App\Models\PortfolioAlbum;
 use Illuminate\Http\JsonResponse;
@@ -48,9 +49,21 @@ class NotificationController extends Controller
             })
             ->values()
             ->take(4);
+        $connectionRequests = Connection::where('recipient_id', $user->id)
+            ->where('status', Connection::STATUS_PENDING)
+            ->with('requester')
+            ->latest()
+            ->limit(4)
+            ->get()
+            ->map(fn (Connection $connection) => [
+                'id' => $connection->id,
+                'title' => $connection->requester?->display_name ?: $connection->requester?->name ?: 'A member',
+                'body' => $connection->message ?: 'Wants to connect with you.',
+                'url' => route('notifications.index'),
+            ]);
 
         $notifications = SiteNotification::where('user_id', $user->id)
-            ->whereNotIn('type', ['credit_pending', 'message'])
+            ->whereNotIn('type', ['credit_pending', 'message', 'connection_request'])
             ->with('actor')
             ->latest()
             ->limit(6)
@@ -68,14 +81,19 @@ class NotificationController extends Controller
             ]);
 
         $unreadOtherCount = SiteNotification::where('user_id', $user->id)
-            ->whereNotIn('type', ['credit_pending', 'message'])
+            ->whereNotIn('type', ['credit_pending', 'message', 'connection_request'])
             ->unread()
+            ->count();
+        $pendingConnectionCount = Connection::where('recipient_id', $user->id)
+            ->where('status', Connection::STATUS_PENDING)
             ->count();
 
         return response()->json([
-            'unread_count' => $pendingCredits->count() + $unreadOtherCount,
+            'unread_count' => $pendingCredits->count() + $pendingConnectionCount + $unreadOtherCount,
             'credit_count' => $pendingCredits->count(),
             'credits' => $creditGroups,
+            'connection_count' => $pendingConnectionCount,
+            'connections' => $connectionRequests,
             'notifications' => $notifications,
         ]);
     }
@@ -94,22 +112,28 @@ class NotificationController extends Controller
 
             return $gallery ? 'gallery:' . $gallery->id : 'single:' . $credit->id;
         });
+        $connectionRequests = Connection::where('recipient_id', $user->id)
+            ->where('status', Connection::STATUS_PENDING)
+            ->with('requester')
+            ->latest()
+            ->get();
 
         $notifications = SiteNotification::where('user_id', $user->id)
-            ->whereNotIn('type', ['credit_pending', 'message'])
+            ->whereNotIn('type', ['credit_pending', 'message', 'connection_request'])
             ->with('actor')
             ->latest()
             ->paginate(20);
 
         $unreadOtherCount = SiteNotification::where('user_id', $user->id)
-            ->whereNotIn('type', ['credit_pending', 'message'])
+            ->whereNotIn('type', ['credit_pending', 'message', 'connection_request'])
             ->unread()
             ->count();
 
         return view('notifications.index', [
             'creditGroups' => $creditGroups,
+            'connectionRequests' => $connectionRequests,
             'notifications' => $notifications,
-            'unreadCount' => $pendingCredits->count() + $unreadOtherCount,
+            'unreadCount' => $pendingCredits->count() + $connectionRequests->count() + $unreadOtherCount,
             'unreadOtherCount' => $unreadOtherCount,
         ]);
     }

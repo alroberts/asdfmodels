@@ -954,6 +954,25 @@
                                         <a href="{{ route('messages.create', ['user_id' => $user->id]) }}" class="inline-flex items-center rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800">
                                             <i class="fas fa-envelope mr-2"></i>Message
                                         </a>
+                                        @if(!$viewerConnection)
+                                            <details class="relative">
+                                                <summary class="inline-flex cursor-pointer list-none items-center rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition hover:border-black">
+                                                    <i class="fas fa-user-plus mr-2"></i>Connect
+                                                </summary>
+                                                <form method="POST" action="{{ route('connections.store', $user) }}" class="absolute right-0 z-40 mt-2 w-80 rounded-2xl border border-gray-200 bg-white p-4 shadow-xl">
+                                                    @csrf
+                                                    <label for="connection-message-model" class="text-sm font-bold text-gray-900">Add a note</label>
+                                                    <textarea id="connection-message-model" name="message" maxlength="125" class="mt-2 block min-h-20 w-full rounded-xl border-gray-300 text-sm shadow-sm focus:border-black focus:ring-black" placeholder="Optional, up to 125 characters"></textarea>
+                                                    <div class="mt-3 flex justify-end">
+                                                        <button type="submit" class="rounded-full bg-black px-4 py-2 text-xs font-bold text-white">Send request</button>
+                                                    </div>
+                                                </form>
+                                            </details>
+                                        @elseif($viewerConnection->status === \App\Models\Connection::STATUS_PENDING)
+                                            <span class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-600">Connection pending</span>
+                                        @elseif($viewerConnection->status === \App\Models\Connection::STATUS_ACCEPTED)
+                                            <span class="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700">Connected</span>
+                                        @endif
                                     @else
                                         <a href="{{ route('login') }}" class="inline-flex items-center rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800">
                                             <i class="fas fa-envelope mr-2"></i>Log in to message
@@ -999,6 +1018,52 @@
                             @endif
                         </section>
                     @endif
+
+                    <section class="model-profile-card">
+                        <div class="model-profile-card-header">
+                            <div>
+                                <p class="photographer-kicker">Network</p>
+                                <h2 class="text-2xl font-semibold text-black">Connections</h2>
+                            </div>
+                            <i class="fas fa-user-group text-gray-300"></i>
+                        </div>
+                        @if(($connections ?? collect())->isNotEmpty())
+                            <div class="space-y-5">
+                                @foreach($connections as $roleLabel => $roleConnections)
+                                    <div>
+                                        <h3 class="mb-3 text-sm font-bold text-gray-900">{{ $roleLabel }}</h3>
+                                        <div class="grid gap-3 sm:grid-cols-2">
+                                            @foreach($roleConnections as $connectedUser)
+                                                @php
+                                                    $connectedProfile = $connectedUser->is_photographer ? $connectedUser->photographerProfile : $connectedUser->modelProfile;
+                                                    $connectedName = $connectedProfile?->display_name ?: $connectedUser->display_name ?: $connectedUser->name;
+                                                    $connectedPhoto = $connectedProfile?->profile_photo_path;
+                                                    $connectedRoute = $connectedUser->is_photographer
+                                                        ? route('photographers.show', $connectedUser->profileRouteIdentifier())
+                                                        : route('models.show', $connectedUser->profileRouteIdentifier());
+                                                @endphp
+                                                <a href="{{ $connectedRoute }}" class="flex items-center gap-3 rounded-2xl border border-gray-200 p-3 transition hover:border-black">
+                                                    <span class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 font-bold text-gray-600">
+                                                        @if($connectedPhoto)
+                                                            <img src="{{ asset($connectedPhoto) }}" alt="" class="h-full w-full object-cover">
+                                                        @else
+                                                            {{ mb_substr($connectedName, 0, 1) }}
+                                                        @endif
+                                                    </span>
+                                                    <span>
+                                                        <strong class="block text-sm text-gray-900">{{ $connectedName }}</strong>
+                                                        <small class="font-semibold text-gray-500">{{ '@' . $connectedUser->username }}</small>
+                                                    </span>
+                                                </a>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @else
+                            <p class="text-sm text-gray-500">No public connections yet.</p>
+                        @endif
+                    </section>
 
                     <section class="model-profile-card">
                         <div class="model-profile-card-header">

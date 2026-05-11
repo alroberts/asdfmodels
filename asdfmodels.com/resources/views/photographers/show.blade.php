@@ -200,16 +200,18 @@
 
             .photographer-company-name {
                 color: #4b5563;
-                font-size: 18px;
+                display: flex;
+                flex-wrap: wrap;
+                font-size: 16px;
                 font-weight: 700;
+                gap: 8px;
+                line-height: 1.5;
                 margin: 8px 0 0;
             }
 
             .photographer-username {
                 color: #6b7280;
-                font-size: 14px;
-                font-weight: 800;
-                margin: 8px 0 0;
+                font-weight: 700;
             }
 
             .photographer-actions {
@@ -254,6 +256,77 @@
                 background: #050505;
                 color: #fff;
                 padding: 11px 16px;
+            }
+
+            .photographer-connect {
+                background: #fff;
+                border: 1px solid #d1d5db;
+                color: #111827;
+                cursor: pointer;
+                padding: 10px 14px;
+            }
+
+            .connection-request-box {
+                background: #fff;
+                border: 1px solid #e5e7eb;
+                border-radius: 16px;
+                box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+                margin-top: 10px;
+                padding: 14px;
+                width: min(320px, 90vw);
+            }
+
+            .connection-request-box textarea {
+                border: 1px solid #d1d5db;
+                border-radius: 12px;
+                min-height: 78px;
+                padding: 10px;
+                resize: vertical;
+                width: 100%;
+            }
+
+            .connection-request-box button {
+                border-radius: 999px;
+                font-size: 12px;
+                font-weight: 850;
+                padding: 9px 12px;
+            }
+
+            .connection-card-grid {
+                display: grid;
+                gap: 12px;
+                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            }
+
+            .connection-card {
+                align-items: center;
+                border: 1px solid #e5e7eb;
+                border-radius: 16px;
+                color: inherit;
+                display: flex;
+                gap: 12px;
+                padding: 12px;
+                text-decoration: none;
+            }
+
+            .connection-card-avatar {
+                align-items: center;
+                background: #f3f4f6;
+                border-radius: 999px;
+                color: #6b7280;
+                display: flex;
+                flex: 0 0 auto;
+                font-weight: 850;
+                height: 44px;
+                justify-content: center;
+                overflow: hidden;
+                width: 44px;
+            }
+
+            .connection-card-avatar img {
+                height: 100%;
+                object-fit: cover;
+                width: 100%;
             }
 
             .photographer-edit {
@@ -1059,6 +1132,11 @@
         $displayName = $profile->display_name;
         $companyName = trim((string) $profile->professional_name);
         $showCompanyName = $profile->shouldShowCompanyName();
+        $isCompanyPrimary = $profile->display_name_format === 'professional_name' && $profile->isVerified();
+        $personalName = $user->display_name ?: $user->name;
+        $secondaryName = $isCompanyPrimary
+            ? ($profile->show_company_on_profile ? $personalName : null)
+            : ($showCompanyName ? $companyName : null);
         $specialtiesOptions = \App\Helpers\PhotographerOptions::specialties();
         $servicesOptions = \App\Helpers\PhotographerOptions::services();
         $validSpecialties = $profile->specialties ? array_intersect_key(array_flip($profile->specialties), $specialtiesOptions) : [];
@@ -1171,10 +1249,13 @@
                             </span>
                         @endif
                     </div>
-                    <p class="photographer-username">{{ '@' . $user->username }}</p>
-                    @if($showCompanyName)
-                        <p class="photographer-company-name">{{ $companyName }}</p>
-                    @endif
+                    <p class="photographer-company-name">
+                        @if($secondaryName)
+                            <span>{{ $secondaryName }}</span>
+                            <span aria-hidden="true">|</span>
+                        @endif
+                        <span class="photographer-username">{{ '@' . $user->username }}</span>
+                    </p>
                     <div class="photographer-meta">
                         @if($profile->location_city || $profile->location_country)
                             <span><i class="fas fa-map-marker-alt"></i> {{ $profile->location_city }}{{ $profile->location_city && $profile->location_country ? ', ' : '' }}{{ $profile->location_country }}</span>
@@ -1202,6 +1283,26 @@
                             <i class="fas fa-envelope"></i>
                             <span>Message</span>
                         </a>
+                        @if(!$viewerConnection)
+                            <details style="position: relative;">
+                                <summary class="photographer-social photographer-connect" style="list-style: none;">
+                                    <i class="fas fa-user-plus"></i>
+                                    <span>Connect</span>
+                                </summary>
+                                <form method="POST" action="{{ route('connections.store', $user) }}" class="connection-request-box">
+                                    @csrf
+                                    <label class="text-sm font-bold text-gray-900" for="connection-message-photographer">Add a note</label>
+                                    <textarea id="connection-message-photographer" name="message" maxlength="125" placeholder="Optional, up to 125 characters"></textarea>
+                                    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+                                        <button type="submit" style="background:#050505;color:#fff;">Send request</button>
+                                    </div>
+                                </form>
+                            </details>
+                        @elseif($viewerConnection->status === \App\Models\Connection::STATUS_PENDING)
+                            <span class="photographer-pill">Connection pending</span>
+                        @elseif($viewerConnection->status === \App\Models\Connection::STATUS_ACCEPTED)
+                            <span class="photographer-pill">Connected</span>
+                        @endif
                     @else
                         <a href="{{ route('login') }}" class="photographer-message">
                             <i class="fas fa-envelope"></i>
@@ -1245,6 +1346,48 @@
                         @endif
                     </article>
                 @endif
+
+                <article class="photographer-card">
+                    <div class="photographer-card-header">
+                        <div>
+                            <p class="photographer-kicker">Network</p>
+                            <h2 class="photographer-heading">Connections</h2>
+                        </div>
+                        <i class="fas fa-user-group photographer-muted-icon"></i>
+                    </div>
+                    @if(($connections ?? collect())->isNotEmpty())
+                        @foreach($connections as $roleLabel => $roleConnections)
+                            <h3 style="font-size:14px;font-weight:850;margin:18px 0 10px;">{{ $roleLabel }}</h3>
+                            <div class="connection-card-grid">
+                                @foreach($roleConnections as $connectedUser)
+                                    @php
+                                        $connectedProfile = $connectedUser->is_photographer ? $connectedUser->photographerProfile : $connectedUser->modelProfile;
+                                        $connectedName = $connectedProfile?->display_name ?: $connectedUser->display_name ?: $connectedUser->name;
+                                        $connectedPhoto = $connectedProfile?->profile_photo_path;
+                                        $connectedRoute = $connectedUser->is_photographer
+                                            ? route('photographers.show', $connectedUser->profileRouteIdentifier())
+                                            : route('models.show', $connectedUser->profileRouteIdentifier());
+                                    @endphp
+                                    <a href="{{ $connectedRoute }}" class="connection-card">
+                                        <span class="connection-card-avatar">
+                                            @if($connectedPhoto)
+                                                <img src="{{ asset($connectedPhoto) }}" alt="">
+                                            @else
+                                                {{ mb_substr($connectedName, 0, 1) }}
+                                            @endif
+                                        </span>
+                                        <span>
+                                            <strong style="display:block;font-size:14px;">{{ $connectedName }}</strong>
+                                            <small style="color:#6b7280;font-weight:700;">{{ '@' . $connectedUser->username }}</small>
+                                        </span>
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endforeach
+                    @else
+                        <p class="photographer-copy">No public connections yet.</p>
+                    @endif
+                </article>
 
                 <article class="photographer-card">
                     <div class="photographer-card-header">

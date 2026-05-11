@@ -33,6 +33,7 @@ class PhotographerProfile extends Model
         'phone',
         'instagram',
         'portfolio_website',
+        'social_links',
         'facebook',
         'twitter',
         'profile_photo_path',
@@ -45,6 +46,7 @@ class PhotographerProfile extends Model
     protected $casts = [
         'specialties' => 'array',
         'equipment' => 'array',
+        'social_links' => 'array',
         'services_offered' => 'array',
         'available_for_travel' => 'boolean',
         'show_company_on_profile' => 'boolean',

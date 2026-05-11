@@ -141,7 +141,7 @@
                 <p class="model-galleries-kicker">{{ $profile->display_name }}</p>
                 <h1 class="model-galleries-title">Galleries</h1>
             </div>
-            <a href="{{ route('models.show', $user->id) }}" class="model-galleries-back">
+            <a href="{{ route('models.show', $user->profileRouteIdentifier()) }}" class="model-galleries-back">
                 <i class="fas fa-arrow-left"></i>
                 <span>Back to Profile</span>
             </a>

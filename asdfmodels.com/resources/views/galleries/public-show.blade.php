@@ -61,6 +61,17 @@
                 text-decoration: none;
             }
 
+            .public-gallery-pill.is-primary {
+                background: #050505;
+                border-color: #050505;
+                color: #fff;
+            }
+
+            .public-gallery-pill.is-primary:hover {
+                background: #1f2937;
+                border-color: #1f2937;
+            }
+
             .public-gallery-meta {
                 align-items: center;
                 color: #6b7280;
@@ -390,6 +401,7 @@
     @php
         $imageType = $gallery->owner_role === 'photographer' ? 'photographer' : 'model';
         $viewer = auth()->user();
+        $ownerCanManage = $viewer && (int) $viewer->id === (int) $gallery->user_id;
         $canInteract = $viewer && (int) $viewer->id !== (int) $gallery->user_id;
         $galleryImagesPayload = $images->values()->map(function ($image) {
             return [
@@ -404,7 +416,7 @@
                         'name' => $credit->creditedUser?->display_name ?: $credit->creditedUser?->name,
                         'role' => $credit->credited_role,
                         'url' => $credit->creditedUser
-                            ? ($credit->creditedUser->is_photographer ? route('photographers.show', $credit->creditedUser->id) : route('models.show', $credit->creditedUser->id))
+                            ? ($credit->creditedUser->is_photographer ? route('photographers.show', $credit->creditedUser->profileRouteIdentifier()) : route('models.show', $credit->creditedUser->profileRouteIdentifier()))
                             : null,
                     ])
                     ->values(),
@@ -442,8 +454,8 @@
                             @php
                                 $creditedUser = $credit->creditedUser;
                                 $creditRoute = $creditedUser?->is_photographer
-                                    ? route('photographers.show', $creditedUser->id)
-                                    : route('models.show', $creditedUser->id);
+                                    ? route('photographers.show', $creditedUser->profileRouteIdentifier())
+                                    : route('models.show', $creditedUser->profileRouteIdentifier());
                             @endphp
                             @if($creditedUser)
                                 <a href="{{ $creditRoute }}" class="public-gallery-credit-pill">
@@ -456,6 +468,12 @@
                 @endif
             </div>
             <div class="public-gallery-actions">
+                @if($ownerCanManage)
+                    <a href="{{ route('portfolio.galleries.show', $gallery->id) }}" class="public-gallery-pill is-primary">
+                        <i class="fas fa-sliders"></i>
+                        <span>Manage Gallery</span>
+                    </a>
+                @endif
                 <a href="{{ $ownerProfileRoute }}" class="public-gallery-pill">
                     <i class="fas fa-arrow-left"></i>
                     <span>Back to Profile</span>

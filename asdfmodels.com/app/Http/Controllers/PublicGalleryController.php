@@ -59,8 +59,8 @@ class PublicGalleryController extends Controller
                 ->get(),
             'ownerProfile' => $owner->is_photographer ? $owner->photographerProfile : $owner->modelProfile,
             'ownerProfileRoute' => $owner->is_photographer
-                ? route('photographers.show', $owner->id)
-                : route('models.show', $owner->id),
+                ? route('photographers.show', $owner->profileRouteIdentifier())
+                : route('models.show', $owner->profileRouteIdentifier()),
         ]);
     }
 

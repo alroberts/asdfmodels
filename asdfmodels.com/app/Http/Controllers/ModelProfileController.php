@@ -8,11 +8,13 @@ use App\Models\PortfolioAlbum;
 use App\Models\PortfolioCredit;
 use App\Models\PortfolioImage;
 use App\Models\User;
+use App\Models\UsernameHistory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Illuminate\Http\UploadedFile;
 use Intervention\Image\Drivers\Gd\Driver;
@@ -23,9 +25,9 @@ class ModelProfileController extends Controller
     /**
      * Display the specified model profile (public view).
      */
-    public function show(string $id): View
+    public function show(string $username): View
     {
-        $user = User::with('modelProfile')->findOrFail($id);
+        $user = $this->resolveProfileUser($username, 'modelProfile');
         $viewer = Auth::user();
 
         if (
@@ -169,9 +171,9 @@ class ModelProfileController extends Controller
     /**
      * Display public galleries for the specified model profile.
      */
-    public function galleries(string $id): View
+    public function galleries(string $username): View
     {
-        $user = User::with('modelProfile')->findOrFail($id);
+        $user = $this->resolveProfileUser($username, 'modelProfile');
         $viewer = Auth::user();
 
         if (
@@ -265,6 +267,15 @@ class ModelProfileController extends Controller
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
+            'username' => [
+                'nullable',
+                'string',
+                'min:3',
+                'max:80',
+                'regex:/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/',
+                Rule::unique('users', 'username')->ignore($user->id),
+                Rule::unique('username_histories', 'username')->ignore($user->username, 'username'),
+            ],
             'bio' => ['nullable', 'string', 'max:2000'],
             'display_name_format' => ['nullable', 'in:first_name_last_initial,first_name,initials,full_name'],
             'location_city' => ['nullable', 'string', 'max:255'],
@@ -392,6 +403,8 @@ class ModelProfileController extends Controller
 
         $profile = $user->modelProfile ?? new ModelProfile();
         $profile->user_id = $user->id;
+        $requestedUsername = $validated['username'] ?? null;
+        unset($validated['username']);
 
         $previousProfilePhoto = $profile->profile_photo_path;
         $previousCoverPhoto = $profile->cover_photo_path;
@@ -450,10 +463,43 @@ class ModelProfileController extends Controller
         $user->first_name = $validated['first_name'];
         $user->last_name = $validated['last_name'];
         $user->name = trim($validated['first_name'] . ' ' . $validated['last_name']);
+        if ($user->canEditUsername() && filled($requestedUsername)) {
+            $user->changeUsername($requestedUsername);
+        } elseif (!filled($user->username)) {
+            $user->username = $user->generateUniqueUsername();
+        }
         $user->save();
 
         return redirect()->route('profile.model.edit')
             ->with('status', 'Profile updated successfully.');
+    }
+
+    private function resolveProfileUser(string $username, string $relation): User
+    {
+        $user = User::with($relation)
+            ->where('username', $username)
+            ->first();
+
+        if (!$user) {
+            $history = UsernameHistory::where('username', $username)
+                ->where('is_active', true)
+                ->whereNotNull('redirects_to_username')
+                ->first();
+
+            if ($history && $history->redirects_to_username !== $username) {
+                redirect()->route(
+                    request()->routeIs('models.galleries') ? 'models.galleries' : 'models.show',
+                    $history->redirects_to_username
+                )->send();
+                exit;
+            }
+        }
+
+        if (!$user) {
+            abort(404);
+        }
+
+        return $user;
     }
 
     public function updateBio(Request $request): JsonResponse

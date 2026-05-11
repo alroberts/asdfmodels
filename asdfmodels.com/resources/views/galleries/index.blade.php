@@ -625,6 +625,7 @@
                 },
                 handleUploadSuccess(detail) {
                     if (detail && detail.count > 0) {
+                        window.asdfSound?.play('done');
                         window.location.reload();
                     }
                 }

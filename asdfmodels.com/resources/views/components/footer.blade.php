@@ -13,8 +13,8 @@
             <div>
                 <h3 class="font-semibold text-black mb-4">Quick Links</h3>
                 <ul class="space-y-2">
-                    <li><a href="{{ route('models.browse') }}" class="text-gray-600 hover:text-black text-sm transition">Browse Models</a></li>
-                    <li><a href="{{ route('photographers.browse') }}" class="text-gray-600 hover:text-black text-sm transition">Browse Photographers</a></li>
+                    <li><a href="{{ route('models.browse') }}" class="text-gray-600 hover:text-black text-sm transition">Find a Model</a></li>
+                    <li><a href="{{ route('photographers.browse') }}" class="text-gray-600 hover:text-black text-sm transition">Find a Photographer</a></li>
                     <li><a href="#" class="text-gray-600 hover:text-black text-sm transition">Support</a></li>
                     @auth
                         <li><a href="{{ route('dashboard') }}" class="text-gray-600 hover:text-black text-sm transition">Dashboard</a></li>
@@ -43,4 +43,3 @@
         </div>
     </div>
 </footer>
-

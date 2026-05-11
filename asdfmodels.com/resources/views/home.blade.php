@@ -46,7 +46,7 @@
                     <h2 class="text-4xl font-bold text-black mb-8 text-center">Featured Models</h2>
                     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                         @foreach($featuredModels as $model)
-                            <a href="{{ route('models.show', $model->user_id) }}" class="bg-white border-2 border-black rounded-lg overflow-hidden hover:shadow-xl transition-shadow">
+                            <a href="{{ route('models.show', $model->user->profileRouteIdentifier()) }}" class="bg-white border-2 border-black rounded-lg overflow-hidden hover:shadow-xl transition-shadow">
                                 @if($model->profile_photo_path)
                                     <img src="{{ asset($model->profile_photo_path) }}" alt="{{ $model->user->name }}" class="w-full aspect-square object-cover">
                                 @else
@@ -77,7 +77,7 @@
                     </div>
                     <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
                         @foreach($newestMembers as $model)
-                            <a href="{{ route('models.show', $model->user_id) }}" class="bg-white border-2 border-black rounded-lg overflow-hidden hover:shadow-xl transition-shadow">
+                            <a href="{{ route('models.show', $model->user->profileRouteIdentifier()) }}" class="bg-white border-2 border-black rounded-lg overflow-hidden hover:shadow-xl transition-shadow">
                                 @if($model->profile_photo_path)
                                     <img src="{{ asset($model->profile_photo_path) }}" alt="{{ $model->user->name }}" class="w-full aspect-square object-cover">
                                 @else

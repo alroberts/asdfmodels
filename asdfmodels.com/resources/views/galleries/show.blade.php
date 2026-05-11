@@ -391,7 +391,7 @@
                         </div>
                         <div class="gallery-credit-field">
                             <label for="creditSearch">Member</label>
-                            <input id="creditSearch" type="search" placeholder="Search by name or email" autocomplete="off">
+                            <input id="creditSearch" type="search" placeholder="Search by @username" autocomplete="off">
                             <div id="creditSearchResults" class="gallery-credit-results"></div>
                             <input id="creditUserId" type="hidden">
                         </div>
@@ -601,6 +601,7 @@
                             this.on('queuecomplete', function() {
                                 updateUploadSummary();
                                 if (successfulUploads > 0) {
+                                    window.asdfSound?.play('done');
                                     setTimeout(() => window.location.reload(), 1000);
                                 }
                             });
@@ -928,11 +929,11 @@
                 data.users.forEach((user) => {
                     const button = document.createElement('button');
                     button.type = 'button';
-                    button.innerHTML = `<strong>${escapeHtml(user.label)}</strong><span>${escapeHtml(user.email)}</span>`;
+                    button.innerHTML = `<strong>${escapeHtml(user.label)}</strong><span>@${escapeHtml(user.username)}</span>`;
                     button.addEventListener('click', () => {
                         selectedCreditUser = user;
                         document.getElementById('creditUserId').value = user.id;
-                        search.value = user.label;
+                        search.value = `@${user.username}`;
                         results.innerHTML = '';
                     });
                     results.appendChild(button);

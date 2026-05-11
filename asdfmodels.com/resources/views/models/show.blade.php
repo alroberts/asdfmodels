@@ -121,6 +121,41 @@
                 padding: 28px;
             }
 
+            .photographer-card {
+                background: #fff;
+                border-radius: 16px;
+                box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06);
+                padding: 28px;
+            }
+
+            .photographer-card-header {
+                align-items: flex-end;
+                display: flex;
+                gap: 16px;
+                justify-content: space-between;
+                margin-bottom: 20px;
+            }
+
+            .photographer-muted-icon {
+                color: #d1d5db;
+            }
+
+            .photographer-kicker {
+                color: #6b7280;
+                font-size: 12px;
+                font-weight: 800;
+                letter-spacing: 0.2em;
+                margin: 0;
+                text-transform: uppercase;
+            }
+
+            .photographer-heading {
+                color: #050505;
+                font-size: 24px;
+                font-weight: 800;
+                margin: 4px 0 0;
+            }
+
             .profile-inline-actions {
                 align-items: center;
                 display: flex;
@@ -500,6 +535,60 @@
                 grid-template-columns: repeat(4, minmax(0, 1fr));
             }
 
+            .photographer-featured-grid,
+            .photographer-tagged-grid {
+                display: grid;
+                gap: 12px;
+            }
+
+            .photographer-featured-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+
+            .photographer-tagged-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .photographer-image-card {
+                background: #fff;
+                border: 1px solid #e5e7eb;
+                border-radius: 14px;
+                color: inherit;
+                display: block;
+                min-width: 0;
+                overflow: hidden;
+                padding: 0;
+                text-align: left;
+                text-decoration: none;
+            }
+
+            .photographer-square {
+                aspect-ratio: 1 / 1;
+                background: #f3f4f6;
+                overflow: hidden;
+                position: relative;
+            }
+
+            .photographer-square img {
+                display: block;
+                height: 100%;
+                object-fit: cover;
+                transition: transform 220ms ease;
+                width: 100%;
+            }
+
+            .photographer-square:hover img {
+                transform: scale(1.04);
+            }
+
+            .photographer-empty {
+                border: 1px dashed #d1d5db;
+                border-radius: 14px;
+                color: #6b7280;
+                padding: 32px 18px;
+                text-align: center;
+            }
+
             .model-snapshot-card {
                 background: #050505;
                 border-radius: 16px;
@@ -806,16 +895,19 @@
                                     </div>
                                 @endif
                             @endif
-                            @if($profile->isVerified())
-                                <div class="absolute bottom-0 right-0 bg-green-500 rounded-full p-2 border-4 border-white">
-                                    <i class="fas fa-check text-white text-sm"></i>
-                                </div>
-                            @endif
                         </div>
                         <div class="flex-1 mt-4 md:mt-0">
                             <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                                 <div>
-                                    <h1 class="text-3xl font-bold text-black mb-2">{{ $profile->display_name }}</h1>
+                                    <div class="mb-2 flex flex-wrap items-center gap-2">
+                                        <h1 class="text-3xl font-bold text-black">{{ $profile->display_name }}</h1>
+                                        @if($profile->isVerified())
+                                            <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-green-500 text-white shadow-sm" title="Verified profile" aria-label="Verified profile">
+                                                <i class="fas fa-check text-xs"></i>
+                                            </span>
+                                        @endif
+                                    </div>
+                                    <p class="mb-3 text-sm font-semibold text-gray-500">{{ '@' . $user->username }}</p>
                                     <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
                                         @if($profile->location_city || $profile->location_country)
                                             <span>
@@ -922,7 +1014,7 @@
                                     </a>
                                 @endif
                                 @if($publicGalleries->isNotEmpty())
-                                    <a href="{{ route('models.galleries', $user->id) }}" class="model-view-all-link">
+                                    <a href="{{ route('models.galleries', $user->profileRouteIdentifier()) }}" class="model-view-all-link">
                                         <span>View All</span>
                                         <i class="fas fa-arrow-right text-xs"></i>
                                     </a>
@@ -963,31 +1055,30 @@
                     </section>
 
                     @if(($featuredAlbumCredits ?? collect())->isNotEmpty() || ($featuredImageCredits ?? collect())->isNotEmpty())
-                        <section class="model-profile-card">
-                            <div class="model-profile-card-header">
+                        <article class="photographer-card">
+                            <div class="photographer-card-header">
                                 <div>
-                                    <p class="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Collaborations</p>
-                                    <h2 class="mt-1 text-2xl font-semibold text-black">Featured In</h2>
+                                    <p class="photographer-kicker">Collaborations</p>
+                                    <h2 class="photographer-heading">Featured In</h2>
                                 </div>
-                                <i class="fas fa-user-tag text-gray-300"></i>
+                                <i class="fas fa-user-tag photographer-muted-icon"></i>
                             </div>
 
                             @if(($featuredAlbumCredits ?? collect())->isNotEmpty())
-                                <div class="mb-6">
-                                    <h3 class="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">Galleries</h3>
-                                    <div class="profile-credit-grid">
+                                <div style="margin-bottom: 24px;">
+                                    <p class="photographer-kicker" style="margin-bottom: 12px;">Galleries</p>
+                                    <div class="photographer-tagged-grid">
                                         @foreach($featuredAlbumCredits->take(4) as $credit)
                                             @php
                                                 $album = $credit->creditable;
                                                 $albumCover = $album->cover_image_path ?? $album->coverImage?->thumbnail_path;
-                                                $ownerRoute = $credit->owner?->is_photographer ? route('photographers.show', $credit->owner_id ?? $credit->owner_user_id) : route('models.show', $credit->owner_id ?? $credit->owner_user_id);
                                             @endphp
-                                            <a href="{{ $ownerRoute }}" class="profile-credit-card">
-                                                <div class="profile-credit-thumb">
+                                            <a href="{{ route('public.galleries.show', $album->id) }}" class="photographer-image-card">
+                                                <div class="photographer-square">
                                                     @if($albumCover)
                                                         <img src="{{ asset($albumCover) }}" alt="{{ $album->name }}">
                                                     @else
-                                                        <div class="flex h-full items-center justify-center text-gray-400"><i class="fas fa-images text-3xl"></i></div>
+                                                        <div class="photographer-empty"><i class="fas fa-images"></i></div>
                                                     @endif
                                                 </div>
                                                 <div class="profile-credit-body">
@@ -1002,28 +1093,22 @@
 
                             @if(($featuredImageCredits ?? collect())->isNotEmpty())
                                 <div>
-                                    <h3 class="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">Photos</h3>
-                                    <div class="profile-credit-grid">
-                                        @foreach($featuredImageCredits->take(8) as $credit)
+                                    <p class="photographer-kicker" style="margin-bottom: 12px;">Photos</p>
+                                    <div class="photographer-tagged-grid">
+                                        @foreach($featuredImageCredits->take(6) as $credit)
                                             @php
                                                 $image = $credit->creditable;
                                                 $imageUrl = asset($image->thumbnail_path ?? $image->full_path);
                                                 $fullUrl = asset($image->full_path ?? $image->thumbnail_path);
                                             @endphp
-                                            <button type="button" class="profile-credit-card" onclick="openLightbox('{{ $fullUrl }}')">
-                                                <div class="profile-credit-thumb">
-                                                    <img src="{{ $imageUrl }}" alt="Credited portfolio image">
-                                                </div>
-                                                <div class="profile-credit-body">
-                                                    <strong>{{ $credit->owner?->display_name ?? $credit->owner?->name }}</strong>
-                                                    <span>Credited photo</span>
-                                                </div>
+                                            <button type="button" class="photographer-image-card photographer-square" onclick="openLightbox('{{ $fullUrl }}')">
+                                                <img src="{{ $imageUrl }}" alt="Credited portfolio image">
                                             </button>
                                         @endforeach
                                     </div>
                                 </div>
                             @endif
-                        </section>
+                        </article>
                     @endif
 
                     <section class="model-profile-card model-profile-card-dashed">

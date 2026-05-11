@@ -145,16 +145,13 @@
             .photographer-verified {
                 align-items: center;
                 background: #22c55e;
-                border: 4px solid #fff;
                 border-radius: 999px;
-                bottom: 2px;
                 color: #fff;
                 display: flex;
-                height: 34px;
+                flex: 0 0 auto;
+                height: 28px;
                 justify-content: center;
-                position: absolute;
-                right: 2px;
-                width: 34px;
+                width: 28px;
             }
 
             .photographer-title {
@@ -164,6 +161,32 @@
                 letter-spacing: -0.04em;
                 line-height: 1;
                 margin: 0;
+            }
+
+            .photographer-name-row {
+                align-items: center;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 14px;
+            }
+
+            .photographer-company-logo {
+                align-items: center;
+                background: #fff;
+                border: 1px solid #e5e7eb;
+                border-radius: 14px;
+                display: inline-flex;
+                height: 54px;
+                justify-content: center;
+                overflow: hidden;
+                padding: 8px;
+                width: 54px;
+            }
+
+            .photographer-company-logo img {
+                height: 100%;
+                object-fit: contain;
+                width: 100%;
             }
 
             .photographer-meta {
@@ -179,6 +202,13 @@
                 color: #4b5563;
                 font-size: 18px;
                 font-weight: 700;
+                margin: 8px 0 0;
+            }
+
+            .photographer-username {
+                color: #6b7280;
+                font-size: 14px;
+                font-weight: 800;
                 margin: 8px 0 0;
             }
 
@@ -1035,12 +1065,37 @@
         $validServices = $profile->services_offered ? array_intersect_key(array_flip($profile->services_offered), $servicesOptions) : [];
         $equipment = $profile->equipment ?? [];
         $publicGalleries = collect($publicGalleries ?? []);
-        $socialLinks = collect([
-            $profile->instagram ? ['label' => 'Instagram', 'icon' => 'fab fa-instagram', 'url' => 'https://instagram.com/' . ltrim($profile->instagram, '@')] : null,
-            $profile->facebook ? ['label' => 'Facebook', 'icon' => 'fab fa-facebook', 'url' => 'https://facebook.com/' . $profile->facebook] : null,
-            $profile->twitter ? ['label' => 'X', 'icon' => 'fab fa-x-twitter', 'url' => 'https://twitter.com/' . ltrim($profile->twitter, '@')] : null,
-            $profile->portfolio_website ? ['label' => 'Website', 'icon' => 'fas fa-globe', 'url' => $profile->portfolio_website] : null,
-        ])->filter();
+        $platformMeta = [
+            'instagram' => ['label' => 'Instagram', 'icon' => 'fab fa-instagram'],
+            'facebook' => ['label' => 'Facebook', 'icon' => 'fab fa-facebook'],
+            'x' => ['label' => 'X', 'icon' => 'fab fa-x-twitter'],
+            'tiktok' => ['label' => 'TikTok', 'icon' => 'fab fa-tiktok'],
+            'youtube' => ['label' => 'YouTube', 'icon' => 'fab fa-youtube'],
+            'behance' => ['label' => 'Behance', 'icon' => 'fab fa-behance'],
+            'linkedin' => ['label' => 'LinkedIn', 'icon' => 'fab fa-linkedin'],
+            'website' => ['label' => 'Website', 'icon' => 'fas fa-globe'],
+        ];
+        $socialLinks = collect($profile->social_links ?? [])
+            ->filter(fn ($link) => filled($link['url'] ?? null))
+            ->map(function ($link) use ($platformMeta) {
+                $platform = $link['platform'] ?? 'website';
+                $meta = $platformMeta[$platform] ?? $platformMeta['website'];
+
+                return [
+                    'label' => $meta['label'],
+                    'icon' => $meta['icon'],
+                    'url' => $link['url'],
+                ];
+            });
+
+        if ($socialLinks->isEmpty()) {
+            $socialLinks = collect([
+                $profile->instagram ? ['label' => 'Instagram', 'icon' => 'fab fa-instagram', 'url' => str_starts_with($profile->instagram, 'http') ? $profile->instagram : 'https://instagram.com/' . ltrim($profile->instagram, '@')] : null,
+                $profile->facebook ? ['label' => 'Facebook', 'icon' => 'fab fa-facebook', 'url' => str_starts_with($profile->facebook, 'http') ? $profile->facebook : 'https://facebook.com/' . $profile->facebook] : null,
+                $profile->twitter ? ['label' => 'X', 'icon' => 'fab fa-x-twitter', 'url' => str_starts_with($profile->twitter, 'http') ? $profile->twitter : 'https://x.com/' . ltrim($profile->twitter, '@')] : null,
+                $profile->portfolio_website ? ['label' => 'Website', 'icon' => 'fas fa-globe', 'url' => $profile->portfolio_website] : null,
+            ])->filter();
+        }
         $profileLocation = collect([
             $profile->location_city,
             $profile->location_country ?: $profile->location_country_code,
@@ -1100,15 +1155,23 @@
                             <span>{{ substr($displayName, 0, 1) }}</span>
                         @endif
                     @endif
-                    @if($profile->isVerified())
-                        <span class="photographer-verified">
-                            <i class="fas fa-check"></i>
-                        </span>
-                    @endif
                 </div>
 
                 <div>
-                    <h1 class="photographer-title">{{ $displayName }}</h1>
+                    <div class="photographer-name-row">
+                        <h1 class="photographer-title">{{ $displayName }}</h1>
+                        @if($profile->isVerified())
+                            <span class="photographer-verified" title="Verified profile" aria-label="Verified profile">
+                                <i class="fas fa-check"></i>
+                            </span>
+                        @endif
+                        @if($profile->isVerified() && $profile->logo_path)
+                            <span class="photographer-company-logo" title="{{ $companyName ?: 'Company logo' }}">
+                                <img src="{{ asset($profile->logo_path) }}" alt="{{ $companyName ?: $displayName }} logo">
+                            </span>
+                        @endif
+                    </div>
+                    <p class="photographer-username">{{ '@' . $user->username }}</p>
                     @if($showCompanyName)
                         <p class="photographer-company-name">{{ $companyName }}</p>
                     @endif
@@ -1253,9 +1316,8 @@
                                         @php
                                             $album = $credit->creditable;
                                             $albumCover = $album->cover_image_path ?? $album->coverImage?->thumbnail_path;
-                                            $ownerRoute = $credit->owner?->is_photographer ? route('photographers.show', $credit->owner_user_id) : route('models.show', $credit->owner_user_id);
                                         @endphp
-                                        <a href="{{ $ownerRoute }}" class="photographer-image-card">
+                                        <a href="{{ route('public.galleries.show', $album->id) }}" class="photographer-image-card">
                                             <div class="photographer-square">
                                                 @if($albumCover)
                                                     <img src="{{ asset($albumCover) }}" alt="{{ $album->name }}">

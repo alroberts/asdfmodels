@@ -8,12 +8,14 @@ use App\Models\PortfolioAlbum;
 use App\Models\PortfolioCredit;
 use App\Models\PortfolioImage;
 use App\Models\User;
+use App\Models\UsernameHistory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class PhotographerProfileController extends Controller
@@ -21,9 +23,9 @@ class PhotographerProfileController extends Controller
     /**
      * Display a photographer's profile (public view).
      */
-    public function show(string $id): View
+    public function show(string $username): View
     {
-        $user = User::with('photographerProfile')->findOrFail($id);
+        $user = $this->resolveProfileUser($username, 'photographerProfile');
 
         if (!$user->is_photographer) {
             abort(404);
@@ -148,6 +150,31 @@ class PhotographerProfileController extends Controller
         ]);
     }
 
+    private function resolveProfileUser(string $username, string $relation): User
+    {
+        $user = User::with($relation)
+            ->where('username', $username)
+            ->first();
+
+        if (!$user) {
+            $history = UsernameHistory::where('username', $username)
+                ->where('is_active', true)
+                ->whereNotNull('redirects_to_username')
+                ->first();
+
+            if ($history && $history->redirects_to_username !== $username) {
+                redirect()->route('photographers.show', $history->redirects_to_username)->send();
+                exit;
+            }
+        }
+
+        if (!$user) {
+            abort(404);
+        }
+
+        return $user;
+    }
+
     /**
      * Show the form for editing the authenticated user's photographer profile.
      */
@@ -174,6 +201,9 @@ class PhotographerProfileController extends Controller
         return view($useWizard ? 'photographers.edit-wizard' : 'photographers.edit', [
             'user' => $user,
             'profile' => $profile,
+            'countries' => config('countries'),
+            'specialtiesOptions' => \App\Helpers\PhotographerOptions::specialties('photographer'),
+            'servicesOptions' => \App\Helpers\PhotographerOptions::services(),
         ]);
     }
 
@@ -188,10 +218,28 @@ class PhotographerProfileController extends Controller
             abort(403, 'Only photographers can have photographer profiles.');
         }
 
-        // Parse equipment JSON if it's a string
+        // Parse equipment JSON if it's a string. The full editor also sends newline text fields
+        // so photographers can maintain equipment without fighting repeatable inputs.
         $equipmentData = $request->input('equipment');
         if (is_string($equipmentData)) {
             $equipmentData = json_decode($equipmentData, true);
+        }
+
+        if (!$equipmentData) {
+            $splitEquipment = function (?string $value): array {
+                return collect(preg_split('/\r\n|\r|\n/', (string) $value))
+                    ->map(fn ($item) => trim($item))
+                    ->filter()
+                    ->values()
+                    ->all();
+            };
+
+            $equipmentData = [
+                'cameras' => $splitEquipment($request->input('equipment_cameras')),
+                'lenses' => $splitEquipment($request->input('equipment_lenses')),
+                'lighting' => $splitEquipment($request->input('equipment_lighting')),
+                'other' => $splitEquipment($request->input('equipment_other')),
+            ];
         }
         
         // Validate equipment structure
@@ -228,6 +276,17 @@ class PhotographerProfileController extends Controller
 
         try {
             $validated = $request->validate([
+            'first_name' => ['nullable', 'string', 'max:255'],
+            'last_name' => ['nullable', 'string', 'max:255'],
+            'username' => [
+                'nullable',
+                'string',
+                'min:3',
+                'max:80',
+                'regex:/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/',
+                Rule::unique('users', 'username')->ignore($user->id),
+                Rule::unique('username_histories', 'username')->ignore($user->username, 'username'),
+            ],
             'name' => ['nullable', 'string', 'max:255'],
             'bio' => ['nullable', 'string', 'max:1200'],
             // Bio validation: if provided, must be 50-1200 chars, but can be empty
@@ -259,6 +318,9 @@ class PhotographerProfileController extends Controller
             // Contact
             'public_email' => ['nullable', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
+            'social_links' => ['nullable', 'array'],
+            'social_links.*.platform' => ['nullable', 'in:instagram,facebook,x,tiktok,youtube,behance,linkedin,website'],
+            'social_links.*.url' => ['nullable', 'url', 'max:255'],
             'instagram' => ['nullable', 'string', 'max:255'],
             'portfolio_website' => ['nullable', 'url', 'max:255'],
             'facebook' => ['nullable', 'string', 'max:255'],
@@ -267,7 +329,7 @@ class PhotographerProfileController extends Controller
             // Images
             'profile_photo' => ['nullable', 'image', 'mimes:jpeg,jpg,png', 'max:10240'], // 10MB max (handles HEIC conversion)
             'profile_photo_crop_data' => ['nullable', 'string'],
-            'logo' => ['nullable', 'image', 'mimes:jpeg,jpg,png,svg', 'max:2048'], // 2MB max for logo
+            'logo' => ['nullable', 'image', 'mimes:jpeg,jpg,png', 'max:2048'], // 2MB max for logo
             
             // Settings
             'is_public' => ['boolean'],
@@ -304,6 +366,26 @@ class PhotographerProfileController extends Controller
         $validated['specialties'] = $specialties;
         $validated['services_offered'] = $services;
         $validated['equipment'] = $equipmentData;
+        $validated['social_links'] = collect($validated['social_links'] ?? [])
+            ->filter(function ($link) {
+                return filled($link['platform'] ?? null) && filled($link['url'] ?? null);
+            })
+            ->map(function ($link) {
+                return [
+                    'platform' => $link['platform'],
+                    'url' => $link['url'],
+                ];
+            })
+            ->values()
+            ->all();
+        $validated['instagram'] = collect($validated['social_links'])
+            ->firstWhere('platform', 'instagram')['url'] ?? null;
+        $validated['portfolio_website'] = collect($validated['social_links'])
+            ->firstWhere('platform', 'website')['url'] ?? null;
+        $validated['facebook'] = collect($validated['social_links'])
+            ->firstWhere('platform', 'facebook')['url'] ?? null;
+        $validated['twitter'] = collect($validated['social_links'])
+            ->firstWhere('platform', 'x')['url'] ?? null;
 
         // If geoname_id is provided, fetch and populate city/country from GeoNames
         if (isset($validated['location_geoname_id']) && $validated['location_geoname_id']) {
@@ -361,15 +443,31 @@ class PhotographerProfileController extends Controller
             $validated['bio'] = $bio;
         }
 
+        $requestedUsername = $validated['username'] ?? null;
+        unset($validated['username']);
+
         // Check if this is a new profile (wizard completion)
         $isNewProfile = !$user->photographerProfile || !$user->photographerProfile->exists;
         $isWizardCompletion = $request->has('wizard_completion') && $isNewProfile;
 
-        // Update user name if provided
-        if (isset($validated['name']) && $validated['name']) {
+        // Update user name parts when present. Keep the legacy `name` field redacted via User::setNameAttribute.
+        if (array_key_exists('first_name', $validated) || array_key_exists('last_name', $validated)) {
+            $firstName = trim((string) ($validated['first_name'] ?? $user->first_name));
+            $lastName = trim((string) ($validated['last_name'] ?? $user->last_name));
+            $user->name = trim($firstName . ' ' . $lastName);
+            $user->save();
+            unset($validated['first_name'], $validated['last_name']);
+        } elseif (isset($validated['name']) && $validated['name']) {
             $user->name = $validated['name'];
             $user->save();
         }
+
+        if ($user->canEditUsername() && filled($requestedUsername)) {
+            $user->changeUsername($requestedUsername);
+        } elseif (!filled($user->username)) {
+            $user->username = $user->generateUniqueUsername();
+        }
+        $user->save();
         
         $profile = $user->photographerProfile ?? new PhotographerProfile();
         $profile->user_id = $user->id;
@@ -436,8 +534,22 @@ class PhotographerProfileController extends Controller
             }
         }
         
-        // Handle logo upload (only if professional_name is set or being set)
+        // Handle logo upload. Company logos are reserved for verified profiles so the
+        // public company presentation cannot be used to bypass identity controls.
         $hasProfessionalName = $profile->professional_name || ($validated['professional_name'] ?? null);
+        if ($request->hasFile('logo') && !$profile->isVerified()) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'message' => 'Company logo uploads are available to verified photographer profiles.',
+                    'errors' => ['logo' => ['Company logo uploads are available to verified photographer profiles.']]
+                ], 422);
+            }
+
+            return redirect()->back()
+                ->withErrors(['logo' => 'Company logo uploads are available to verified photographer profiles.'])
+                ->withInput();
+        }
+
         if ($request->hasFile('logo') && $hasProfessionalName) {
             // Delete old logo if exists
             if ($profile->logo_path) {

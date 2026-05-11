@@ -23,6 +23,12 @@ class PortfolioCreditController extends Controller
             'q' => ['nullable', 'string', 'max:120'],
         ]);
 
+        $search = ltrim(trim((string) ($validated['q'] ?? '')), '@');
+
+        if (mb_strlen($search) < 2) {
+            return response()->json(['users' => []]);
+        }
+
         $query = User::query()
             ->where('is_admin', false)
             ->when($validated['role'] === 'model', function ($userQuery) {
@@ -36,16 +42,9 @@ class PortfolioCreditController extends Controller
                     ->whereHas('photographerProfile');
             });
 
-        if (!empty($validated['q'])) {
-            $search = trim($validated['q']);
-            $query->where(function ($searchQuery) use ($search) {
-                $searchQuery
-                    ->where('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
-            });
-        }
+        $query->where(function ($searchQuery) use ($search) {
+            $searchQuery->where('username', 'like', "%{$search}%");
+        });
 
         $users = $query
             ->orderBy('first_name')
@@ -55,7 +54,7 @@ class PortfolioCreditController extends Controller
             ->map(fn (User $user) => [
                 'id' => $user->id,
                 'label' => $user->display_name ?: $user->name,
-                'email' => $user->email,
+                'username' => $user->username,
                 'role' => $user->is_photographer ? 'photographer' : 'model',
             ]);
 

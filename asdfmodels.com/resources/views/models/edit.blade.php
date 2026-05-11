@@ -40,6 +40,9 @@
     );
     $initialFirstName = old('first_name', $user->first_name ?? '');
     $initialLastName = old('last_name', $user->last_name ?? '');
+    $canEditUsername = $profile->isVerified();
+    $initialUsername = old('username', $user->username ?? '');
+    $hasChangedUsernameBefore = $user->hasChangedUsernameBefore();
     $defaultDisplayNameFormat = $profile->isVerified() ? 'full_name' : 'first_name_last_initial';
     $initialDisplayNameFormat = old(
         'display_name_format',
@@ -123,7 +126,7 @@
                 </p>
             </div>
             <div class="flex items-center gap-3">
-                <a href="{{ route('models.show', $user->id) }}" class="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50">
+                <a href="{{ route('models.show', $user->profileRouteIdentifier()) }}" class="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50">
                     View Profile
                 </a>
             </div>
@@ -247,6 +250,73 @@
                                     <p class="mt-2 text-xs text-gray-500">The last name is stored separately so it can be hidden from public display.</p>
                                     <x-input-error :messages="$errors->get('last_name')" class="mt-2" />
                                 </div>
+                            </div>
+
+                            <div>
+                                <x-input-label for="username" :value="__('Username')" />
+                                <div class="mt-1 max-w-xl rounded-2xl border border-gray-200 bg-white p-2 shadow-sm transition focus-within:border-black focus-within:ring-1 focus-within:ring-black">
+                                    <div class="flex items-center gap-2">
+                                        <span class="inline-flex h-10 items-center rounded-xl bg-gray-100 px-3 text-sm font-bold text-gray-500">@</span>
+                                        <input
+                                            id="username"
+                                            name="username"
+                                            type="text"
+                                            class="h-10 min-w-0 flex-1 rounded-xl border-0 bg-transparent px-2 text-sm font-semibold text-gray-900 shadow-none focus:border-0 focus:bg-gray-50 focus:ring-0 disabled:cursor-default disabled:text-gray-700"
+                                            value="{{ $initialUsername }}"
+                                            pattern="[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+                                            x-ref="usernameInput"
+                                            :readonly="!usernameEditing"
+                                            @if(!$canEditUsername) disabled @endif
+                                        />
+                                        @if($canEditUsername)
+                                            <button
+                                                type="button"
+                                                class="inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-bold transition focus:outline-none focus:ring-2 focus:ring-black"
+                                                :class="usernameEditing ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                                                :title="usernameEditing ? 'Lock username field' : 'Edit username'"
+                                                @click="usernameEditing = !usernameEditing; if (usernameEditing) { $nextTick(() => $refs.usernameInput.focus()) }"
+                                            >
+                                                <i :class="usernameEditing ? 'fas fa-check text-xs' : 'fas fa-pencil-alt text-xs'"></i>
+                                                <span x-text="usernameEditing ? 'Done' : 'Edit'"></span>
+                                            </button>
+                                        @else
+                                            <button
+                                                type="button"
+                                                class="inline-flex h-10 items-center gap-2 rounded-xl bg-gray-100 px-4 text-sm font-bold text-gray-600 transition hover:bg-gray-200 hover:text-black focus:outline-none focus:ring-2 focus:ring-black"
+                                                @click="usernameLockInfo = !usernameLockInfo"
+                                            >
+                                                <i class="fas fa-lock text-xs"></i>
+                                                Verify Your Profile
+                                            </button>
+                                        @endif
+                                    </div>
+                                </div>
+                                <p class="mt-2 text-xs text-gray-500">
+                                    @if($canEditUsername)
+                                        Click the pencil to change your public handle. Use lowercase letters, numbers, and hyphens.
+                                    @else
+                                        Your username is generated automatically. Custom usernames are available after verification.
+                                    @endif
+                                </p>
+                                @unless($canEditUsername)
+                                    <div x-show="usernameLockInfo" x-cloak x-transition class="mt-3 max-w-xl rounded-2xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-900">
+                                        <div class="flex items-start gap-3">
+                                            <i class="fas fa-shield-halved mt-0.5 text-yellow-700"></i>
+                                            <div>
+                                                <p class="font-bold">Verification unlocks custom usernames.</p>
+                                                <p class="mt-1 text-yellow-800">It helps members trust your profile and gives you access to profile display controls such as custom handles and verified-only name options.</p>
+                                                <a href="{{ route('verification.create') }}" class="mt-3 inline-flex rounded-full bg-black px-4 py-2 text-xs font-bold text-white">Start Verification</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endunless
+                                @if($canEditUsername && $hasChangedUsernameBefore)
+                                    <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                        <i class="fas fa-triangle-exclamation mr-2"></i>
+                                        Changing your username again will stop your current custom username from working. Update any external links where you have shared it.
+                                    </div>
+                                @endif
+                                <x-input-error :messages="$errors->get('username')" class="mt-2" />
                             </div>
 
                             <div>
@@ -906,7 +976,7 @@
                     </div>
 
                     <div class="flex flex-col gap-3 border-t border-gray-200 pt-6 sm:flex-row sm:items-center sm:justify-end">
-                        <a href="{{ route('models.show', $user->id) }}" class="inline-flex items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50">
+                        <a href="{{ route('models.show', $user->profileRouteIdentifier()) }}" class="inline-flex items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50">
                             Cancel
                         </a>
                         <x-primary-button>
@@ -1079,6 +1149,8 @@
             cityInput: @json(old('location_city', $profile->location_city ?? '')),
             selectedGeonameId: @json(old('location_geoname_id', $profile->location_geoname_id ?? null)),
             selectedCountryName: @json(old('location_country', $profile->location_country ?? '')),
+            usernameEditing: @json($errors->has('username')),
+            usernameLockInfo: false,
             displayNameFormat: @json($initialDisplayNameFormat),
             displayNameFormatOptions: @json($displayNameFormatOptions),
             displayNameDropdownOpen: false,

@@ -6,11 +6,22 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
+
+    protected static function booted(): void
+    {
+        static::creating(function (User $user) {
+            if (!filled($user->username)) {
+                $user->username = $user->generateUniqueUsername();
+            }
+        });
+    }
 
     /**
      * The attributes that are mass assignable.
@@ -20,6 +31,7 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $fillable = [
         'first_name',
         'last_name',
+        'username',
         'name',
         'email',
         'password',
@@ -173,6 +185,109 @@ class User extends Authenticatable implements MustVerifyEmail
     public function photographerProfile()
     {
         return $this->hasOne(PhotographerProfile::class);
+    }
+
+    public function usernameHistories(): HasMany
+    {
+        return $this->hasMany(UsernameHistory::class);
+    }
+
+    public function profileRouteIdentifier(): string
+    {
+        return (string) $this->username;
+    }
+
+    public function canEditUsername(): bool
+    {
+        return (bool) ($this->is_photographer
+            ? $this->photographerProfile?->isVerified()
+            : $this->modelProfile?->isVerified());
+    }
+
+    public function hasChangedUsernameBefore(): bool
+    {
+        return $this->usernameHistories()
+            ->where('type', 'original')
+            ->where('username', '!=', $this->username)
+            ->exists();
+    }
+
+    public function changeUsername(string $username): bool
+    {
+        $username = Str::slug(Str::lower(trim($username)));
+
+        if ($username === '' || $username === $this->username) {
+            return false;
+        }
+
+        $previousUsername = (string) $this->username;
+        $hasCustomHistory = $this->hasChangedUsernameBefore();
+
+        $this->usernameHistories()->firstOrCreate(
+            ['username' => $previousUsername],
+            [
+                'type' => 'original',
+                'redirects_to_username' => $username,
+                'is_active' => true,
+            ]
+        );
+
+        $this->usernameHistories()
+            ->where('type', 'original')
+            ->where('is_active', true)
+            ->update(['redirects_to_username' => $username]);
+
+        if ($hasCustomHistory) {
+            $this->usernameHistories()->updateOrCreate(
+                ['username' => $previousUsername],
+                [
+                    'type' => 'custom',
+                    'redirects_to_username' => null,
+                    'is_active' => false,
+                    'released_at' => now(),
+                ]
+            );
+        }
+
+        $this->username = $username;
+        $this->save();
+
+        return true;
+    }
+
+    public function ensureUsername(): void
+    {
+        if (filled($this->username)) {
+            return;
+        }
+
+        $this->username = $this->generateUniqueUsername();
+        $this->save();
+    }
+
+    public function generateUniqueUsername(): string
+    {
+        $firstName = trim((string) $this->first_name);
+        $lastName = trim((string) $this->last_name);
+
+        if ($firstName === '' && $this->email) {
+            $firstName = Str::before($this->email, '@');
+        }
+
+        $lastInitial = $lastName !== '' ? mb_substr($lastName, 0, 1) : '';
+        $base = Str::slug(trim($firstName . ' ' . $lastInitial)) ?: 'member';
+        $base = Str::limit($base, 66, '');
+
+        do {
+            $username = $base . '-' . random_int(1000, 9999);
+            $query = static::where('username', $username);
+
+            if ($this->exists) {
+                $query->where('id', '!=', $this->id);
+            }
+        } while ($query->exists());
+
+        return $username;
     }
 
     public function hasCompletedModelProfile(): bool

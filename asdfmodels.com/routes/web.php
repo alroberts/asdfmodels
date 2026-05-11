@@ -74,8 +74,8 @@ Route::get('/dashboard', function () {
             'quickLinks' => [
                 ['label' => 'My Portfolio', 'description' => 'Manage galleries, uploads, and featured work.', 'route' => route('portfolio.index')],
                 ['label' => 'Edit Profile', 'description' => 'Update your public profile, branding, and contact details.', 'route' => route('photographers.profile.edit')],
-                ['label' => 'Public Profile', 'description' => 'See how your live photographer profile appears to visitors.', 'route' => route('photographers.show', $user->id)],
-                ['label' => 'Browse Models', 'description' => 'Explore public model profiles and portfolios.', 'route' => route('models.browse')],
+                ['label' => 'Public Profile', 'description' => 'See how your live photographer profile appears to visitors.', 'route' => route('photographers.show', $user->profileRouteIdentifier())],
+                ['label' => 'Find a Model', 'description' => 'Explore public model profiles and portfolios.', 'route' => route('models.browse')],
                 ['label' => 'Messages', 'description' => 'Open your conversations and reply to enquiries.', 'route' => route('messages.index')],
                 ['label' => 'Account Settings', 'description' => 'Manage email, password, and account-level preferences.', 'route' => route('profile.edit')],
             ],
@@ -94,8 +94,8 @@ Route::get('/dashboard', function () {
             'quickLinks' => [
                 ['label' => 'My Portfolio', 'description' => 'Add, organise, and update your portfolio images.', 'route' => route('portfolio.index')],
                 ['label' => 'Edit Profile', 'description' => 'Update your model profile, stats, and public details.', 'route' => route('profile.model.edit')],
-                ['label' => 'Public Profile', 'description' => 'Preview how your public model profile appears.', 'route' => route('models.show', $user->id)],
-                ['label' => 'Browse Photographers', 'description' => 'Explore photographer profiles and portfolios.', 'route' => route('photographers.browse')],
+                ['label' => 'Public Profile', 'description' => 'Preview how your public model profile appears.', 'route' => route('models.show', $user->profileRouteIdentifier())],
+                ['label' => 'Find a Photographer', 'description' => 'Explore photographer profiles and portfolios.', 'route' => route('photographers.browse')],
                 ['label' => 'Messages', 'description' => 'Review conversations and follow up with photographers.', 'route' => route('messages.index')],
                 ['label' => 'Account Settings', 'description' => 'Manage email, password, and account-level preferences.', 'route' => route('profile.edit')],
             ],
@@ -132,8 +132,13 @@ Route::middleware('auth')->group(function () {
     
     // Verification (accessible without profile completion)
     Route::get('/verification', [\App\Http\Controllers\VerificationController::class, 'create'])->name('verification.create');
+    Route::get('/verification/start', [\App\Http\Controllers\VerificationController::class, 'start'])->name('verification.start');
     Route::post('/verification', [\App\Http\Controllers\VerificationController::class, 'store'])->name('verification.store');
+    Route::get('/verification/mobile-status/{token}', [\App\Http\Controllers\VerificationController::class, 'mobileStatus'])->name('verification.mobile.status');
 });
+
+Route::get('/verification/mobile/{token}', [\App\Http\Controllers\VerificationController::class, 'mobile'])->name('verification.mobile');
+Route::post('/verification/mobile/{token}', [\App\Http\Controllers\VerificationController::class, 'mobileStore'])->name('verification.mobile.store');
 
 Route::middleware(['auth', 'profile.complete'])->group(function () {
     // Two-Factor Authentication
@@ -175,11 +180,16 @@ Route::middleware(['auth', 'profile.complete'])->group(function () {
     Route::get('/messages', [\App\Http\Controllers\MessageController::class, 'index'])->name('messages.index');
     Route::get('/messages/create', [\App\Http\Controllers\MessageController::class, 'create'])->name('messages.create');
     Route::post('/messages', [\App\Http\Controllers\MessageController::class, 'store'])->name('messages.store');
+    Route::get('/messages/summary', [\App\Http\Controllers\MessageController::class, 'summary'])->name('messages.summary');
+    Route::get('/messages/with/{recipient}', [\App\Http\Controllers\MessageController::class, 'open'])->name('messages.open');
+    Route::delete('/messages/items/{message}', [\App\Http\Controllers\MessageController::class, 'unsend'])->name('messages.unsend');
+    Route::get('/messages/{thread}/thread', [\App\Http\Controllers\MessageController::class, 'thread'])->name('messages.thread');
     Route::get('/messages/{id}', [\App\Http\Controllers\MessageController::class, 'show'])->name('messages.show');
     Route::delete('/messages/{id}', [\App\Http\Controllers\MessageController::class, 'destroy'])->name('messages.destroy');
 
     // Notifications
     Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('/notifications/summary', [\App\Http\Controllers\NotificationController::class, 'summary'])->name('notifications.summary');
     Route::post('/notifications/credits', [\App\Http\Controllers\NotificationController::class, 'updateCreditStatus'])->name('notifications.credits.update');
     Route::post('/notifications/read-all', [\App\Http\Controllers\NotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::get('/notifications/{notification}/open', [\App\Http\Controllers\NotificationController::class, 'markRead'])->name('notifications.open');
@@ -232,11 +242,14 @@ Route::middleware(['auth', 'profile.complete'])->group(function () {
 // Public Model Profiles
 Route::get('/galleries/{gallery}', [\App\Http\Controllers\PublicGalleryController::class, 'show'])->name('public.galleries.show');
 Route::post('/galleries/{gallery}/verify-age', [\App\Http\Controllers\PublicGalleryController::class, 'verifyAge'])->name('public.galleries.verify-age');
-Route::get('/models/{id}/galleries', [\App\Http\Controllers\ModelProfileController::class, 'galleries'])->name('models.galleries');
-Route::get('/models/{id}', [\App\Http\Controllers\ModelProfileController::class, 'show'])->name('models.show');
+Route::get('/models/{legacyId}/galleries', fn () => response('Not Found', 404))->whereNumber('legacyId');
+Route::get('/models/{legacyId}', fn () => response('Not Found', 404))->whereNumber('legacyId');
+Route::get('/models/{username}/galleries', [\App\Http\Controllers\ModelProfileController::class, 'galleries'])->name('models.galleries');
+Route::get('/models/{username}', [\App\Http\Controllers\ModelProfileController::class, 'show'])->name('models.show');
 
 // Public Photographer Profiles
-Route::get('/photographers/{id}', [\App\Http\Controllers\PhotographerProfileController::class, 'show'])->name('photographers.show');
+Route::get('/photographers/{legacyId}', fn () => response('Not Found', 404))->whereNumber('legacyId');
+Route::get('/photographers/{username}', [\App\Http\Controllers\PhotographerProfileController::class, 'show'])->name('photographers.show');
 
 // Legal Pages
 Route::get('/terms', [\App\Http\Controllers\LegalController::class, 'terms'])->name('legal.terms');

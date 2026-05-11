@@ -34,7 +34,9 @@
                                         </a>
                                     </div>
                                 @endif
-                                <p class="text-sm">{{ $message->body }}</p>
+                                <p class="text-sm {{ $message->unsent_at ? 'italic opacity-70' : '' }}">
+                                    {{ $message->unsent_at ? 'Message unsent' : $message->body }}
+                                </p>
                                 <p class="text-xs mt-2 opacity-75">{{ $message->created_at->format('M d, Y g:i A') }}</p>
                             </div>
                         </div>
@@ -92,4 +94,3 @@
         });
     </script>
 </x-app-layout>
-

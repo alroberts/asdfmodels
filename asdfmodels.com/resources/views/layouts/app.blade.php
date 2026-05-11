@@ -41,6 +41,10 @@
             <x-footer />
         </div>
 
+        @auth
+            <x-floating-messenger />
+        @endauth
+
         <x-cookie-consent />
     </body>
 </html>

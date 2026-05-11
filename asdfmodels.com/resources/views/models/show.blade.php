@@ -1033,6 +1033,12 @@
         $eyeColors = \App\Helpers\ModelProfileOptions::eyeColors();
         $shoeSizeRegions = \App\Helpers\ModelProfileOptions::shoeSizeRegions();
         $dressSizeRegions = \App\Helpers\ModelProfileOptions::dressSizeRegions();
+        $modelExperienceLabel = match ($profile->experience_level) {
+            'beginner' => 'Beginner model',
+            'intermediate' => 'Intermediate model',
+            'professional' => 'Professional model',
+            default => $profile->experience_level ? ucfirst($profile->experience_level) . ' model' : null,
+        };
         $polaroidLabelOptions = [
             'front' => 'Front',
             'left_side' => 'Left Side',
@@ -1154,6 +1160,18 @@
                                     <span>
                                         <i class="fas fa-cake-candles mr-1.5"></i>
                                         {{ $profile->age }} years old
+                                    </span>
+                                @endif
+                                @if($modelExperienceLabel)
+                                    <span>
+                                        <i class="fas fa-briefcase mr-1.5"></i>
+                                        {{ $modelExperienceLabel }}
+                                    </span>
+                                @endif
+                                @if($profile->experience_start_year)
+                                    <span>
+                                        <i class="fas fa-calendar mr-1.5"></i>
+                                        Modelling since {{ $profile->experience_start_year }}
                                     </span>
                                 @endif
                             </div>

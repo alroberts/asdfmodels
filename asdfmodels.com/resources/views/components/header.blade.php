@@ -158,8 +158,8 @@
                                 <p class="site-user-menu-username">{{ '@' . $headerUsername }}</p>
                             </div>
                             <a href="{{ $headerProfileUrl }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">My Profile</a>
-                            <a href="{{ route('connections.index') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Connections</a>
                             <a href="{{ $headerEditProfileUrl }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Edit Profile</a>
+                            <a href="{{ route('connections.index') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Connections</a>
                             <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Settings</a>
                             <form method="POST" action="{{ route('logout') }}">
                                 @csrf
@@ -193,8 +193,8 @@
                                 <p class="site-user-menu-username">{{ '@' . $headerUsername }}</p>
                             </div>
                             <a href="{{ $headerProfileUrl }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">My Profile</a>
-                            <a href="{{ route('connections.index') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Connections</a>
                             <a href="{{ $headerEditProfileUrl }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Edit Profile</a>
+                            <a href="{{ route('connections.index') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Connections</a>
                             <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-sm text-black hover:bg-gray-100">Settings</a>
                             <form method="POST" action="{{ route('logout') }}">
                                 @csrf
@@ -265,8 +265,8 @@
                 @elseif($userType === 'model')
                     <a href="{{ route('dashboard') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Dashboard</a>
                     <a href="{{ $user->hasCompletedModelProfile() ? route('models.show', $user->profileRouteIdentifier()) : route('profile.model.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">My Profile</a>
-                    <a href="{{ route('connections.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Connections</a>
                     <a href="{{ route('profile.model.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Edit Profile</a>
+                    <a href="{{ route('connections.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Connections</a>
                     <a href="{{ route('photographers.browse') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Find a Photographer</a>
                     <a href="{{ route('portfolio.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Portfolio</a>
                     <a href="{{ route('portfolio.galleries.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Galleries</a>
@@ -279,11 +279,11 @@
                 @elseif($userType === 'photographer')
                     <a href="{{ route('dashboard') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Dashboard</a>
                     <a href="{{ $user->photographerProfile ? route('photographers.show', $user->profileRouteIdentifier()) : route('photographers.profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">My Profile</a>
-                    <a href="{{ route('connections.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Connections</a>
                     <a href="{{ route('models.browse') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Find a Model</a>
                     <a href="{{ route('portfolio.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">My Portfolio</a>
                     <a href="{{ route('notifications.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Notifications{{ $notificationCount > 0 ? ' (' . $notificationCount . ')' : '' }}</a>
                     <a href="{{ route('photographers.profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Edit Profile</a>
+                    <a href="{{ route('connections.index') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Connections</a>
                     <a href="{{ route('profile.edit') }}" class="block text-black hover:bg-gray-100 px-3 py-2 rounded-md text-base font-medium">Settings</a>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf

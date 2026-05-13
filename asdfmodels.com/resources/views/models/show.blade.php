@@ -1232,10 +1232,10 @@
                                         {{ $profile->location_city }}{{ $profile->location_city && $profile->location_country ? ', ' : '' }}{{ $profile->location_country }}
                                     </span>
                                 @endif
-                                @if($profile->age)
+                                @if($modelExperienceLabel)
                                     <span class="model-hero-meta-item">
-                                        <i class="fas fa-cake-candles"></i>
-                                        {{ $profile->age }} years old
+                                        <i class="fas fa-briefcase"></i>
+                                        {{ $modelExperienceLabel }}
                                     </span>
                                 @endif
                             </div>
@@ -1370,12 +1370,12 @@
                                 @endif
                             </div>
                             <div class="profile-bio-display {{ $profile->bio ? '' : 'profile-bio-empty' }}" data-profile-bio-display>{{ $profile->bio ?: 'Add a short bio so visitors understand your style, experience, and personality.' }}</div>
-                            @if($modelExperienceLabel || $profile->experience_start_year)
+                            @if($profile->age || $profile->experience_start_year)
                                 <div class="profile-about-details">
-                                    @if($modelExperienceLabel)
+                                    @if($profile->age)
                                         <div>
-                                            <p class="profile-about-detail-label">Experience</p>
-                                            <p class="profile-about-detail-value">{{ $modelExperienceLabel }}</p>
+                                            <p class="profile-about-detail-label">Age</p>
+                                            <p class="profile-about-detail-value">{{ $profile->age }} years old</p>
                                         </div>
                                     @endif
                                     @if($profile->experience_start_year)

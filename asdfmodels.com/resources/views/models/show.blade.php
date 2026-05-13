@@ -276,30 +276,49 @@
             }
 
             .model-hero-meta {
+                color: #4b5563;
                 display: flex;
                 flex-wrap: wrap;
-                gap: 8px;
+                font-size: 14px;
+                gap: 10px 18px;
                 margin-top: 10px;
             }
 
             .model-hero-meta-item {
                 align-items: center;
-                background: #f9fafb;
-                border: 1px solid #e5e7eb;
-                border-radius: 999px;
-                color: #4b5563;
                 display: inline-flex;
-                font-size: 13px;
-                font-weight: 650;
                 gap: 7px;
-                line-height: 1;
-                padding: 8px 11px;
                 white-space: nowrap;
             }
 
             .model-hero-meta-item i {
                 color: #6b7280;
                 font-size: 12px;
+            }
+
+            .profile-about-details {
+                border-top: 1px solid #e5e7eb;
+                display: grid;
+                gap: 18px;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                margin-top: 22px;
+                padding-top: 20px;
+            }
+
+            .profile-about-detail-label {
+                color: #6b7280;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: .16em;
+                margin: 0 0 7px;
+                text-transform: uppercase;
+            }
+
+            .profile-about-detail-value {
+                color: #111827;
+                font-size: 15px;
+                font-weight: 700;
+                margin: 0;
             }
 
             .model-hero-action-column {
@@ -1189,18 +1208,6 @@
                                         {{ $profile->age }} years old
                                     </span>
                                 @endif
-                                @if($modelExperienceLabel)
-                                    <span class="model-hero-meta-item">
-                                        <i class="fas fa-briefcase"></i>
-                                        {{ $modelExperienceLabel }}
-                                    </span>
-                                @endif
-                                @if($profile->experience_start_year)
-                                    <span class="model-hero-meta-item">
-                                        <i class="fas fa-calendar"></i>
-                                        Modelling since {{ $profile->experience_start_year }}
-                                    </span>
-                                @endif
                             </div>
                         </div>
 
@@ -1317,14 +1324,14 @@
 
             <div class="model-profile-layout">
                 <main class="model-profile-main">
-                    @if($profile->bio || $ownerCanManage)
+                    @if($profile->bio || $modelExperienceLabel || $profile->experience_start_year || $ownerCanManage)
                         <section class="model-profile-card profile-inline-section" data-profile-bio-section>
                             <div class="profile-inline-actions">
                                 <div class="flex items-center gap-3">
                                     <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-700">
                                         <i class="fas fa-quote-left"></i>
                                     </span>
-                                    <h2 class="text-xl font-semibold text-black">Bio</h2>
+                                    <h2 class="text-xl font-semibold text-black">About {{ $profile->display_name }}</h2>
                                 </div>
                                 @if($ownerCanManage)
                                     <button type="button" class="profile-icon-action" data-profile-bio-edit aria-label="Edit bio">
@@ -1333,6 +1340,22 @@
                                 @endif
                             </div>
                             <div class="profile-bio-display {{ $profile->bio ? '' : 'profile-bio-empty' }}" data-profile-bio-display>{{ $profile->bio ?: 'Add a short bio so visitors understand your style, experience, and personality.' }}</div>
+                            @if($modelExperienceLabel || $profile->experience_start_year)
+                                <div class="profile-about-details">
+                                    @if($modelExperienceLabel)
+                                        <div>
+                                            <p class="profile-about-detail-label">Experience</p>
+                                            <p class="profile-about-detail-value">{{ $modelExperienceLabel }}</p>
+                                        </div>
+                                    @endif
+                                    @if($profile->experience_start_year)
+                                        <div>
+                                            <p class="profile-about-detail-label">Modelling Since</p>
+                                            <p class="profile-about-detail-value">{{ $profile->experience_start_year }}</p>
+                                        </div>
+                                    @endif
+                                </div>
+                            @endif
                             @if($ownerCanManage)
                                 <form class="profile-inline-editor" data-profile-bio-form action="{{ route('profile.model.bio.update') }}">
                                     @csrf

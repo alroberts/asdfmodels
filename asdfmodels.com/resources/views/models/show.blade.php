@@ -790,6 +790,15 @@
                 position: relative;
             }
 
+            .model-connection-avatar::before {
+                bottom: 100%;
+                content: "";
+                height: 14px;
+                left: -18px;
+                position: absolute;
+                right: -18px;
+            }
+
             .model-connection-trigger {
                 align-items: center;
                 background: #f3f4f6;
@@ -821,7 +830,7 @@
                 bottom: calc(100% + 10px);
                 box-shadow: 0 18px 45px rgba(15, 23, 42, .18);
                 left: 50%;
-                min-width: 210px;
+                min-width: 240px;
                 opacity: 0;
                 padding: 12px;
                 pointer-events: none;
@@ -851,6 +860,27 @@
                 font-size: 12px;
                 font-weight: 600;
                 margin-top: 2px;
+            }
+
+            .model-connection-card-detail {
+                align-items: center;
+                color: #4b5563;
+                display: flex;
+                font-size: 12px;
+                gap: 7px;
+                line-height: 1.4;
+                margin-top: 8px;
+            }
+
+            .model-connection-card-detail i {
+                color: #9ca3af;
+                width: 13px;
+            }
+
+            .model-connection-card-detail-stack {
+                display: grid;
+                gap: 4px;
+                margin-top: 10px;
             }
 
             .model-connection-card-link {
@@ -1534,6 +1564,16 @@
                                                     $connectedName = $connectedProfile?->display_name ?: $connectedUser->display_name ?: $connectedUser->name;
                                                     $connectedPhoto = $connectedProfile?->profile_photo_path;
                                                     $connectedRole = $connectedUser->is_photographer ? 'Photographer' : 'Model';
+                                                    $connectedLocation = collect([
+                                                        $connectedProfile?->location_city,
+                                                        $connectedProfile?->location_country,
+                                                    ])->filter()->implode(', ');
+                                                    $connectedContext = $connectedUser->is_photographer
+                                                        ? ($connectedProfile?->experience_level ? ucfirst($connectedProfile->experience_level) . ' photographer' : null)
+                                                        : ($connectedProfile?->experience_level ? ucfirst($connectedProfile->experience_level) . ' model' : null);
+                                                    $connectedSince = $connectedProfile?->experience_start_year
+                                                        ? ($connectedUser->is_photographer ? 'Shooting since ' : 'Modelling since ') . $connectedProfile->experience_start_year
+                                                        : null;
                                                     $connectedRoute = $connectedUser->is_photographer
                                                         ? route('photographers.show', $connectedUser->profileRouteIdentifier())
                                                         : route('models.show', $connectedUser->profileRouteIdentifier());
@@ -1549,6 +1589,26 @@
                                                     <div class="model-connection-card">
                                                         <strong class="model-connection-card-name">{{ $connectedName }}</strong>
                                                         <span class="model-connection-card-meta">{{ $connectedRole }} · {{ '@' . $connectedUser->username }}</span>
+                                                        <div class="model-connection-card-detail-stack">
+                                                            @if($connectedLocation)
+                                                                <span class="model-connection-card-detail">
+                                                                    <i class="fas fa-location-dot"></i>
+                                                                    {{ $connectedLocation }}
+                                                                </span>
+                                                            @endif
+                                                            @if($connectedContext)
+                                                                <span class="model-connection-card-detail">
+                                                                    <i class="fas fa-briefcase"></i>
+                                                                    {{ $connectedContext }}
+                                                                </span>
+                                                            @endif
+                                                            @if($connectedSince)
+                                                                <span class="model-connection-card-detail">
+                                                                    <i class="fas fa-calendar"></i>
+                                                                    {{ $connectedSince }}
+                                                                </span>
+                                                            @endif
+                                                        </div>
                                                         <a href="{{ $connectedRoute }}" class="model-connection-card-link">
                                                             <span>View profile</span>
                                                             <i class="fas fa-arrow-right text-[10px]"></i>

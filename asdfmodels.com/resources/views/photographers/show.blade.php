@@ -340,41 +340,121 @@
                 padding: 9px 12px;
             }
 
-            .connection-card-grid {
-                display: grid;
-                gap: 12px;
-                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-            }
-
-            .connection-card {
-                align-items: center;
-                border: 1px solid #e5e7eb;
-                border-radius: 16px;
-                color: inherit;
+            .profile-connections-strip {
                 display: flex;
-                gap: 12px;
-                padding: 12px;
-                text-decoration: none;
+                flex-wrap: wrap;
+                gap: 10px;
             }
 
-            .connection-card-avatar {
+            .profile-connection-avatar {
+                position: relative;
+            }
+
+            .profile-connection-avatar::before {
+                bottom: 100%;
+                content: "";
+                height: 14px;
+                left: -18px;
+                position: absolute;
+                right: -18px;
+            }
+
+            .profile-connection-trigger {
                 align-items: center;
                 background: #f3f4f6;
+                border: 2px solid #fff;
                 border-radius: 999px;
-                color: #6b7280;
+                box-shadow: 0 1px 4px rgba(15, 23, 42, .12);
+                color: #4b5563;
                 display: flex;
-                flex: 0 0 auto;
-                font-weight: 850;
-                height: 44px;
+                font-size: 13px;
+                font-weight: 800;
+                height: 46px;
                 justify-content: center;
                 overflow: hidden;
-                width: 44px;
+                text-decoration: none;
+                width: 46px;
             }
 
-            .connection-card-avatar img {
+            .profile-connection-trigger img {
+                display: block;
                 height: 100%;
                 object-fit: cover;
                 width: 100%;
+            }
+
+            .profile-connection-card {
+                background: #fff;
+                border: 1px solid #e5e7eb;
+                border-radius: 16px;
+                bottom: calc(100% + 10px);
+                box-shadow: 0 18px 45px rgba(15, 23, 42, .18);
+                left: 50%;
+                min-width: 240px;
+                opacity: 0;
+                padding: 12px;
+                pointer-events: none;
+                position: absolute;
+                transform: translateX(-50%) translateY(6px);
+                transition: opacity .16s ease, transform .16s ease;
+                z-index: 60;
+            }
+
+            .profile-connection-avatar:hover .profile-connection-card,
+            .profile-connection-avatar:focus-within .profile-connection-card {
+                opacity: 1;
+                pointer-events: auto;
+                transform: translateX(-50%) translateY(0);
+            }
+
+            .profile-connection-card-name {
+                color: #111827;
+                display: block;
+                font-size: 14px;
+                font-weight: 800;
+            }
+
+            .profile-connection-card-meta {
+                color: #6b7280;
+                display: block;
+                font-size: 12px;
+                font-weight: 600;
+                margin-top: 2px;
+            }
+
+            .profile-connection-card-detail {
+                align-items: center;
+                color: #4b5563;
+                display: flex;
+                font-size: 12px;
+                gap: 7px;
+                line-height: 1.4;
+                margin-top: 8px;
+            }
+
+            .profile-connection-card-detail i {
+                color: #9ca3af;
+                width: 13px;
+            }
+
+            .profile-connection-card-detail-stack {
+                display: grid;
+                gap: 4px;
+                margin-top: 10px;
+            }
+
+            .profile-connection-card-link {
+                align-items: center;
+                background: #050505;
+                border-radius: 999px;
+                color: #fff;
+                display: inline-flex;
+                font-size: 12px;
+                font-weight: 700;
+                gap: 6px;
+                margin-top: 10px;
+                padding: 8px 10px;
+                text-decoration: none;
             }
 
             .photographer-edit {
@@ -1445,48 +1525,6 @@
                 <article class="photographer-card">
                     <div class="photographer-card-header">
                         <div>
-                            <p class="photographer-kicker">Network</p>
-                            <h2 class="photographer-heading">Connections</h2>
-                        </div>
-                        <i class="fas fa-user-group photographer-muted-icon"></i>
-                    </div>
-                    @if(($connections ?? collect())->isNotEmpty())
-                        @foreach($connections as $roleLabel => $roleConnections)
-                            <h3 style="font-size:14px;font-weight:850;margin:18px 0 10px;">{{ $roleLabel }}</h3>
-                            <div class="connection-card-grid">
-                                @foreach($roleConnections as $connectedUser)
-                                    @php
-                                        $connectedProfile = $connectedUser->is_photographer ? $connectedUser->photographerProfile : $connectedUser->modelProfile;
-                                        $connectedName = $connectedProfile?->display_name ?: $connectedUser->display_name ?: $connectedUser->name;
-                                        $connectedPhoto = $connectedProfile?->profile_photo_path;
-                                        $connectedRoute = $connectedUser->is_photographer
-                                            ? route('photographers.show', $connectedUser->profileRouteIdentifier())
-                                            : route('models.show', $connectedUser->profileRouteIdentifier());
-                                    @endphp
-                                    <a href="{{ $connectedRoute }}" class="connection-card">
-                                        <span class="connection-card-avatar">
-                                            @if($connectedPhoto)
-                                                <img src="{{ asset($connectedPhoto) }}" alt="">
-                                            @else
-                                                {{ mb_substr($connectedName, 0, 1) }}
-                                            @endif
-                                        </span>
-                                        <span>
-                                            <strong style="display:block;font-size:14px;">{{ $connectedName }}</strong>
-                                            <small style="color:#6b7280;font-weight:700;">{{ '@' . $connectedUser->username }}</small>
-                                        </span>
-                                    </a>
-                                @endforeach
-                            </div>
-                        @endforeach
-                    @else
-                        <p class="photographer-copy">No public connections yet.</p>
-                    @endif
-                </article>
-
-                <article class="photographer-card">
-                    <div class="photographer-card-header">
-                        <div>
                             <p class="photographer-kicker">Portfolio</p>
                             <h2 class="photographer-heading">Galleries</h2>
                         </div>
@@ -1622,6 +1660,87 @@
             </section>
 
             <aside class="photographer-side">
+                <section class="photographer-card">
+                    <div class="photographer-card-header">
+                        <div>
+                            <p class="photographer-kicker">Network</p>
+                            <h2 class="photographer-heading">Connections</h2>
+                        </div>
+                        <i class="fas fa-user-group photographer-muted-icon"></i>
+                    </div>
+                    @if(($connections ?? collect())->isNotEmpty())
+                        <div style="display:grid;gap:20px;">
+                            @foreach($connections as $roleLabel => $roleConnections)
+                                <div>
+                                    <h3 style="font-size:14px;font-weight:850;margin:0 0 12px;">{{ $roleLabel }}</h3>
+                                    <div class="profile-connections-strip">
+                                        @foreach($roleConnections as $connectedUser)
+                                            @php
+                                                $connectedProfile = $connectedUser->is_photographer ? $connectedUser->photographerProfile : $connectedUser->modelProfile;
+                                                $connectedName = $connectedProfile?->display_name ?: $connectedUser->display_name ?: $connectedUser->name;
+                                                $connectedPhoto = $connectedProfile?->profile_photo_path;
+                                                $connectedRole = $connectedUser->is_photographer ? 'Photographer' : 'Model';
+                                                $connectedLocation = collect([
+                                                    $connectedProfile?->location_city,
+                                                    $connectedProfile?->location_country,
+                                                ])->filter()->implode(', ');
+                                                $connectedContext = $connectedUser->is_photographer
+                                                    ? ($connectedProfile?->experience_level ? ucfirst($connectedProfile->experience_level) . ' photographer' : null)
+                                                    : ($connectedProfile?->experience_level ? ucfirst($connectedProfile->experience_level) . ' model' : null);
+                                                $connectedSince = $connectedProfile?->experience_start_year
+                                                    ? ($connectedUser->is_photographer ? 'Shooting since ' : 'Modelling since ') . $connectedProfile->experience_start_year
+                                                    : null;
+                                                $connectedRoute = $connectedUser->is_photographer
+                                                    ? route('photographers.show', $connectedUser->profileRouteIdentifier())
+                                                    : route('models.show', $connectedUser->profileRouteIdentifier());
+                                            @endphp
+                                            <div class="profile-connection-avatar">
+                                                <a href="{{ $connectedRoute }}" class="profile-connection-trigger" aria-label="Open {{ $connectedName }} profile">
+                                                    @if($connectedPhoto)
+                                                        <img src="{{ asset($connectedPhoto) }}" alt="">
+                                                    @else
+                                                        {{ mb_substr($connectedName, 0, 1) }}
+                                                    @endif
+                                                </a>
+                                                <div class="profile-connection-card">
+                                                    <strong class="profile-connection-card-name">{{ $connectedName }}</strong>
+                                                    <span class="profile-connection-card-meta">{{ $connectedRole }} · {{ '@' . $connectedUser->username }}</span>
+                                                    <div class="profile-connection-card-detail-stack">
+                                                        @if($connectedLocation)
+                                                            <span class="profile-connection-card-detail">
+                                                                <i class="fas fa-location-dot"></i>
+                                                                {{ $connectedLocation }}
+                                                            </span>
+                                                        @endif
+                                                        @if($connectedContext)
+                                                            <span class="profile-connection-card-detail">
+                                                                <i class="fas fa-briefcase"></i>
+                                                                {{ $connectedContext }}
+                                                            </span>
+                                                        @endif
+                                                        @if($connectedSince)
+                                                            <span class="profile-connection-card-detail">
+                                                                <i class="fas fa-calendar"></i>
+                                                                {{ $connectedSince }}
+                                                            </span>
+                                                        @endif
+                                                    </div>
+                                                    <a href="{{ $connectedRoute }}" class="profile-connection-card-link">
+                                                        <span>View profile</span>
+                                                        <i class="fas fa-arrow-right" style="font-size:10px;"></i>
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @else
+                        <p class="photographer-copy" style="font-size:14px;">No public connections yet.</p>
+                    @endif
+                </section>
+
                 @if($briefItems->isNotEmpty() || $ownerCanManage)
                     <section class="photographer-brief-card">
                         <div class="photographer-brief-header">

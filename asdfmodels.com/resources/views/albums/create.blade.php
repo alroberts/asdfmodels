@@ -8,6 +8,6 @@
     'formAction' => route('portfolio.galleries.store'),
     'introText' => 'Create a new gallery to organise your portfolio images.',
     'settingsIntro' => 'Configure visibility, content settings, and publication status.',
-    'submitLabel' => 'Create and Add Images',
+    'submitLabel' => 'Create Gallery',
     'submitIcon' => 'fa-images',
 ])

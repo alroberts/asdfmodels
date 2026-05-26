@@ -10,6 +10,8 @@
         ? optional($coverImages->firstWhere('full_path', $record?->cover_image_path))->id
         : null;
     $coverValue = old('cover_image_id', $isPhotographer ? $selectedPhotographerCover : $record?->cover_image_id);
+    $showInlineUploader = !$isEditing;
+    $galleryUploadField = $isPhotographer ? 'gallery_id' : 'album_id';
 @endphp
 
 <x-app-layout>
@@ -26,7 +28,17 @@
 
     <div class="py-6 md:py-12">
         <div class="max-w-5xl mx-auto sm:px-6 lg:px-8">
-            <form method="POST" action="{{ $formAction }}" x-data="{ visibility: '{{ old('visibility', $record?->visibility ?? 'public') }}', status: '{{ old('status', $record?->status ?? 'draft') }}', containsNudity: {{ old('contains_nudity', ($record?->contains_nudity ? '1' : '0')) == '1' ? 'true' : 'false' }}, isPublic: {{ old('is_public', $record?->is_public ?? true) ? 'true' : 'false' }} }">
+            <form
+                method="POST"
+                action="{{ $formAction }}"
+                x-data="{ visibility: '{{ old('visibility', $record?->visibility ?? 'public') }}', status: '{{ old('status', $record?->status ?? 'draft') }}', containsNudity: {{ old('contains_nudity', ($record?->contains_nudity ? '1' : '0')) == '1' ? 'true' : 'false' }}, isPublic: {{ old('is_public', $record?->is_public ?? true) ? 'true' : 'false' }} }"
+                @if($showInlineUploader)
+                    data-gallery-create-form
+                    data-upload-url="{{ route('portfolio.store') }}"
+                    data-gallery-field="{{ $galleryUploadField }}"
+                    data-role="{{ $role }}"
+                @endif
+            >
                 @csrf
                 @if($isEditing)
                     @method('PATCH')
@@ -65,6 +77,38 @@
                             >{{ $descriptionValue }}</textarea>
                             <x-input-error :messages="$errors->get('description')" class="mt-2" />
                         </div>
+
+                        @if($showInlineUploader)
+                            <div class="border-t border-gray-200 pt-8">
+                                <div class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                                    <div>
+                                        <h3 class="text-xl font-bold text-gray-900">Gallery Images</h3>
+                                        <p class="text-sm text-gray-600 mt-1">Add images now, or create the gallery empty and upload later.</p>
+                                    </div>
+                                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400" data-create-upload-summary>Optional</p>
+                                </div>
+
+                                <div
+                                    class="rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-center transition-colours hover:border-gray-500 hover:bg-white"
+                                    data-create-upload-zone
+                                    role="button"
+                                    tabindex="0"
+                                >
+                                    <input type="file" accept="image/jpeg,image/jpg,image/png" multiple class="sr-only" data-create-upload-input>
+                                    <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-gray-400 shadow-sm">
+                                        <i class="fas fa-cloud-arrow-up text-2xl"></i>
+                                    </div>
+                                    <p class="mt-4 text-base font-semibold text-gray-900">Drag images here or click to browse</p>
+                                    <p class="mt-1 text-sm text-gray-500">JPG or PNG, up to 10MB each. Upload starts after the gallery is created.</p>
+                                </div>
+
+                                <div class="mt-4 hidden rounded-xl border border-gray-200 bg-white p-4 shadow-sm" data-create-upload-previews-wrapper>
+                                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" data-create-upload-previews></div>
+                                </div>
+
+                                <p class="mt-3 hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700" data-create-upload-error></p>
+                            </div>
+                        @endif
 
                         @if($isEditing && $coverImages->count() > 0)
                             <div class="space-y-2">
@@ -218,14 +262,231 @@
                         </a>
                         <button
                             type="submit"
+                            data-gallery-create-submit
                             class="px-6 py-2.5 bg-gray-900 text-white rounded-lg font-semibold hover:bg-gray-800 active:bg-gray-950 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2"
                         >
                             <i class="fas {{ $submitIcon }}"></i>
-                            {{ $submitLabel }}
+                            <span data-gallery-create-submit-text>{{ $submitLabel }}</span>
                         </button>
                     </div>
                 </div>
             </form>
         </div>
     </div>
+
+    @if($showInlineUploader)
+        @push('scripts')
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    const form = document.querySelector('[data-gallery-create-form]');
+                    if (!form) return;
+
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                    const uploadUrl = form.dataset.uploadUrl;
+                    const galleryField = form.dataset.galleryField;
+                    const role = form.dataset.role;
+                    const uploadZone = form.querySelector('[data-create-upload-zone]');
+                    const uploadInput = form.querySelector('[data-create-upload-input]');
+                    const previewsWrapper = form.querySelector('[data-create-upload-previews-wrapper]');
+                    const previewsContainer = form.querySelector('[data-create-upload-previews]');
+                    const summary = form.querySelector('[data-create-upload-summary]');
+                    const errorBox = form.querySelector('[data-create-upload-error]');
+                    const submitButton = form.querySelector('[data-gallery-create-submit]');
+                    const submitText = form.querySelector('[data-gallery-create-submit-text]');
+                    const selectedFiles = [];
+
+                    const showError = (message) => {
+                        if (!errorBox) return;
+                        errorBox.textContent = message;
+                        errorBox.classList.toggle('hidden', !message);
+                    };
+
+                    const setBusy = (busy, label = null) => {
+                        if (submitButton) submitButton.disabled = busy;
+                        if (submitButton) submitButton.classList.toggle('opacity-60', busy);
+                        if (submitButton) submitButton.classList.toggle('cursor-wait', busy);
+                        if (submitText && label) submitText.textContent = label;
+                    };
+
+                    const updateSummary = () => {
+                        if (!summary) return;
+                        summary.textContent = selectedFiles.length
+                            ? `${selectedFiles.length} ${selectedFiles.length === 1 ? 'image' : 'images'} ready`
+                            : 'Optional';
+                    };
+
+                    const renderPreviews = () => {
+                        if (!previewsContainer || !previewsWrapper) return;
+                        previewsContainer.innerHTML = '';
+                        previewsWrapper.classList.toggle('hidden', selectedFiles.length === 0);
+
+                        selectedFiles.forEach((file, index) => {
+                            const previewUrl = URL.createObjectURL(file);
+                            const card = document.createElement('div');
+                            card.className = 'overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm';
+                            card.dataset.uploadIndex = String(index);
+                            card.innerHTML = `
+                                <div class="flex gap-4 p-3">
+                                    <div class="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                                        <img src="${previewUrl}" alt="" class="h-full w-full object-cover">
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-start justify-between gap-3">
+                                            <div class="min-w-0">
+                                                <p class="truncate text-sm font-semibold text-gray-900"></p>
+                                                <p class="mt-1 text-xs text-gray-500"></p>
+                                            </div>
+                                            <button type="button" class="text-gray-400 transition hover:text-red-600" data-remove-upload title="Remove upload">
+                                                <i class="fas fa-times text-xs"></i>
+                                            </button>
+                                        </div>
+                                        <div class="mt-3">
+                                            <div class="h-2 overflow-hidden rounded-full bg-gray-100">
+                                                <div class="h-full w-0 rounded-full bg-gray-900 transition-all duration-300" data-progress-bar></div>
+                                            </div>
+                                            <span class="mt-2 block text-xs font-medium text-gray-500" data-upload-status>Ready</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            card.querySelector('p').textContent = file.name;
+                            card.querySelectorAll('p')[1].textContent = `${(file.size / 1024 / 1024).toFixed(1)} MB`;
+                            card.querySelector('[data-remove-upload]').addEventListener('click', () => {
+                                selectedFiles.splice(index, 1);
+                                renderPreviews();
+                                updateSummary();
+                            });
+                            previewsContainer.appendChild(card);
+                            card.querySelector('img')?.addEventListener('load', () => URL.revokeObjectURL(previewUrl), { once: true });
+                        });
+                    };
+
+                    const addFiles = (files) => {
+                        showError('');
+                        Array.from(files).forEach((file) => {
+                            if (!['image/jpeg', 'image/jpg', 'image/png'].includes(file.type)) return;
+                            if (file.size > 10 * 1024 * 1024) return;
+                            selectedFiles.push(file);
+                        });
+                        renderPreviews();
+                        updateSummary();
+                    };
+
+                    uploadZone?.addEventListener('click', () => uploadInput?.click());
+                    uploadZone?.addEventListener('keydown', (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            uploadInput?.click();
+                        }
+                    });
+                    uploadZone?.addEventListener('dragover', (event) => {
+                        event.preventDefault();
+                        uploadZone.classList.add('border-gray-800', 'bg-white');
+                    });
+                    uploadZone?.addEventListener('dragleave', () => {
+                        uploadZone.classList.remove('border-gray-800', 'bg-white');
+                    });
+                    uploadZone?.addEventListener('drop', (event) => {
+                        event.preventDefault();
+                        uploadZone.classList.remove('border-gray-800', 'bg-white');
+                        addFiles(event.dataTransfer.files);
+                    });
+                    uploadInput?.addEventListener('change', () => {
+                        addFiles(uploadInput.files);
+                        uploadInput.value = '';
+                    });
+
+                    const updateProgress = (fileIndex, progress, status) => {
+                        const card = previewsContainer?.querySelector(`[data-upload-index="${fileIndex}"]`);
+                        if (!card) return;
+                        card.querySelector('[data-progress-bar]').style.width = `${progress}%`;
+                        card.querySelector('[data-upload-status]').textContent = status;
+                    };
+
+                    const uploadFile = (file, fileIndex, galleryId) => new Promise((resolve, reject) => {
+                        const formData = new FormData();
+                        formData.append('images[]', file);
+                        formData.append(galleryField, galleryId);
+                        formData.append('is_public', '1');
+                        formData.append('is_featured', '0');
+                        formData.append('contains_nudity', form.querySelector('[name="contains_nudity"]')?.checked ? '1' : '0');
+                        if (role === 'model') {
+                            formData.append('is_polaroid', '0');
+                        }
+
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('POST', uploadUrl);
+                        xhr.setRequestHeader('X-CSRF-TOKEN', csrfToken);
+                        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                        xhr.setRequestHeader('Accept', 'application/json');
+                        xhr.upload.addEventListener('progress', (event) => {
+                            if (event.lengthComputable) {
+                                updateProgress(fileIndex, Math.round((event.loaded / event.total) * 100), `Uploading ${Math.round((event.loaded / event.total) * 100)}%`);
+                            }
+                        });
+                        xhr.onload = () => {
+                            if (xhr.status >= 200 && xhr.status < 300) {
+                                updateProgress(fileIndex, 100, 'Uploaded');
+                                resolve();
+                                return;
+                            }
+
+                            updateProgress(fileIndex, 100, 'Upload failed');
+                            reject(new Error('One or more images failed to upload.'));
+                        };
+                        xhr.onerror = () => {
+                            updateProgress(fileIndex, 100, 'Upload failed');
+                            reject(new Error('One or more images failed to upload.'));
+                        };
+                        updateProgress(fileIndex, 5, 'Uploading...');
+                        xhr.send(formData);
+                    });
+
+                    const uploadFiles = async (galleryId) => {
+                        let cursor = 0;
+                        const workers = Array.from({ length: Math.min(3, selectedFiles.length) }, async () => {
+                            while (cursor < selectedFiles.length) {
+                                const index = cursor++;
+                                await uploadFile(selectedFiles[index], index, galleryId);
+                            }
+                        });
+                        await Promise.all(workers);
+                    };
+
+                    form.addEventListener('submit', async (event) => {
+                        if (selectedFiles.length === 0) return;
+
+                        event.preventDefault();
+                        showError('');
+                        setBusy(true, 'Creating gallery...');
+
+                        try {
+                            const createData = new FormData(form);
+                            const createResponse = await fetch(form.action, {
+                                method: 'POST',
+                                body: createData,
+                                headers: {
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Accept': 'application/json',
+                                },
+                            });
+
+                            const createPayload = await createResponse.json();
+                            if (!createResponse.ok || !createPayload.gallery_id) {
+                                throw new Error(createPayload.message || 'Gallery could not be created.');
+                            }
+
+                            setBusy(true, `Uploading ${selectedFiles.length} ${selectedFiles.length === 1 ? 'image' : 'images'}...`);
+                            await uploadFiles(createPayload.gallery_id);
+                            window.asdfSound?.play('done');
+                            window.location.href = createPayload.redirect_url;
+                        } catch (error) {
+                            showError(error.message || 'Something went wrong while creating the gallery.');
+                            setBusy(false, @json($submitLabel));
+                        }
+                    });
+                });
+            </script>
+        @endpush
+    @endif
 </x-app-layout>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PhotographerPortfolioImage;
 use App\Models\PortfolioAlbum;
 use App\Models\PortfolioCredit;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -29,7 +30,7 @@ class PhotographerGalleryController extends Controller
     /**
      * Store a newly created gallery.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse|JsonResponse
     {
         $user = Auth::user();
         
@@ -65,7 +66,16 @@ class PhotographerGalleryController extends Controller
             'is_public' => $validated['visibility'] === 'public',
         ]);
 
-        return redirect()->route('portfolio.galleries.show', ['id' => $gallery->id, 'upload' => 1])
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Gallery created.',
+                'gallery_id' => $gallery->id,
+                'redirect_url' => route('portfolio.galleries.show', $gallery->id),
+            ]);
+        }
+
+        return redirect()->route('portfolio.galleries.show', $gallery->id)
             ->with('status', 'Gallery created. You can add images below.');
     }
 

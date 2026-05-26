@@ -250,11 +250,6 @@ class PortfolioImageController extends Controller
             $album->update(['cover_image_id' => $firstUploadedImage->id]);
         }
 
-        if (!empty($validated['album_id'])) {
-            return redirect()->route('portfolio.galleries.show', $validated['album_id'])
-                ->with('status', "Successfully uploaded {$uploadedCount} image(s) to your gallery.");
-        }
-
         if ($request->wantsJson() || $request->expectsJson()) {
             $uploadedImages = PortfolioImage::where('model_id', $user->id)
                 ->latest('id')
@@ -273,6 +268,11 @@ class PortfolioImageController extends Controller
                 'count' => $uploadedCount,
                 'images' => $uploadedImages,
             ]);
+        }
+
+        if (!empty($validated['album_id'])) {
+            return redirect()->route('portfolio.galleries.show', $validated['album_id'])
+                ->with('status', "Successfully uploaded {$uploadedCount} image(s) to your gallery.");
         }
 
         return redirect()->route('portfolio.index')

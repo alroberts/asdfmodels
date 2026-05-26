@@ -328,6 +328,7 @@
             isSending: false,
             statusText: 'Messenger',
             error: '',
+            indexUrl: config.indexUrl || '#',
             threadId: null,
             threadUrl: '',
             recipient: {},

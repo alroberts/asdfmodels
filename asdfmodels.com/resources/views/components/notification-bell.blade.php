@@ -463,6 +463,7 @@
     window.asdfNotificationBell = window.asdfNotificationBell || function asdfNotificationBell(config) {
         return {
             count: Number(config.count || 0),
+            notificationsUrl: config.notificationsUrl || '#',
             previousCount: Number(config.count || 0),
             open: false,
             loading: false,

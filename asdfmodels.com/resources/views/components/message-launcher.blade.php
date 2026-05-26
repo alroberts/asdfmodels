@@ -291,6 +291,7 @@
     window.asdfMessageLauncher = window.asdfMessageLauncher || function asdfMessageLauncher(config) {
         return {
             count: Number(config.count || 0),
+            indexUrl: config.indexUrl || '#',
             open: false,
             loading: false,
             threads: [],

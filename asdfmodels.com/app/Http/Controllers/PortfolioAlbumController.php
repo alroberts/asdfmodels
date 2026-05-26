@@ -227,7 +227,7 @@ class PortfolioAlbumController extends Controller
     /**
      * Update the specified gallery.
      */
-    public function update(Request $request, string $id): RedirectResponse
+    public function update(Request $request, string $id): RedirectResponse|JsonResponse
     {
         $album = PortfolioAlbum::findOrFail($id);
         $user = Auth::user();
@@ -255,10 +255,9 @@ class PortfolioAlbumController extends Controller
             }
         }
 
-        $album->update([
+        $updateData = [
             'name' => $validated['title'],
             'description' => $validated['description'] ?? null,
-            'cover_image_id' => $validated['cover_image_id'] ?? null,
             'contains_nudity' => $request->boolean('contains_nudity', false),
             'visibility' => $validated['visibility'],
             'status' => $validated['status'],
@@ -266,7 +265,27 @@ class PortfolioAlbumController extends Controller
                 ? $validated['custom_visibility_users']
                 : null,
             'is_public' => $validated['visibility'] === 'public',
-        ]);
+        ];
+
+        if ($request->has('cover_image_id')) {
+            $updateData['cover_image_id'] = $validated['cover_image_id'] ?? null;
+        }
+
+        $album->update($updateData);
+
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Gallery settings updated.',
+                'gallery' => [
+                    'title' => $album->name,
+                    'description' => $album->description,
+                    'visibility' => $album->visibility,
+                    'status' => $album->status,
+                    'contains_nudity' => $album->contains_nudity,
+                ],
+            ]);
+        }
 
         return redirect()->route('portfolio.galleries.show', $album->id)
             ->with('status', 'Gallery updated successfully.');

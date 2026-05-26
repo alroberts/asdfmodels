@@ -160,7 +160,7 @@ class PhotographerGalleryController extends Controller
     /**
      * Update the specified gallery.
      */
-    public function update(Request $request, string $id): RedirectResponse
+    public function update(Request $request, string $id): RedirectResponse|JsonResponse
     {
         $user = Auth::user();
         
@@ -187,10 +187,9 @@ class PhotographerGalleryController extends Controller
                 ->findOrFail($validated['cover_image_id']);
         }
 
-        $gallery->update([
+        $updateData = [
             'name' => $validated['title'],
             'description' => $validated['description'] ?? null,
-            'cover_image_path' => !empty($validated['cover_image_id']) ? $coverImage->full_path : null,
             'contains_nudity' => isset($validated['contains_nudity']) && $validated['contains_nudity'] == '1',
             'visibility' => $validated['visibility'],
             'status' => $validated['status'],
@@ -198,9 +197,29 @@ class PhotographerGalleryController extends Controller
                 ? $validated['custom_visibility_users'] 
                 : null,
             'is_public' => $validated['visibility'] === 'public',
-        ]);
+        ];
 
-        return redirect()->route('portfolio.galleries.index')
+        if ($request->has('cover_image_id')) {
+            $updateData['cover_image_path'] = !empty($validated['cover_image_id']) ? $coverImage->full_path : null;
+        }
+
+        $gallery->update($updateData);
+
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Gallery settings updated.',
+                'gallery' => [
+                    'title' => $gallery->name,
+                    'description' => $gallery->description,
+                    'visibility' => $gallery->visibility,
+                    'status' => $gallery->status,
+                    'contains_nudity' => $gallery->contains_nudity,
+                ],
+            ]);
+        }
+
+        return redirect()->route('portfolio.galleries.show', $gallery->id)
             ->with('status', 'Gallery updated successfully!');
     }
 

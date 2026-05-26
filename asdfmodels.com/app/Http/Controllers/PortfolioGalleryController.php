@@ -55,7 +55,7 @@ class PortfolioGalleryController extends Controller
         return app(PortfolioAlbumController::class)->edit($id);
     }
 
-    public function update(Request $request, string $id): RedirectResponse
+    public function update(Request $request, string $id): RedirectResponse|JsonResponse
     {
         if (Auth::user()->is_photographer) {
             return app(PhotographerGalleryController::class)->update($request, $id);

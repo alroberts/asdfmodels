@@ -20,7 +20,7 @@
             <div class="flex flex-col gap-2">
                 <div class="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-3 lg:gap-y-2">
                     <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                        {{ $galleryTitle }}
+                        <span data-gallery-title-text>{{ $galleryTitle }}</span>
                     </h2>
                     <span class="hidden text-gray-300 lg:inline">|</span>
                     <span class="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700">
@@ -30,17 +30,15 @@
                     <span class="hidden text-gray-300 lg:inline">|</span>
                     <span class="inline-flex items-center gap-1.5 text-sm font-medium text-blue-800">
                         <i class="fas fa-eye text-xs text-blue-600"></i>
-                        <span>{{ $visibilityLabel }}</span>
+                        <span data-gallery-visibility-text>{{ $visibilityLabel }}</span>
                     </span>
                     <span class="hidden text-gray-300 lg:inline">|</span>
                     <span class="inline-flex items-center gap-1.5 text-sm font-medium {{ $gallery->contains_nudity ? 'text-amber-800' : 'text-emerald-800' }}">
                         <i class="fas {{ $gallery->contains_nudity ? 'fa-triangle-exclamation text-amber-600' : 'fa-shield-heart text-emerald-600' }} text-xs"></i>
-                        <span>{{ $statusLabel }}</span>
+                        <span data-gallery-rating-text>{{ $statusLabel }}</span>
                     </span>
                 </div>
-                @if($gallery->description)
-                    <p class="max-w-4xl text-sm leading-6 text-gray-600">{{ $gallery->description }}</p>
-                @endif
+                <p class="max-w-4xl text-sm leading-6 text-gray-600 {{ $gallery->description ? '' : 'hidden' }}" data-gallery-description-text>{{ $gallery->description }}</p>
             </div>
             <a href="{{ route('portfolio.index') }}" class="inline-flex items-center gap-2 text-sm font-medium text-gray-500 transition-colors hover:text-gray-900">
                 <i class="fas fa-arrow-left text-xs"></i>
@@ -58,6 +56,27 @@
             @if(request()->boolean('upload') && $ownerCanManage)
                 <div class="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
                     Gallery created. Add images below to start building it out.
+                </div>
+            @endif
+
+            @if($ownerCanManage && $gallery->images->count() === 0)
+                <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
+                    <button type="button" onclick="openGallerySettingsModal()" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:border-gray-400 hover:bg-gray-50">
+                        <i class="fas fa-pen-to-square text-sm"></i>
+                        <span>Edit Gallery</span>
+                    </button>
+                    <button type="button" onclick="openCreditsModal()" class="gallery-credit-button">
+                        <i class="fas fa-user-tag"></i>
+                        <span>Credits</span>
+                    </button>
+                    <form method="POST" action="{{ route('portfolio.galleries.destroy', $gallery->id) }}" onsubmit="return confirm('Delete this gallery? Images will remain in your portfolio, but they will be removed from this gallery.');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:border-red-300 hover:bg-red-100">
+                            <i class="fas fa-trash text-sm"></i>
+                            <span>Delete Gallery</span>
+                        </button>
+                    </form>
                 </div>
             @endif
 
@@ -80,10 +99,10 @@
                                 <i class="fas" :class="isReorderMode ? 'fa-check' : 'fa-grip-vertical'"></i>
                                 <span x-text="isReorderMode ? 'Done Rearranging' : 'Re-Arrange'"></span>
                             </button>
-                            <a href="{{ route('portfolio.galleries.edit', $gallery->id) }}" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:border-gray-400 hover:bg-gray-50">
+                            <button type="button" onclick="openGallerySettingsModal()" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:border-gray-400 hover:bg-gray-50">
                                 <i class="fas fa-pen-to-square text-sm"></i>
                                 <span>Edit Gallery</span>
-                            </a>
+                            </button>
                             <button type="button" onclick="openCreditsModal()" class="gallery-credit-button">
                                 <i class="fas fa-user-tag"></i>
                                 <span>Credits</span>
@@ -100,8 +119,39 @@
                     @endif
                 </div>
 
+                @if($ownerCanManage)
+                    <div class="mb-4 flex flex-col gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Order</span>
+                            <button type="button" @click="sortByDate('asc')" class="gallery-tool-button" :class="{ 'is-active': sortOrder === 'asc' }">
+                                <i class="fas fa-arrow-up-1-9"></i>
+                                <span>Oldest first</span>
+                            </button>
+                            <button type="button" @click="sortByDate('desc')" class="gallery-tool-button" :class="{ 'is-active': sortOrder === 'desc' }">
+                                <i class="fas fa-arrow-down-9-1"></i>
+                                <span>Newest first</span>
+                            </button>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" @click="toggleBulkDeleteMode()" class="gallery-tool-button" :class="{ 'is-danger-active': isBulkDeleteMode }">
+                                <i class="fas" :class="isBulkDeleteMode ? 'fa-xmark' : 'fa-check-double'"></i>
+                                <span x-text="isBulkDeleteMode ? 'Cancel Selection' : 'Bulk Delete'"></span>
+                            </button>
+                            <template x-if="isBulkDeleteMode">
+                                <button type="button" @click="deleteSelectedImages()" class="gallery-tool-button is-danger" :disabled="selectedImageIds.length === 0" :class="{ 'is-disabled': selectedImageIds.length === 0 }">
+                                    <i class="fas fa-trash"></i>
+                                    <span>Delete <span x-text="selectedImageIds.length"></span></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                @endif
+
                 <div x-show="isReorderMode" x-cloak class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     Rearranging is on. Drag images into the order you want, then press <span class="font-semibold">Done Rearranging</span>.
+                </div>
+                <div x-show="isBulkDeleteMode" x-cloak class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+                    Select one or more images to delete. This permanently removes the selected image files.
                 </div>
 
                 <div class="justified-grid relative" id="gallery-images-grid" x-ref="gridContainer">
@@ -113,8 +163,15 @@
                         @endphp
                         <div
                             class="relative overflow-hidden rounded-lg border-2 border-gray-200 hover:border-gray-800 transition-all group sortable-item justified-image-item"
-                            :class="isReorderMode ? 'cursor-move ring-2 ring-amber-300 ring-offset-2' : 'cursor-default'"
+                            :class="{
+                                'cursor-move ring-2 ring-amber-300 ring-offset-2': isReorderMode,
+                                'cursor-pointer': isBulkDeleteMode,
+                                'ring-4 ring-red-300 ring-offset-2 border-red-400': selectedImageIds.includes({{ $image->id }}),
+                                'cursor-default': !isReorderMode && !isBulkDeleteMode
+                            }"
                             data-image-id="{{ $image->id }}"
+                            data-created-at="{{ optional($image->created_at)->timestamp ?? 0 }}"
+                            @click="toggleImageSelection({{ $image->id }})"
                         >
                             <img src="{{ asset($image->full_path ?? $image->thumbnail_path) }}"
                                  alt="{{ $image->title ?? 'Image' }}"
@@ -123,6 +180,17 @@
                                  data-aspect-ratio="1">
 
                             @if($ownerCanManage)
+                                <button
+                                    type="button"
+                                    x-show="isBulkDeleteMode"
+                                    x-cloak
+                                    @click.stop="toggleImageSelection({{ $image->id }})"
+                                    class="absolute top-2 left-2 z-20 flex h-9 w-9 items-center justify-center rounded-full border-2 border-white shadow-lg transition"
+                                    :class="selectedImageIds.includes({{ $image->id }}) ? 'bg-red-600 text-white' : 'bg-white/90 text-gray-700'"
+                                    title="Select image"
+                                >
+                                    <i class="fas" :class="selectedImageIds.includes({{ $image->id }}) ? 'fa-check' : 'fa-circle'"></i>
+                                </button>
                                 <div x-show="isReorderMode" x-cloak class="absolute top-14 left-2 bg-gray-800 bg-opacity-75 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
                                     <i class="fas fa-grip-vertical"></i> Drag to reorder
                                 </div>
@@ -130,6 +198,7 @@
                                     type="button"
                                     onclick="setCoverImage({{ $image->id }}, this); event.stopPropagation();"
                                     class="absolute top-2 left-2 {{ $isCoverImage ? 'bg-amber-500 hover:bg-amber-500' : 'bg-black/70 hover:bg-amber-500 opacity-0 group-hover:opacity-100' }} flex h-9 w-9 items-center justify-center text-white rounded-full transition-opacity shadow-lg z-10"
+                                    :class="{ 'hidden': isBulkDeleteMode }"
                                     title="{{ $isCoverImage ? 'Current cover image' : 'Set as cover image' }}"
                                 >
                                     <i class="fas fa-star text-sm"></i>
@@ -138,6 +207,7 @@
                                     type="button"
                                     onclick="openEditModal({{ $image->id }}, '{{ asset($image->full_path ?? $image->thumbnail_path) }}'); event.stopPropagation();"
                                     class="absolute top-2 right-2 bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10"
+                                    :class="{ 'hidden': isBulkDeleteMode }"
                                     title="Edit image"
                                 >
                                     <i class="fas fa-edit text-sm"></i>
@@ -146,6 +216,7 @@
                                     type="button"
                                     onclick="deleteImage({{ $image->id }}, this); event.stopPropagation();"
                                     class="absolute bottom-2 right-2 bg-red-600 hover:bg-red-700 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10"
+                                    :class="{ 'hidden': isBulkDeleteMode }"
                                     title="Delete image"
                                 >
                                     <i class="fas fa-trash text-sm"></i>
@@ -228,6 +299,81 @@
     </div>
 
     @if($ownerCanManage)
+        <div id="gallerySettingsModal" class="gallery-settings-modal" aria-hidden="true" onclick="closeGallerySettingsModal(event)">
+            <div class="gallery-settings-panel" onclick="event.stopPropagation()">
+                <form id="gallerySettingsForm" onsubmit="submitGallerySettings(event)">
+                    <div class="gallery-settings-header">
+                        <div>
+                            <p class="gallery-credit-kicker">Gallery Settings</p>
+                            <h3>Edit Gallery</h3>
+                            <p>Update the public details and visibility for this gallery. Cover image is managed directly from the image grid.</p>
+                        </div>
+                        <button type="button" class="gallery-credit-close" onclick="closeGallerySettingsModal()" aria-label="Close gallery settings">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+
+                    <div class="gallery-settings-body">
+                        <div class="gallery-settings-field">
+                            <label for="gallery_settings_title">Gallery Title</label>
+                            <input id="gallery_settings_title" name="title" type="text" value="{{ $galleryTitle }}" required maxlength="255">
+                        </div>
+
+                        <div class="gallery-settings-field">
+                            <label for="gallery_settings_description">Description</label>
+                            <textarea id="gallery_settings_description" name="description" rows="4" maxlength="2000">{{ $gallery->description }}</textarea>
+                        </div>
+
+                        <div class="gallery-settings-grid">
+                            <div class="gallery-settings-field">
+                                <label for="gallery_settings_visibility">Visibility</label>
+                                <select id="gallery_settings_visibility" name="visibility" required>
+                                    @foreach([
+                                        'public' => 'Public',
+                                        'link_only' => 'Link Only',
+                                        'hidden' => 'Hidden',
+                                        'custom' => 'Custom',
+                                    ] as $value => $label)
+                                        <option value="{{ $value }}" @selected(($gallery->visibility ?? 'public') === $value)>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="gallery-settings-field">
+                                <label for="gallery_settings_status">Status</label>
+                                <select id="gallery_settings_status" name="status" required>
+                                    @foreach([
+                                        'draft' => 'Draft',
+                                        'published' => 'Published',
+                                    ] as $value => $label)
+                                        <option value="{{ $value }}" @selected(($gallery->status ?? 'published') === $value)>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <label class="gallery-settings-check">
+                            <input id="gallery_settings_contains_nudity" name="contains_nudity" type="checkbox" value="1" @checked($gallery->contains_nudity)>
+                            <span>
+                                <strong>NSFW Content</strong>
+                                <small>Mark this gallery when the overall gallery contains NSFW material.</small>
+                            </span>
+                        </label>
+
+                        <p id="gallerySettingsStatus" class="gallery-settings-status" aria-live="polite"></p>
+                    </div>
+
+                    <div class="gallery-settings-footer">
+                        <button type="button" class="gallery-credit-secondary" onclick="closeGallerySettingsModal()">Cancel</button>
+                        <button type="submit" class="gallery-credit-primary">
+                            <i class="fas fa-save"></i>
+                            <span>Save Settings</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <div id="editImageModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4" onclick="closeEditModal(event)">
             <div class="bg-white rounded-xl shadow-lg border border-gray-200 max-w-5xl w-full max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
                 <div id="editModalLoading" class="text-center py-12">
@@ -766,11 +912,97 @@
                 }
             }
 
+            function openGallerySettingsModal() {
+                const modal = document.getElementById('gallerySettingsModal');
+                if (!modal) return;
+                modal.classList.add('is-open');
+                modal.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('modal-open');
+                setTimeout(() => document.getElementById('gallery_settings_title')?.focus(), 50);
+            }
+
+            function closeGallerySettingsModal(event) {
+                if (event && event.target.id !== 'gallerySettingsModal') {
+                    return;
+                }
+
+                const modal = document.getElementById('gallerySettingsModal');
+                if (!modal) return;
+                modal.classList.remove('is-open');
+                modal.setAttribute('aria-hidden', 'true');
+                document.body.classList.remove('modal-open');
+            }
+
+            async function submitGallerySettings(event) {
+                event.preventDefault();
+                const form = event.target;
+                const status = document.getElementById('gallerySettingsStatus');
+                const submit = form.querySelector('button[type="submit"]');
+                const formData = new FormData(form);
+                formData.append('_method', 'PATCH');
+                formData.set('contains_nudity', document.getElementById('gallery_settings_contains_nudity')?.checked ? '1' : '0');
+
+                if (status) {
+                    status.textContent = 'Saving...';
+                    status.classList.remove('is-error');
+                }
+                if (submit) submit.disabled = true;
+
+                try {
+                    const response = await fetch('{{ route('portfolio.galleries.update', $gallery->id) }}', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        }
+                    });
+                    const data = await response.json().catch(() => ({}));
+
+                    if (!response.ok) {
+                        throw new Error(data.message || 'Could not save gallery settings.');
+                    }
+
+                    const gallery = data.gallery || {};
+                    document.querySelector('[data-gallery-title-text]').textContent = gallery.title || formData.get('title');
+                    const description = document.querySelector('[data-gallery-description-text]');
+                    if (description) {
+                        description.textContent = gallery.description || '';
+                        description.classList.toggle('hidden', !gallery.description);
+                    }
+                    document.querySelector('[data-gallery-visibility-text]').textContent = labelForVisibility(gallery.visibility || formData.get('visibility'));
+                    document.querySelector('[data-gallery-rating-text]').textContent = gallery.contains_nudity ? 'NSFW Content' : 'Standard Content';
+
+                    if (status) status.textContent = data.message || 'Gallery settings saved.';
+                    setTimeout(() => closeGallerySettingsModal(), 450);
+                } catch (error) {
+                    if (status) {
+                        status.textContent = error.message || 'Could not save gallery settings.';
+                        status.classList.add('is-error');
+                    }
+                } finally {
+                    if (submit) submit.disabled = false;
+                }
+            }
+
+            function labelForVisibility(value) {
+                return {
+                    public: 'Public',
+                    link_only: 'Link Only',
+                    hidden: 'Hidden',
+                    custom: 'Custom',
+                }[value] || 'Public';
+            }
+
             function galleryManager(galleryId) {
                 return {
                     galleryId,
                     sortable: null,
                     isReorderMode: false,
+                    isBulkDeleteMode: false,
+                    selectedImageIds: [],
+                    sortOrder: null,
                     initSortable() {
                         this.$nextTick(() => {
                             const grid = document.getElementById('gallery-images-grid');
@@ -783,6 +1015,7 @@
                                 dragClass: 'opacity-30',
                                 disabled: true,
                                 onEnd: () => {
+                                    this.sortOrder = null;
                                     this.reorderImages();
                                     this.justifyGrid();
                                 }
@@ -791,9 +1024,83 @@
                     },
                     toggleReorderMode() {
                         this.isReorderMode = !this.isReorderMode;
+                        if (this.isReorderMode) {
+                            this.isBulkDeleteMode = false;
+                            this.selectedImageIds = [];
+                        }
                         if (this.sortable) {
                             this.sortable.option('disabled', !this.isReorderMode);
                         }
+                    },
+                    toggleBulkDeleteMode() {
+                        this.isBulkDeleteMode = !this.isBulkDeleteMode;
+                        this.selectedImageIds = [];
+                        if (this.isBulkDeleteMode) {
+                            this.isReorderMode = false;
+                            if (this.sortable) {
+                                this.sortable.option('disabled', true);
+                            }
+                        }
+                    },
+                    toggleImageSelection(imageId) {
+                        if (!this.isBulkDeleteMode) return;
+                        if (this.selectedImageIds.includes(imageId)) {
+                            this.selectedImageIds = this.selectedImageIds.filter((id) => id !== imageId);
+                        } else {
+                            this.selectedImageIds = [...this.selectedImageIds, imageId];
+                        }
+                    },
+                    async sortByDate(direction) {
+                        const grid = document.getElementById('gallery-images-grid');
+                        if (!grid) return;
+
+                        this.isReorderMode = false;
+                        this.isBulkDeleteMode = false;
+                        this.selectedImageIds = [];
+                        if (this.sortable) {
+                            this.sortable.option('disabled', true);
+                        }
+
+                        const items = Array.from(grid.querySelectorAll('.sortable-item'));
+                        items.sort((a, b) => {
+                            const aTime = Number(a.dataset.createdAt || 0);
+                            const bTime = Number(b.dataset.createdAt || 0);
+                            return direction === 'asc' ? aTime - bTime : bTime - aTime;
+                        });
+                        items.forEach((item) => grid.appendChild(item));
+                        this.sortOrder = direction;
+                        this.justifyGrid();
+                        await this.reorderImages();
+                    },
+                    async deleteSelectedImages() {
+                        if (this.selectedImageIds.length === 0) return;
+                        const count = this.selectedImageIds.length;
+                        if (!confirm(`Delete ${count} selected ${count === 1 ? 'image' : 'images'}? This cannot be undone.`)) {
+                            return;
+                        }
+
+                        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                        const ids = [...this.selectedImageIds];
+
+                        for (const imageId of ids) {
+                            const response = await fetch(`{{ url('/portfolio') }}/${imageId}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'X-CSRF-TOKEN': csrfToken,
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Accept': 'application/json'
+                                }
+                            });
+
+                            if (response.ok) {
+                                document.querySelector(`[data-image-id="${imageId}"]`)?.remove();
+                            }
+                        }
+
+                        this.selectedImageIds = [];
+                        this.isBulkDeleteMode = false;
+                        this.justifyGrid();
+                        window.location.reload();
                     },
                     justifyGrid() {
                         this.$nextTick(() => {
@@ -1059,6 +1366,158 @@
         .gallery-credit-button:hover {
             background: #000;
             transform: translateY(-1px);
+        }
+        .gallery-tool-button {
+            align-items: center;
+            background: #fff;
+            border: 1px solid #d1d5db;
+            border-radius: 999px;
+            color: #374151;
+            display: inline-flex;
+            font-size: 13px;
+            font-weight: 800;
+            gap: 7px;
+            justify-content: center;
+            min-height: 36px;
+            padding: 8px 12px;
+            transition: background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease;
+        }
+        .gallery-tool-button:hover {
+            border-color: #9ca3af;
+            transform: translateY(-1px);
+        }
+        .gallery-tool-button.is-active {
+            background: #111827;
+            border-color: #111827;
+            color: #fff;
+        }
+        .gallery-tool-button.is-danger,
+        .gallery-tool-button.is-danger-active {
+            background: #fee2e2;
+            border-color: #fecaca;
+            color: #991b1b;
+        }
+        .gallery-tool-button.is-danger:not(.is-disabled):hover {
+            background: #dc2626;
+            border-color: #dc2626;
+            color: #fff;
+        }
+        .gallery-tool-button.is-disabled {
+            cursor: not-allowed;
+            opacity: .45;
+            transform: none;
+        }
+        .gallery-settings-modal {
+            align-items: center;
+            background: rgba(15, 23, 42, .56);
+            display: none;
+            inset: 0;
+            justify-content: center;
+            padding: 24px;
+            position: fixed;
+            z-index: 72;
+        }
+        .gallery-settings-modal.is-open {
+            display: flex;
+        }
+        .gallery-settings-panel {
+            background: #fff;
+            border: 1px solid #dbe3ef;
+            border-radius: 22px;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
+            max-height: min(760px, 92vh);
+            max-width: 760px;
+            overflow: hidden;
+            width: 100%;
+        }
+        .gallery-settings-header,
+        .gallery-settings-footer {
+            align-items: center;
+            display: flex;
+            gap: 16px;
+            justify-content: space-between;
+            padding: 22px 24px;
+        }
+        .gallery-settings-header {
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .gallery-settings-header h3 {
+            color: #111827;
+            font-size: 24px;
+            font-weight: 850;
+            margin: 2px 0 4px;
+        }
+        .gallery-settings-header p {
+            color: #64748b;
+            font-size: 14px;
+            margin: 0;
+        }
+        .gallery-settings-body {
+            display: grid;
+            gap: 18px;
+            max-height: calc(92vh - 180px);
+            overflow-y: auto;
+            padding: 22px 24px;
+        }
+        .gallery-settings-grid {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .gallery-settings-field label {
+            color: #334155;
+            display: block;
+            font-size: 13px;
+            font-weight: 800;
+            margin-bottom: 7px;
+        }
+        .gallery-settings-field input,
+        .gallery-settings-field textarea,
+        .gallery-settings-field select {
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            color: #111827;
+            min-height: 46px;
+            padding: 10px 12px;
+            width: 100%;
+        }
+        .gallery-settings-field textarea {
+            resize: vertical;
+        }
+        .gallery-settings-check {
+            align-items: flex-start;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            display: flex;
+            gap: 12px;
+            padding: 14px;
+        }
+        .gallery-settings-check input {
+            margin-top: 4px;
+        }
+        .gallery-settings-check strong {
+            color: #111827;
+            display: block;
+            font-size: 14px;
+        }
+        .gallery-settings-check small {
+            color: #64748b;
+            display: block;
+            font-size: 12px;
+            margin-top: 2px;
+        }
+        .gallery-settings-footer {
+            border-top: 1px solid #e5e7eb;
+        }
+        .gallery-settings-status {
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 700;
+            min-height: 18px;
+        }
+        .gallery-settings-status.is-error {
+            color: #b91c1c;
         }
         .gallery-credit-pills {
             bottom: 10px;
@@ -1352,6 +1811,12 @@
             font-size: 13px;
         }
         @media (max-width: 720px) {
+            .gallery-settings-grid {
+                grid-template-columns: 1fr;
+            }
+            .gallery-settings-modal {
+                padding: 10px;
+            }
             .gallery-credit-form-grid {
                 grid-template-columns: 1fr;
             }

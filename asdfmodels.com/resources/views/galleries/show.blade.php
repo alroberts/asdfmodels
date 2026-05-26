@@ -13,6 +13,28 @@
         $credits = collect($credits ?? []);
         $creditableAlbumKey = \App\Models\PortfolioAlbum::class . ':' . $gallery->id;
         $creditsByTarget = $credits->groupBy(fn ($credit) => $credit->creditable_type . ':' . $credit->creditable_id);
+        $collaborators = $credits
+            ->groupBy('credited_user_id')
+            ->map(function ($userCredits) use ($gallery) {
+                $firstCredit = $userCredits->first();
+                $user = $firstCredit?->creditedUser;
+                $profile = $user?->is_photographer ? $user?->photographerProfile : $user?->modelProfile;
+
+                return [
+                    'id' => $user?->id,
+                    'label' => $user?->display_name ?: $user?->name,
+                    'username' => $user?->username,
+                    'role' => $firstCredit?->credited_role,
+                    'avatar' => $profile?->profile_photo_path ? asset($profile->profile_photo_path) : null,
+                    'galleryCreditId' => optional($userCredits->first(fn ($credit) => class_basename($credit->creditable_type) === 'PortfolioAlbum'))->id,
+                    'imageCredits' => $userCredits
+                        ->filter(fn ($credit) => class_basename($credit->creditable_type) !== 'PortfolioAlbum')
+                        ->mapWithKeys(fn ($credit) => [(string) $credit->creditable_id => $credit->id])
+                        ->all(),
+                ];
+            })
+            ->filter(fn ($collaborator) => !empty($collaborator['id']))
+            ->values();
     @endphp
 
     <x-slot name="header">
@@ -246,13 +268,25 @@
                                 $imageCredits = $creditsByTarget->get($imageCreditKey, collect());
                             @endphp
                             @if($imageCredits->isNotEmpty())
-                                <div class="gallery-credit-pills">
-                                    @foreach($imageCredits->take(3) as $credit)
-                                        <span class="gallery-credit-pill" title="{{ $credit->creditedUser?->display_name ?? $credit->creditedUser?->name }}: {{ str_replace('_', ' ', $credit->status) }}">
-                                            <i class="fas fa-user-tag"></i>
-                                            {{ $credit->creditedUser?->display_name ?? $credit->creditedUser?->name }}
+                                <div class="gallery-credit-avatars">
+                                    @foreach($imageCredits->take(4) as $credit)
+                                        @php
+                                            $creditedProfile = $credit->creditedUser?->is_photographer
+                                                ? $credit->creditedUser?->photographerProfile
+                                                : $credit->creditedUser?->modelProfile;
+                                            $creditedName = $credit->creditedUser?->display_name ?? $credit->creditedUser?->name;
+                                        @endphp
+                                        <span class="gallery-credit-avatar" title="{{ $creditedName }}: {{ str_replace('_', ' ', $credit->status) }}">
+                                            @if($creditedProfile?->profile_photo_path)
+                                                <img src="{{ asset($creditedProfile->profile_photo_path) }}" alt="">
+                                            @else
+                                                {{ mb_substr($creditedName ?? '?', 0, 1) }}
+                                            @endif
                                         </span>
                                     @endforeach
+                                    @if($imageCredits->count() > 4)
+                                        <span class="gallery-credit-avatar is-count">+{{ $imageCredits->count() - 4 }}</span>
+                                    @endif
                                 </div>
                             @endif
                         </div>
@@ -519,7 +553,7 @@
                     <div>
                         <p class="gallery-credit-kicker">Credits & Tags</p>
                         <h3 id="creditsModalTitle">Tag collaborators</h3>
-                        <p>Credit a {{ $isPhotographer ? 'model' : 'photographer' }} on the full gallery, selected images, or both.</p>
+                        <p>Add collaborators once, then assign them to the full gallery or individual images.</p>
                     </div>
                     <button type="button" class="gallery-credit-close" onclick="closeCreditsModal()" aria-label="Close credits">
                         <i class="fas fa-times"></i>
@@ -529,70 +563,61 @@
                 <div class="gallery-credit-body">
                     <div class="gallery-credit-form-grid">
                         <div class="gallery-credit-field">
-                            <label for="creditRole">Role</label>
-                            <select id="creditRole">
-                                <option value="{{ $isPhotographer ? 'model' : 'photographer' }}">{{ $isPhotographer ? 'Model' : 'Photographer' }}</option>
-                                <option value="{{ $isPhotographer ? 'photographer' : 'model' }}">{{ $isPhotographer ? 'Photographer' : 'Model' }}</option>
-                            </select>
-                        </div>
-                        <div class="gallery-credit-field">
-                            <label for="creditSearch">Member</label>
-                            <input id="creditSearch" type="search" placeholder="Search by @username" autocomplete="off">
+                            <label for="creditSearch">Search for Member</label>
+                            <input id="creditSearch" type="search" placeholder="Search by @username or name" autocomplete="off">
                             <div id="creditSearchResults" class="gallery-credit-results"></div>
                             <input id="creditUserId" type="hidden">
                         </div>
+                        <div class="gallery-credit-field">
+                            <label for="creditRole">Role</label>
+                            <select id="creditRole">
+                                <option value="model">Model</option>
+                                <option value="photographer">Photographer</option>
+                            </select>
+                        </div>
+                        <button type="button" onclick="addCollaborator()" class="gallery-credit-primary gallery-credit-add-button">
+                            <i class="fas fa-plus"></i>
+                            <span>Tag</span>
+                        </button>
                     </div>
 
-                    <label class="gallery-credit-check">
-                        <input id="creditWholeGallery" type="checkbox" value="1">
-                        <span>
-                            <strong>Credit the full gallery</strong>
-                            <small>This shows as a gallery credit after the tagged member accepts it.</small>
-                        </span>
-                    </label>
+                    <section class="gallery-collaborators-section">
+                        <div class="gallery-credit-select-row">
+                            <div>
+                                <h4>Collaborators</h4>
+                                <p>Add everyone involved, then select one collaborator to assign them to images.</p>
+                            </div>
+                            <button type="button" onclick="tagAllCollaboratorsInGallery()">Tag all in gallery</button>
+                        </div>
+                        <div id="collaboratorList" class="gallery-collaborator-list"></div>
+                    </section>
 
                     <div class="gallery-credit-select-row">
                         <div>
-                            <h4>Select individual images</h4>
-                            <p>If only some images include the person, select only those images. These are the ones that can appear on their profile.</p>
+                            <h4>Assign to individual images</h4>
+                            <p>Select a collaborator above, then click thumbnails to add or remove them from that image.</p>
                         </div>
-                        <button type="button" onclick="toggleAllCreditImages()">Select all</button>
+                        <span id="activeCollaboratorHint" class="gallery-credit-status">Choose a collaborator to begin.</span>
                     </div>
 
                     <div class="gallery-credit-image-grid">
                         @foreach($gallery->images as $image)
-                            <label class="gallery-credit-image-option">
-                                <input type="checkbox" value="{{ $image->id }}" data-credit-image>
+                            <button type="button" class="gallery-credit-image-option" data-credit-image="{{ $image->id }}" onclick="toggleCollaboratorImage({{ $image->id }})">
                                 <img src="{{ asset($image->thumbnail_path ?? $image->full_path) }}" alt="{{ $image->title ?? 'Gallery image' }}">
                                 <span><i class="fas fa-check"></i></span>
-                            </label>
+                                <div class="gallery-credit-image-avatars" data-credit-image-avatars="{{ $image->id }}"></div>
+                            </button>
                         @endforeach
                     </div>
 
-                    @if($credits->isNotEmpty())
-                        <div class="gallery-credit-existing">
-                            <h4>Current credits</h4>
-                            <div class="gallery-credit-existing-list">
-                                @foreach($credits as $credit)
-                                    <div class="gallery-credit-existing-item" data-credit-row="{{ $credit->id }}">
-                                        <div>
-                                            <strong>{{ $credit->creditedUser?->display_name ?? $credit->creditedUser?->name }}</strong>
-                                            <span>{{ class_basename($credit->creditable_type) === 'PortfolioAlbum' ? 'Gallery' : 'Image' }} · {{ str_replace('_', ' ', $credit->status) }}</span>
-                                        </div>
-                                        <button type="button" onclick="deleteCredit({{ $credit->id }})">Remove</button>
-                                    </div>
-                                @endforeach
-                            </div>
-                        </div>
-                    @endif
                 </div>
 
                 <div class="gallery-credit-footer">
                     <span id="creditStatus" class="gallery-credit-status"></span>
                     <button type="button" onclick="closeCreditsModal()" class="gallery-credit-secondary">Cancel</button>
-                    <button type="button" onclick="submitCredits()" class="gallery-credit-primary">
+                    <button type="button" onclick="tagAllCollaboratorsInGallery()" class="gallery-credit-primary">
                         <i class="fas fa-user-tag"></i>
-                        Save Credits
+                        Tag All in Gallery
                     </button>
                 </div>
             </div>
@@ -1189,6 +1214,8 @@
 
             let selectedCreditUser = null;
             let creditSearchTimer = null;
+            let collaborators = @js($collaborators);
+            let activeCollaboratorId = collaborators[0]?.id || null;
 
             function openCreditsModal() {
                 const modal = document.getElementById('creditsModal');
@@ -1196,6 +1223,8 @@
                 modal.classList.add('is-open');
                 modal.setAttribute('aria-hidden', 'false');
                 document.body.classList.add('modal-open');
+                renderCollaborators();
+                renderCollaboratorAssignments();
                 setTimeout(() => document.getElementById('creditSearch')?.focus(), 50);
             }
 
@@ -1216,16 +1245,21 @@
                     clearTimeout(creditSearchTimer);
                     creditSearchTimer = setTimeout(searchCreditUsers, 220);
                 });
-                role?.addEventListener('change', searchCreditUsers);
+                role?.addEventListener('change', () => {
+                    if (selectedCreditUser) {
+                        selectedCreditUser.role = role.value;
+                    }
+                });
+                renderCollaborators();
+                renderCollaboratorAssignments();
             });
 
             async function searchCreditUsers() {
                 const search = document.getElementById('creditSearch');
-                const role = document.getElementById('creditRole');
                 const results = document.getElementById('creditSearchResults');
-                if (!search || !role || !results) return;
+                if (!search || !results) return;
 
-                const params = new URLSearchParams({ role: role.value, q: search.value || '' });
+                const params = new URLSearchParams({ q: search.value || '' });
                 const response = await fetch(`{{ route('portfolio.credits.search') }}?${params.toString()}`, {
                     headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
                 });
@@ -1236,36 +1270,187 @@
                 data.users.forEach((user) => {
                     const button = document.createElement('button');
                     button.type = 'button';
-                    button.innerHTML = `<strong>${escapeHtml(user.label)}</strong><span>@${escapeHtml(user.username)}</span>`;
+                    button.innerHTML = `<strong>${escapeHtml(user.label)}</strong><span>@${escapeHtml(user.username)} · ${escapeHtml(user.role)}</span>`;
                     button.addEventListener('click', () => {
                         selectedCreditUser = user;
                         document.getElementById('creditUserId').value = user.id;
                         search.value = `@${user.username}`;
+                        document.getElementById('creditRole').value = user.role;
                         results.innerHTML = '';
                     });
                     results.appendChild(button);
                 });
             }
 
-            function toggleAllCreditImages() {
-                const boxes = Array.from(document.querySelectorAll('[data-credit-image]'));
-                const shouldCheck = boxes.some((box) => !box.checked);
-                boxes.forEach((box) => { box.checked = shouldCheck; });
+            function addCollaborator() {
+                const status = document.getElementById('creditStatus');
+                const role = document.getElementById('creditRole')?.value;
+
+                if (!selectedCreditUser) {
+                    status.textContent = 'Choose a member first.';
+                    return;
+                }
+
+                const existing = collaborators.find((collaborator) => Number(collaborator.id) === Number(selectedCreditUser.id));
+                if (existing) {
+                    existing.role = role || selectedCreditUser.role;
+                } else {
+                    collaborators.push({
+                        id: selectedCreditUser.id,
+                        label: selectedCreditUser.label,
+                        username: selectedCreditUser.username,
+                        role: role || selectedCreditUser.role,
+                        avatar: selectedCreditUser.avatar || null,
+                        galleryCreditId: null,
+                        imageCredits: {},
+                    });
+                }
+
+                activeCollaboratorId = selectedCreditUser.id;
+                selectedCreditUser = null;
+                document.getElementById('creditSearch').value = '';
+                document.getElementById('creditUserId').value = '';
+                document.getElementById('creditSearchResults').innerHTML = '';
+                status.textContent = 'Collaborator added. Click images to assign them.';
+                renderCollaborators();
+                renderCollaboratorAssignments();
             }
 
-            async function submitCredits() {
-                const status = document.getElementById('creditStatus');
-                const userId = document.getElementById('creditUserId')?.value;
-                const role = document.getElementById('creditRole')?.value;
-                const applyGallery = document.getElementById('creditWholeGallery')?.checked;
-                const imageIds = Array.from(document.querySelectorAll('[data-credit-image]:checked')).map((box) => box.value);
+            function renderCollaborators() {
+                const list = document.getElementById('collaboratorList');
+                if (!list) return;
+                list.innerHTML = '';
 
-                if (!userId) {
-                    status.textContent = 'Choose a member to credit.';
+                if (collaborators.length === 0) {
+                    list.innerHTML = '<p class="gallery-collaborator-empty">No collaborators added yet.</p>';
+                    return;
+                }
+
+                collaborators.forEach((collaborator) => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = `gallery-collaborator-card ${Number(activeCollaboratorId) === Number(collaborator.id) ? 'is-active' : ''}`;
+                    button.innerHTML = `
+                        <span class="gallery-collaborator-avatar">${collaborator.avatar ? `<img src="${collaborator.avatar}" alt="">` : escapeHtml((collaborator.label || '?').charAt(0))}</span>
+                        <span class="gallery-collaborator-copy">
+                            <strong>${escapeHtml(collaborator.label)}</strong>
+                            <small>@${escapeHtml(collaborator.username)} · ${escapeHtml(collaborator.role)}</small>
+                        </span>
+                        <span class="gallery-collaborator-actions">
+                            <em>${Object.keys(collaborator.imageCredits || {}).length} images</em>
+                            <i class="fas fa-chevron-right"></i>
+                        </span>
+                    `;
+                    button.addEventListener('click', () => {
+                        activeCollaboratorId = collaborator.id;
+                        renderCollaborators();
+                        renderCollaboratorAssignments();
+                    });
+                    list.appendChild(button);
+
+                    const remove = document.createElement('button');
+                    remove.type = 'button';
+                    remove.className = 'gallery-collaborator-remove';
+                    remove.innerHTML = '<i class="fas fa-trash"></i><span>Remove</span>';
+                    remove.addEventListener('click', (event) => {
+                        event.stopPropagation();
+                        removeCollaborator(collaborator.id);
+                    });
+                    button.appendChild(remove);
+                });
+            }
+
+            function renderCollaboratorAssignments() {
+                const active = collaborators.find((collaborator) => Number(collaborator.id) === Number(activeCollaboratorId));
+                const hint = document.getElementById('activeCollaboratorHint');
+                if (hint) {
+                    hint.textContent = active ? `Assigning ${active.label}` : 'Choose a collaborator to begin.';
+                }
+
+                document.querySelectorAll('[data-credit-image]').forEach((button) => {
+                    const imageId = button.dataset.creditImage;
+                    button.classList.toggle('is-active', Boolean(active?.imageCredits?.[imageId]));
+                });
+
+                document.querySelectorAll('[data-credit-image-avatars]').forEach((container) => {
+                    const imageId = container.dataset.creditImageAvatars;
+                    const attached = collaborators.filter((collaborator) => collaborator.imageCredits?.[imageId]);
+                    container.innerHTML = attached.slice(0, 4).map((collaborator) => `
+                        <span class="gallery-credit-mini-avatar" title="${escapeHtml(collaborator.label)}">
+                            ${collaborator.avatar ? `<img src="${collaborator.avatar}" alt="">` : escapeHtml((collaborator.label || '?').charAt(0))}
+                        </span>
+                    `).join('');
+                    if (attached.length > 4) {
+                        container.innerHTML += `<span class="gallery-credit-mini-avatar is-count">+${attached.length - 4}</span>`;
+                    }
+                });
+            }
+
+            async function toggleCollaboratorImage(imageId) {
+                const status = document.getElementById('creditStatus');
+                const collaborator = collaborators.find((item) => Number(item.id) === Number(activeCollaboratorId));
+                if (!collaborator) {
+                    status.textContent = 'Choose a collaborator first.';
+                    return;
+                }
+
+                const imageKey = String(imageId);
+                const existingCreditId = collaborator.imageCredits?.[imageKey];
+
+                try {
+                    if (existingCreditId) {
+                        await deleteCredit(existingCreditId, false);
+                        delete collaborator.imageCredits[imageKey];
+                        status.textContent = `${collaborator.label} removed from image.`;
+                    } else {
+                        const data = await createCredit(collaborator, false, [imageId]);
+                        const credit = (data.credits || [])[0];
+                        if (credit?.id) {
+                            collaborator.imageCredits[imageKey] = credit.id;
+                        }
+                        status.textContent = `${collaborator.label} assigned to image.`;
+                    }
+                } catch (error) {
+                    status.textContent = error.message || 'Could not update collaborator assignment.';
+                }
+
+                renderCollaborators();
+                renderCollaboratorAssignments();
+            }
+
+            async function tagAllCollaboratorsInGallery() {
+                const status = document.getElementById('creditStatus');
+                const imageIds = Array.from(document.querySelectorAll('[data-credit-image]')).map((button) => button.dataset.creditImage);
+
+                if (collaborators.length === 0) {
+                    status.textContent = 'Add at least one collaborator first.';
                     return;
                 }
 
                 status.textContent = 'Saving...';
+                try {
+                    for (const collaborator of collaborators) {
+                        const data = await createCredit(collaborator, true, imageIds);
+                        (data.credits || []).forEach((credit) => {
+                            if (!credit?.id) return;
+                            if (String(credit.creditable_type || '').includes('PortfolioAlbum')) {
+                                collaborator.galleryCreditId = credit.id;
+                            } else {
+                                collaborator.imageCredits[String(credit.creditable_id)] = credit.id;
+                            }
+                        });
+                    }
+
+                    status.textContent = 'Collaborators tagged across the gallery.';
+                } catch (error) {
+                    status.textContent = error.message || 'Could not tag collaborators.';
+                } finally {
+                    renderCollaborators();
+                    renderCollaboratorAssignments();
+                }
+            }
+
+            async function createCredit(collaborator, applyGallery, imageIds = []) {
                 const response = await fetch('{{ route('portfolio.credits.store') }}', {
                     method: 'POST',
                     headers: {
@@ -1275,8 +1460,8 @@
                         'Accept': 'application/json'
                     },
                     body: JSON.stringify({
-                        credited_user_id: userId,
-                        credited_role: role,
+                        credited_user_id: collaborator.id,
+                        credited_role: collaborator.role,
                         gallery_id: {{ $gallery->id }},
                         apply_to_gallery: applyGallery,
                         image_type: @json($isPhotographer ? 'photographer' : 'model'),
@@ -1286,15 +1471,37 @@
 
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
-                    status.textContent = data.message || 'Could not save credits.';
+                    throw new Error(data.message || 'Could not save credits.');
+                }
+
+                return data;
+            }
+
+            async function removeCollaborator(collaboratorId) {
+                const collaborator = collaborators.find((item) => Number(item.id) === Number(collaboratorId));
+                if (!collaborator) return;
+
+                if (!confirm(`Remove ${collaborator.label} from this gallery and its images?`)) {
                     return;
                 }
 
-                status.textContent = data.message || 'Credits saved.';
-                setTimeout(() => window.location.reload(), 700);
+                const creditIds = [
+                    collaborator.galleryCreditId,
+                    ...Object.values(collaborator.imageCredits || {}),
+                ].filter(Boolean);
+
+                for (const creditId of creditIds) {
+                    await deleteCredit(creditId, false);
+                }
+
+                collaborators = collaborators.filter((item) => Number(item.id) !== Number(collaboratorId));
+                activeCollaboratorId = collaborators[0]?.id || null;
+                document.getElementById('creditStatus').textContent = 'Collaborator removed.';
+                renderCollaborators();
+                renderCollaboratorAssignments();
             }
 
-            async function deleteCredit(creditId) {
+            async function deleteCredit(creditId, removeRow = true) {
                 const response = await fetch(`{{ url('/portfolio/credits') }}/${creditId}`, {
                     method: 'DELETE',
                     headers: {
@@ -1304,7 +1511,7 @@
                     }
                 });
 
-                if (response.ok) {
+                if (response.ok && removeRow) {
                     document.querySelector(`[data-credit-row="${creditId}"]`)?.remove();
                 }
             }
@@ -1519,31 +1726,41 @@
         .gallery-settings-status.is-error {
             color: #b91c1c;
         }
-        .gallery-credit-pills {
+        .gallery-credit-avatars {
             bottom: 10px;
             display: flex;
             flex-wrap: wrap;
-            gap: 6px;
+            gap: 0;
             left: 10px;
             position: absolute;
             right: 54px;
             z-index: 11;
         }
-        .gallery-credit-pill {
+        .gallery-credit-avatar,
+        .gallery-credit-mini-avatar {
             align-items: center;
-            backdrop-filter: blur(8px);
-            background: rgba(17, 24, 39, .78);
+            background: #111827;
+            border: 2px solid #fff;
             border-radius: 999px;
             color: #fff;
             display: inline-flex;
             font-size: 11px;
             font-weight: 800;
-            gap: 5px;
-            max-width: 150px;
+            height: 30px;
+            justify-content: center;
+            margin-right: -7px;
             overflow: hidden;
-            padding: 5px 8px;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            width: 30px;
+        }
+        .gallery-credit-avatar img,
+        .gallery-credit-mini-avatar img {
+            height: 100%;
+            object-fit: cover;
+            width: 100%;
+        }
+        .gallery-credit-avatar.is-count,
+        .gallery-credit-mini-avatar.is-count {
+            background: #374151;
         }
         .gallery-credit-modal {
             align-items: center;
@@ -1617,7 +1834,8 @@
         .gallery-credit-form-grid {
             display: grid;
             gap: 16px;
-            grid-template-columns: minmax(160px, .32fr) 1fr;
+            grid-template-columns: minmax(260px, 1fr) minmax(150px, .28fr) auto;
+            align-items: end;
         }
         .gallery-credit-field {
             position: relative;
@@ -1637,6 +1855,9 @@
             min-height: 46px;
             padding: 10px 12px;
             width: 100%;
+        }
+        .gallery-credit-add-button {
+            min-height: 46px;
         }
         .gallery-credit-results {
             background: #fff;
@@ -1673,21 +1894,81 @@
             font-size: 12px;
             margin-top: 2px;
         }
-        .gallery-credit-check {
-            align-items: flex-start;
-            background: #f8fafc;
+        .gallery-collaborators-section {
+            border: 1px solid #e2e8f0;
+            border-radius: 18px;
+            margin: 18px 0;
+            padding: 16px;
+        }
+        .gallery-collaborator-list {
+            display: grid;
+            gap: 10px;
+        }
+        .gallery-collaborator-empty {
+            color: #64748b;
+            font-size: 14px;
+            margin: 0;
+        }
+        .gallery-collaborator-card {
+            align-items: center;
+            background: #fff;
             border: 1px solid #e2e8f0;
             border-radius: 16px;
-            display: flex;
+            color: inherit;
+            display: grid;
             gap: 12px;
-            margin: 18px 0;
-            padding: 14px;
+            grid-template-columns: auto 1fr auto auto;
+            padding: 10px;
+            text-align: left;
+            transition: border-color .16s ease, box-shadow .16s ease;
         }
-        .gallery-credit-check small {
-            color: #64748b;
+        .gallery-collaborator-card.is-active {
+            border-color: #111827;
+            box-shadow: 0 0 0 2px rgba(17,24,39,.08);
+        }
+        .gallery-collaborator-avatar {
+            align-items: center;
+            background: #f3f4f6;
+            border-radius: 999px;
+            color: #4b5563;
+            display: inline-flex;
+            font-weight: 850;
+            height: 42px;
+            justify-content: center;
+            overflow: hidden;
+            width: 42px;
+        }
+        .gallery-collaborator-avatar img {
+            height: 100%;
+            object-fit: cover;
+            width: 100%;
+        }
+        .gallery-collaborator-copy strong,
+        .gallery-collaborator-copy small {
             display: block;
+        }
+        .gallery-collaborator-copy small,
+        .gallery-collaborator-actions {
+            color: #64748b;
             font-size: 12px;
-            margin-top: 2px;
+            font-weight: 700;
+        }
+        .gallery-collaborator-actions {
+            align-items: center;
+            display: inline-flex;
+            gap: 8px;
+        }
+        .gallery-collaborator-remove {
+            align-items: center;
+            background: #fff5f5;
+            border: 1px solid #fecaca;
+            border-radius: 999px;
+            color: #b91c1c;
+            display: inline-flex;
+            font-size: 12px;
+            font-weight: 800;
+            gap: 6px;
+            padding: 7px 10px;
         }
         .gallery-credit-select-row {
             align-items: end;
@@ -1738,21 +2019,20 @@
         }
         .gallery-credit-image-option {
             aspect-ratio: 1 / 1;
+            background: #f8fafc;
+            border: 2px solid transparent;
             border-radius: 14px;
             cursor: pointer;
             overflow: hidden;
             position: relative;
-        }
-        .gallery-credit-image-option input {
-            opacity: 0;
-            position: absolute;
+            width: 100%;
         }
         .gallery-credit-image-option img {
             height: 100%;
             object-fit: cover;
             width: 100%;
         }
-        .gallery-credit-image-option span {
+        .gallery-credit-image-option > span {
             align-items: center;
             background: rgba(17, 24, 39, .78);
             border: 2px solid #fff;
@@ -1766,11 +2046,21 @@
             top: 8px;
             width: 28px;
         }
-        .gallery-credit-image-option input:checked + img {
+        .gallery-credit-image-option.is-active {
+            border-color: #111827;
+        }
+        .gallery-credit-image-option.is-active img {
             filter: brightness(.72);
         }
-        .gallery-credit-image-option input:checked ~ span {
+        .gallery-credit-image-option.is-active > span {
             display: inline-flex;
+        }
+        .gallery-credit-image-avatars {
+            bottom: 8px;
+            display: flex;
+            left: 8px;
+            position: absolute;
+            z-index: 2;
         }
         .gallery-credit-existing {
             border-top: 1px solid #e5e7eb;
@@ -1819,6 +2109,14 @@
             }
             .gallery-credit-form-grid {
                 grid-template-columns: 1fr;
+            }
+            .gallery-collaborator-card {
+                grid-template-columns: auto 1fr;
+            }
+            .gallery-collaborator-actions,
+            .gallery-collaborator-remove {
+                grid-column: 2;
+                justify-self: start;
             }
             .gallery-credit-modal {
                 padding: 10px;

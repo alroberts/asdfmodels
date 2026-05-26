@@ -19,7 +19,7 @@ class PortfolioCreditController extends Controller
     public function search(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'role' => ['required', Rule::in(['model', 'photographer'])],
+            'role' => ['nullable', Rule::in(['model', 'photographer'])],
             'q' => ['nullable', 'string', 'max:120'],
         ]);
 
@@ -31,32 +31,42 @@ class PortfolioCreditController extends Controller
 
         $query = User::query()
             ->where('is_admin', false)
-            ->when($validated['role'] === 'model', function ($userQuery) {
+            ->when(($validated['role'] ?? null) === 'model', function ($userQuery) {
                 $userQuery
                     ->where('is_photographer', false)
                     ->whereHas('modelProfile');
             })
-            ->when($validated['role'] === 'photographer', function ($userQuery) {
+            ->when(($validated['role'] ?? null) === 'photographer', function ($userQuery) {
                 $userQuery
                     ->where('is_photographer', true)
                     ->whereHas('photographerProfile');
             });
 
         $query->where(function ($searchQuery) use ($search) {
-            $searchQuery->where('username', 'like', "%{$search}%");
+            $searchQuery
+                ->where('username', 'like', "%{$search}%")
+                ->orWhere('first_name', 'like', "%{$search}%")
+                ->orWhere('last_name', 'like', "%{$search}%")
+                ->orWhere('name', 'like', "%{$search}%");
         });
 
         $users = $query
+            ->with(['modelProfile', 'photographerProfile'])
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->limit(20)
             ->get()
-            ->map(fn (User $user) => [
-                'id' => $user->id,
-                'label' => $user->display_name ?: $user->name,
-                'username' => $user->username,
-                'role' => $user->is_photographer ? 'photographer' : 'model',
-            ]);
+            ->map(function (User $user) {
+                $profile = $user->is_photographer ? $user->photographerProfile : $user->modelProfile;
+
+                return [
+                    'id' => $user->id,
+                    'label' => $user->display_name ?: $user->name,
+                    'username' => $user->username,
+                    'role' => $user->is_photographer ? 'photographer' : 'model',
+                    'avatar' => $profile?->profile_photo_path ? asset($profile->profile_photo_path) : null,
+                ];
+            });
 
         return response()->json(['users' => $users]);
     }

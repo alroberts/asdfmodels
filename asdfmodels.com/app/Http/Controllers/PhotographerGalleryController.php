@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PhotographerPortfolioImage;
 use App\Models\PortfolioAlbum;
 use App\Models\PortfolioCredit;
-use App\Models\SiteNotification;
+use App\Services\PortfolioCleanupService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -240,7 +240,7 @@ class PhotographerGalleryController extends Controller
             ->where('album_id', $gallery->id)
             ->pluck('id');
 
-        $this->deleteGalleryCreditsAndNotifications($gallery, PhotographerPortfolioImage::class, $imageIds);
+        PortfolioCleanupService::deleteGalleryCreditsAndNotifications($gallery, PhotographerPortfolioImage::class, $imageIds);
 
         PhotographerPortfolioImage::where('photographer_id', $user->id)
             ->where('album_id', $gallery->id)
@@ -252,35 +252,4 @@ class PhotographerGalleryController extends Controller
             ->with('status', 'Gallery deleted successfully!');
     }
 
-    private function deleteGalleryCreditsAndNotifications(PortfolioAlbum $gallery, string $imageModelClass, $imageIds): void
-    {
-        $creditIds = PortfolioCredit::where(function ($query) use ($gallery, $imageModelClass, $imageIds) {
-            $query->where(function ($galleryQuery) use ($gallery) {
-                $galleryQuery->where('creditable_type', PortfolioAlbum::class)
-                    ->where('creditable_id', $gallery->id);
-            });
-
-            if ($imageIds->isNotEmpty()) {
-                $query->orWhere(function ($imageQuery) use ($imageModelClass, $imageIds) {
-                    $imageQuery->where('creditable_type', $imageModelClass)
-                        ->whereIn('creditable_id', $imageIds);
-                });
-            }
-        })->pluck('id');
-
-        SiteNotification::where('type', 'credit_pending')
-            ->where(function ($query) use ($gallery, $creditIds) {
-                $query->where('group_key', 'credit:gallery:' . $gallery->id)
-                    ->orWhere('data->gallery_id', $gallery->id);
-
-                if ($creditIds->isNotEmpty()) {
-                    $query->orWhereIn('data->credit_id', $creditIds);
-                }
-            })
-            ->delete();
-
-        if ($creditIds->isNotEmpty()) {
-            PortfolioCredit::whereIn('id', $creditIds)->delete();
-        }
-    }
 }

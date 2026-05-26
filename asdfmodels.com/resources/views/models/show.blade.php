@@ -1166,9 +1166,9 @@
             <div class="model-profile-header-card">
                 <div class="model-profile-cover">
                     @if($profile->cover_photo_path)
-                        <img :src="coverPreview || @js(asset($profile->cover_photo_path))" alt="Cover" class="w-full h-full object-cover">
+                        <img :src="coverPreview || @js(asset($profile->cover_photo_path))" alt="Cover" class="w-full h-full object-cover" data-model-cover-image>
                     @else
-                        <div class="absolute inset-0 flex items-center justify-center text-gray-400">
+                        <div class="absolute inset-0 flex items-center justify-center text-gray-400" data-model-cover-empty>
                             <i class="fas fa-panorama text-3xl"></i>
                         </div>
                     @endif
@@ -1192,7 +1192,7 @@
                             @if($profile->profile_photo_path)
                                 @if($ownerCanManage)
                                     <button type="button" @click="open('profile')" class="group relative block rounded-full focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2" aria-label="Manage profile photo">
-                                        <img :src="profilePreview || @js(asset($profile->profile_photo_path))" alt="{{ $profile->display_name }}" class="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white object-cover shadow-lg">
+                                        <img :src="profilePreview || @js(asset($profile->profile_photo_path))" alt="{{ $profile->display_name }}" class="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white object-cover shadow-lg" data-model-profile-image>
                                         <span class="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white transition group-hover:bg-black/30">
                                             <span class="rounded-full bg-black/75 px-3 py-2 text-xs font-semibold opacity-0 shadow transition group-hover:opacity-100">Manage</span>
                                         </span>
@@ -1203,7 +1203,7 @@
                             @else
                                 @if($ownerCanManage)
                                     <button type="button" @click="open('profile')" class="group w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white bg-gray-300 flex items-center justify-center shadow-lg transition hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2" aria-label="Add profile photo">
-                                        <span class="text-center text-gray-600 transition group-hover:text-gray-800">
+                                        <span class="text-center text-gray-600 transition group-hover:text-gray-800" data-model-profile-empty>
                                             <i class="fas fa-user text-3xl block"></i>
                                             <span class="mt-1 block text-xs font-semibold">Add photo</span>
                                         </span>
@@ -1879,6 +1879,9 @@
                                         <button type="button" @click="showPortfolioGroups()" class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition hover:bg-gray-50">
                                             <i class="fas fa-images mr-2 text-xs"></i>Choose from portfolio
                                         </button>
+                                        <button x-show="profilePreview" x-cloak type="button" @click="removeCurrentMedia($event)" class="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100">
+                                            <i class="fas fa-trash-can mr-2 text-xs"></i>Remove photo
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -1956,6 +1959,9 @@
                                         </button>
                                         <button type="button" @click="showPortfolioGroups()" class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition hover:bg-gray-50">
                                             <i class="fas fa-images mr-2 text-xs"></i>Choose from portfolio
+                                        </button>
+                                        <button x-show="coverPreview" x-cloak type="button" @click="removeCurrentMedia($event)" class="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100">
+                                            <i class="fas fa-trash-can mr-2 text-xs"></i>Remove cover
                                         </button>
                                     </div>
                                 </div>
@@ -2507,10 +2513,34 @@
 
                         if (payload.profile_photo_url) {
                             this.profilePreview = payload.profile_photo_url;
+                            const current = document.querySelector('[data-model-profile-image]');
+                            const empty = document.querySelector('[data-model-profile-empty]');
+                            if (current) {
+                                current.src = payload.profile_photo_url;
+                            } else if (empty) {
+                                const img = document.createElement('img');
+                                img.src = payload.profile_photo_url;
+                                img.alt = '';
+                                img.className = 'w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white object-cover shadow-lg';
+                                img.setAttribute('data-model-profile-image', '');
+                                empty.replaceWith(img);
+                            }
                         }
 
                         if (payload.cover_photo_url) {
                             this.coverPreview = payload.cover_photo_url;
+                            const current = document.querySelector('[data-model-cover-image]');
+                            const empty = document.querySelector('[data-model-cover-empty]');
+                            if (current) {
+                                current.src = payload.cover_photo_url;
+                            } else if (empty) {
+                                const img = document.createElement('img');
+                                img.src = payload.cover_photo_url;
+                                img.alt = 'Cover';
+                                img.className = 'w-full h-full object-cover';
+                                img.setAttribute('data-model-cover-image', '');
+                                empty.replaceWith(img);
+                            }
                         }
 
                         this.preview = this.activeSlot === 'cover' ? this.coverPreview : this.profilePreview;
@@ -2523,6 +2553,77 @@
                         }, 450);
                     } catch (error) {
                         this.mediaError = error.message || 'The image could not be saved.';
+                    } finally {
+                        this.isSaving = false;
+                    }
+                },
+
+                async removeCurrentMedia(event) {
+                    if (this.isSaving) {
+                        return;
+                    }
+
+                    const form = event.target.closest('form');
+                    const formData = new FormData(form);
+                    formData.delete('profile_photo_upload');
+                    formData.delete('cover_photo_upload');
+                    formData.set(this.activeSlot === 'cover' ? 'remove_cover_photo' : 'remove_profile_photo', '1');
+
+                    this.isSaving = true;
+                    this.mediaError = '';
+                    this.mediaStatus = '';
+
+                    try {
+                        const response = await fetch(form.action, {
+                            method: 'POST',
+                            body: formData,
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                        });
+
+                        const payload = await response.json().catch(() => ({}));
+
+                        if (!response.ok) {
+                            const errors = payload.errors || {};
+                            const firstError = Object.values(errors).flat()[0];
+                            throw new Error(firstError || payload.message || 'The image could not be removed.');
+                        }
+
+                        if (this.activeSlot === 'cover') {
+                            this.coverPreview = '';
+                            this.preview = '';
+                            const current = document.querySelector('[data-model-cover-image]');
+                            if (current) {
+                                const placeholder = document.createElement('div');
+                                placeholder.className = 'absolute inset-0 flex items-center justify-center text-gray-400';
+                                placeholder.setAttribute('data-model-cover-empty', '');
+                                placeholder.innerHTML = '<i class="fas fa-panorama text-3xl"></i>';
+                                current.replaceWith(placeholder);
+                            }
+                        } else {
+                            this.profilePreview = '';
+                            this.preview = '';
+                            const current = document.querySelector('[data-model-profile-image]');
+                            if (current) {
+                                const placeholder = document.createElement('span');
+                                placeholder.className = 'w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white bg-gray-300 flex flex-col items-center justify-center text-center text-gray-600 shadow-lg transition group-hover:text-gray-800';
+                                placeholder.setAttribute('data-model-profile-empty', '');
+                                placeholder.innerHTML = '<i class="fas fa-user text-3xl block"></i><span class="mt-1 block text-xs font-semibold">Add photo</span>';
+                                current.replaceWith(placeholder);
+                            }
+                        }
+
+                        this.mediaStatus = payload.message || 'Profile media removed.';
+                        this.destroyCropper();
+                        this.clearUploadInputs();
+
+                        setTimeout(() => {
+                            this.close();
+                        }, 450);
+                    } catch (error) {
+                        this.mediaError = error.message || 'The image could not be removed.';
                     } finally {
                         this.isSaving = false;
                     }

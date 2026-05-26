@@ -605,6 +605,12 @@
                 color: #fff;
             }
 
+            .photographer-media-button.danger {
+                background: #fef2f2;
+                border-color: #fecaca;
+                color: #b91c1c;
+            }
+
             .photographer-media-close {
                 align-items: center;
                 background: transparent;
@@ -1905,6 +1911,8 @@
                 <input type="hidden" name="cover_photo_image_id" data-cover-image-id>
                 <input type="hidden" name="profile_photo_crop_data" data-profile-crop-data>
                 <input type="hidden" name="cover_photo_crop_data" data-cover-crop-data>
+                <input type="hidden" name="remove_profile_photo" value="" data-remove-profile-photo>
+                <input type="hidden" name="remove_cover_photo" value="" data-remove-cover-photo>
 
                 <div class="photographer-media-header">
                     <div>
@@ -1931,6 +1939,7 @@
                             <div class="photographer-media-choice-row">
                                 <button type="button" class="photographer-media-button primary" data-media-upload-choice><i class="fas fa-upload"></i> Upload</button>
                                 <button type="button" class="photographer-media-button" data-media-portfolio-choice><i class="fas fa-images"></i> Portfolio</button>
+                                <button type="button" class="photographer-media-button danger photographer-media-hidden" data-media-remove-current><i class="fas fa-trash-can"></i> Remove</button>
                             </div>
                         </div>
                     </section>
@@ -2036,6 +2045,9 @@
                 coverImageId: modal.querySelector('[data-cover-image-id]'),
                 profileCropData: modal.querySelector('[data-profile-crop-data]'),
                 coverCropData: modal.querySelector('[data-cover-crop-data]'),
+                removeProfilePhoto: modal.querySelector('[data-remove-profile-photo]'),
+                removeCoverPhoto: modal.querySelector('[data-remove-cover-photo]'),
+                removeButton: modal.querySelector('[data-media-remove-current]'),
             };
 
             const lockPage = () => {
@@ -2084,6 +2096,8 @@
                 els.coverImageId.value = '';
                 els.profileCropData.value = '';
                 els.coverCropData.value = '';
+                els.removeProfilePhoto.value = '';
+                els.removeCoverPhoto.value = '';
                 state.selectedImageId = '';
             };
 
@@ -2103,6 +2117,10 @@
                 els.placeholder.classList.toggle('photographer-media-hidden', hasPreview);
                 els.profileUpload.classList.toggle('photographer-media-hidden', !isProfile);
                 els.coverUpload.classList.toggle('photographer-media-hidden', isProfile);
+                els.removeButton.classList.toggle('photographer-media-hidden', !hasPreview);
+                els.removeButton.innerHTML = isProfile
+                    ? '<i class="fas fa-trash-can"></i> Remove photo'
+                    : '<i class="fas fa-trash-can"></i> Remove cover';
             };
 
             const openModal = (slot) => {
@@ -2243,6 +2261,16 @@
                 showStep('groups');
             });
 
+            els.removeButton.addEventListener('click', () => {
+                resetInputs();
+                if (state.slot === 'profile') {
+                    els.removeProfilePhoto.value = '1';
+                } else {
+                    els.removeCoverPhoto.value = '1';
+                }
+                form.requestSubmit();
+            });
+
             modal.querySelectorAll('[data-media-back]').forEach((button) => {
                 button.addEventListener('click', () => {
                     destroyCropper();
@@ -2310,11 +2338,21 @@
                         throw new Error(firstError || payload.message || 'The image could not be saved.');
                     }
 
-                    if (payload.profile_photo_url) {
-                        els.profilePreview.src = payload.profile_photo_url;
+                    if (Object.prototype.hasOwnProperty.call(payload, 'profile_photo_url')) {
+                        els.profilePreview.src = payload.profile_photo_url || '';
                         const current = document.querySelector('[data-photographer-profile-image]');
                         const empty = document.querySelector('[data-photographer-profile-empty]');
-                        if (current) {
+                        if (!payload.profile_photo_url) {
+                            if (current) {
+                                const placeholder = document.createElement('span');
+                                placeholder.textContent = @json(substr($displayName, 0, 1));
+                                placeholder.setAttribute('data-photographer-profile-empty', '');
+                                current.replaceWith(placeholder);
+                            }
+                            if (empty) {
+                                empty.classList.remove('photographer-media-hidden');
+                            }
+                        } else if (current) {
                             current.src = payload.profile_photo_url;
                         } else if (empty) {
                             const img = document.createElement('img');
@@ -2325,11 +2363,22 @@
                         }
                     }
 
-                    if (payload.cover_photo_url) {
-                        els.coverPreview.src = payload.cover_photo_url;
+                    if (Object.prototype.hasOwnProperty.call(payload, 'cover_photo_url')) {
+                        els.coverPreview.src = payload.cover_photo_url || '';
                         const current = document.querySelector('[data-photographer-cover-image]');
                         const empty = document.querySelector('[data-photographer-cover-empty]');
-                        if (current) {
+                        if (!payload.cover_photo_url) {
+                            if (current) {
+                                const placeholder = document.createElement('div');
+                                placeholder.className = 'photographer-cover-empty';
+                                placeholder.setAttribute('data-photographer-cover-empty', '');
+                                placeholder.innerHTML = '<i class="fas fa-panorama"></i>';
+                                current.replaceWith(placeholder);
+                            }
+                            if (empty) {
+                                empty.classList.remove('photographer-media-hidden');
+                            }
+                        } else if (current) {
                             current.src = payload.cover_photo_url;
                         } else if (empty) {
                             const img = document.createElement('img');

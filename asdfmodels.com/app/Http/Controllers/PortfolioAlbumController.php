@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PortfolioAlbum;
 use App\Models\PortfolioCredit;
 use App\Models\PortfolioImage;
-use App\Models\SiteNotification;
+use App\Services\PortfolioCleanupService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -305,7 +305,7 @@ class PortfolioAlbumController extends Controller
         }
 
         $imageIds = $album->images()->pluck('id');
-        $this->deleteGalleryCreditsAndNotifications($album, PortfolioImage::class, $imageIds);
+        PortfolioCleanupService::deleteGalleryCreditsAndNotifications($album, PortfolioImage::class, $imageIds);
 
         // Remove images from album (don't delete images, just unlink)
         $album->images()->update(['album_id' => null]);
@@ -357,38 +357,6 @@ class PortfolioAlbumController extends Controller
         // For now, if no DOB, assume not verified
         // In production, you might want a separate age verification system
         return false;
-    }
-
-    private function deleteGalleryCreditsAndNotifications(PortfolioAlbum $album, string $imageModelClass, $imageIds): void
-    {
-        $creditIds = PortfolioCredit::where(function ($query) use ($album, $imageModelClass, $imageIds) {
-            $query->where(function ($galleryQuery) use ($album) {
-                $galleryQuery->where('creditable_type', PortfolioAlbum::class)
-                    ->where('creditable_id', $album->id);
-            });
-
-            if ($imageIds->isNotEmpty()) {
-                $query->orWhere(function ($imageQuery) use ($imageModelClass, $imageIds) {
-                    $imageQuery->where('creditable_type', $imageModelClass)
-                        ->whereIn('creditable_id', $imageIds);
-                });
-            }
-        })->pluck('id');
-
-        SiteNotification::where('type', 'credit_pending')
-            ->where(function ($query) use ($album, $creditIds) {
-                $query->where('group_key', 'credit:gallery:' . $album->id)
-                    ->orWhere('data->gallery_id', $album->id);
-
-                if ($creditIds->isNotEmpty()) {
-                    $query->orWhereIn('data->credit_id', $creditIds);
-                }
-            })
-            ->delete();
-
-        if ($creditIds->isNotEmpty()) {
-            PortfolioCredit::whereIn('id', $creditIds)->delete();
-        }
     }
 
     private function canViewAlbum(PortfolioAlbum $album, $user): bool

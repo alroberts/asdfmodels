@@ -647,6 +647,8 @@ class ModelProfileController extends Controller
             'cover_photo_image_id' => ['nullable', 'integer', 'exists:portfolio_images,id'],
             'profile_photo_crop_data' => ['nullable', 'string'],
             'cover_photo_crop_data' => ['nullable', 'string'],
+            'remove_profile_photo' => ['nullable', 'boolean'],
+            'remove_cover_photo' => ['nullable', 'boolean'],
         ]);
 
         $profileCrop = $this->parseProfileCropData($validated['profile_photo_crop_data'] ?? null);
@@ -655,7 +657,10 @@ class ModelProfileController extends Controller
         $previousCoverPhoto = $profile->cover_photo_path;
         $mediaWasChanged = false;
 
-        if ($request->hasFile('profile_photo_upload')) {
+        if ($request->boolean('remove_profile_photo')) {
+            $profile->profile_photo_path = null;
+            $mediaWasChanged = true;
+        } elseif ($request->hasFile('profile_photo_upload')) {
             $profile->profile_photo_path = $this->storeModelMediaUpload(
                 $request->file('profile_photo_upload'),
                 $user->id,
@@ -681,7 +686,10 @@ class ModelProfileController extends Controller
             $mediaWasChanged = true;
         }
 
-        if ($request->hasFile('cover_photo_upload')) {
+        if ($request->boolean('remove_cover_photo')) {
+            $profile->cover_photo_path = null;
+            $mediaWasChanged = true;
+        } elseif ($request->hasFile('cover_photo_upload')) {
             $profile->cover_photo_path = $this->storeModelMediaUpload(
                 $request->file('cover_photo_upload'),
                 $user->id,

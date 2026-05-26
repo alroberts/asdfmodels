@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PortfolioImage;
+use App\Services\PortfolioCleanupService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -441,6 +442,8 @@ class PortfolioImageController extends Controller
         if ($image->model_id !== $user->id) {
             abort(403);
         }
+
+        PortfolioCleanupService::deleteImageReferences(PortfolioImage::class, $image->id, $image->album_id);
 
         // Delete files
         $files = [

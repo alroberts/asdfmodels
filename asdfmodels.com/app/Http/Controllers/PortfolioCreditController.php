@@ -105,10 +105,12 @@ class PortfolioCreditController extends Controller
             ], 422);
         }
 
-        $credits->each(fn (PortfolioCredit $credit) => SiteNotification::notifyCredit($credit->loadMissing(['creditable', 'owner'])));
+        $credits
+            ->filter(fn (PortfolioCredit $credit) => (int) $credit->credited_user_id !== (int) $actor->id)
+            ->each(fn (PortfolioCredit $credit) => SiteNotification::notifyCredit($credit->loadMissing(['creditable', 'owner'])));
 
         return response()->json([
-            'message' => 'Credit added. The tagged member can now choose whether to show it on their profile.',
+            'message' => 'Tags saved.',
             'credits' => $credits->values(),
         ]);
     }
@@ -190,7 +192,9 @@ class PortfolioCreditController extends Controller
             ]
         );
 
-        SiteNotification::notifyCredit($credit->loadMissing(['creditable', 'owner']));
+        if ((int) $credit->credited_user_id !== (int) $ownerUserId) {
+            SiteNotification::notifyCredit($credit->loadMissing(['creditable', 'owner']));
+        }
 
         return response()->json([
             'message' => 'Tag request sent.',
@@ -200,6 +204,8 @@ class PortfolioCreditController extends Controller
 
     private function upsertCredit(Model $creditable, User $actor, array $validated): PortfolioCredit
     {
+        $isSelfTag = (int) $validated['credited_user_id'] === (int) $actor->id;
+
         return PortfolioCredit::updateOrCreate(
             [
                 'creditable_type' => $creditable::class,
@@ -210,9 +216,9 @@ class PortfolioCreditController extends Controller
             [
                 'owner_user_id' => $actor->id,
                 'created_by_user_id' => $actor->id,
-                'status' => PortfolioCredit::STATUS_PENDING,
+                'status' => $isSelfTag ? PortfolioCredit::STATUS_ACCEPTED_HIDDEN : PortfolioCredit::STATUS_PENDING,
                 'source' => 'owner_tag',
-                'responded_at' => null,
+                'responded_at' => $isSelfTag ? now() : null,
             ]
         );
     }

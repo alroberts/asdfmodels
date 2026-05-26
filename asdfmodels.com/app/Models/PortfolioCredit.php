@@ -57,6 +57,7 @@ class PortfolioCredit extends Model
 
         return $query
             ->where('credited_user_id', $userId)
+            ->whereColumn('owner_user_id', '!=', 'credited_user_id')
             ->when($role, fn (Builder $roleQuery) => $roleQuery->where('credited_role', $role))
             ->where('status', self::STATUS_ACCEPTED_VISIBLE);
     }
@@ -67,6 +68,7 @@ class PortfolioCredit extends Model
 
         return $query
             ->where('credited_user_id', $userId)
+            ->whereColumn('owner_user_id', '!=', 'credited_user_id')
             ->when($role, fn (Builder $roleQuery) => $roleQuery->where('credited_role', $role))
             ->where('status', self::STATUS_PENDING);
     }

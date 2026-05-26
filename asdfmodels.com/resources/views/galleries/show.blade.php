@@ -27,6 +27,7 @@
                     'role' => $firstCredit?->credited_role,
                     'avatar' => $profile?->profile_photo_path ? asset($profile->profile_photo_path) : null,
                     'galleryCreditId' => optional($userCredits->first(fn ($credit) => class_basename($credit->creditable_type) === 'PortfolioAlbum'))->id,
+                    'galleryTagged' => (bool) $userCredits->first(fn ($credit) => class_basename($credit->creditable_type) === 'PortfolioAlbum'),
                     'imageCredits' => $userCredits
                         ->filter(fn ($credit) => class_basename($credit->creditable_type) !== 'PortfolioAlbum')
                         ->mapWithKeys(fn ($credit) => [(string) $credit->creditable_id => $credit->id])
@@ -553,7 +554,7 @@
                     <div>
                         <p class="gallery-credit-kicker">Credits & Tags</p>
                         <h3 id="creditsModalTitle">Tag collaborators</h3>
-                        <p>Add collaborators once, then assign them to the full gallery or individual images.</p>
+                        <p>Add collaborators once, set the images they appear in, then save the tag invitations together.</p>
                     </div>
                     <button type="button" class="gallery-credit-close" onclick="closeCreditsModal()" aria-label="Close credits">
                         <i class="fas fa-times"></i>
@@ -587,7 +588,7 @@
                                 <h4>Collaborators</h4>
                                 <p>Add everyone involved, then select one collaborator to assign them to images.</p>
                             </div>
-                            <button type="button" onclick="tagAllCollaboratorsInGallery()">Tag all in gallery</button>
+                            <button type="button" onclick="stageAllCollaboratorsInGallery()">Tag all in gallery</button>
                         </div>
                         <div id="collaboratorList" class="gallery-collaborator-list"></div>
                     </section>
@@ -615,9 +616,9 @@
                 <div class="gallery-credit-footer">
                     <span id="creditStatus" class="gallery-credit-status"></span>
                     <button type="button" onclick="closeCreditsModal()" class="gallery-credit-secondary">Cancel</button>
-                    <button type="button" onclick="tagAllCollaboratorsInGallery()" class="gallery-credit-primary">
+                    <button type="button" onclick="saveCollaboratorTags()" class="gallery-credit-primary" data-save-collaborator-tags>
                         <i class="fas fa-user-tag"></i>
-                        Tag All in Gallery
+                        Save Tags
                     </button>
                 </div>
             </div>
@@ -1215,6 +1216,7 @@
             let selectedCreditUser = null;
             let creditSearchTimer = null;
             let collaborators = @js($collaborators);
+            let originalCollaborators = JSON.parse(JSON.stringify(collaborators));
             let activeCollaboratorId = collaborators[0]?.id || null;
 
             function openCreditsModal() {
@@ -1303,6 +1305,7 @@
                         avatar: selectedCreditUser.avatar || null,
                         galleryCreditId: null,
                         imageCredits: {},
+                        galleryTagged: false,
                     });
                 }
 
@@ -1337,7 +1340,7 @@
                             <small>@${escapeHtml(collaborator.username)} · ${escapeHtml(collaborator.role)}</small>
                         </span>
                         <span class="gallery-collaborator-actions">
-                            <em>${Object.keys(collaborator.imageCredits || {}).length} images</em>
+                            <em>${collaborator.galleryTagged ? 'Gallery' : `${Object.keys(collaborator.imageCredits || {}).length} images`}</em>
                             <i class="fas fa-chevron-right"></i>
                         </span>
                     `;
@@ -1354,7 +1357,7 @@
                     remove.innerHTML = '<i class="fas fa-trash"></i><span>Remove</span>';
                     remove.addEventListener('click', (event) => {
                         event.stopPropagation();
-                        removeCollaborator(collaborator.id);
+                    stageRemoveCollaborator(collaborator.id);
                     });
                     button.appendChild(remove);
                 });
@@ -1395,30 +1398,21 @@
                 }
 
                 const imageKey = String(imageId);
-                const existingCreditId = collaborator.imageCredits?.[imageKey];
 
-                try {
-                    if (existingCreditId) {
-                        await deleteCredit(existingCreditId, false);
-                        delete collaborator.imageCredits[imageKey];
-                        status.textContent = `${collaborator.label} removed from image.`;
-                    } else {
-                        const data = await createCredit(collaborator, false, [imageId]);
-                        const credit = (data.credits || [])[0];
-                        if (credit?.id) {
-                            collaborator.imageCredits[imageKey] = credit.id;
-                        }
-                        status.textContent = `${collaborator.label} assigned to image.`;
-                    }
-                } catch (error) {
-                    status.textContent = error.message || 'Could not update collaborator assignment.';
+                if (Object.prototype.hasOwnProperty.call(collaborator.imageCredits || {}, imageKey)) {
+                    delete collaborator.imageCredits[imageKey];
+                    status.textContent = `${collaborator.label} removed from image. Press Save Tags to apply.`;
+                } else {
+                    collaborator.imageCredits = collaborator.imageCredits || {};
+                    collaborator.imageCredits[imageKey] = collaborator.imageCredits[imageKey] || null;
+                    status.textContent = `${collaborator.label} assigned to image. Press Save Tags to apply.`;
                 }
 
                 renderCollaborators();
                 renderCollaboratorAssignments();
             }
 
-            async function tagAllCollaboratorsInGallery() {
+            function stageAllCollaboratorsInGallery() {
                 const status = document.getElementById('creditStatus');
                 const imageIds = Array.from(document.querySelectorAll('[data-credit-image]')).map((button) => button.dataset.creditImage);
 
@@ -1427,24 +1421,69 @@
                     return;
                 }
 
-                status.textContent = 'Saving...';
+                collaborators.forEach((collaborator) => {
+                    collaborator.galleryTagged = true;
+                    collaborator.imageCredits = collaborator.imageCredits || {};
+                    imageIds.forEach((imageId) => {
+                        collaborator.imageCredits[String(imageId)] = collaborator.imageCredits[String(imageId)] || null;
+                    });
+                });
+
+                status.textContent = 'All collaborators staged for the gallery. Press Save Tags to apply.';
+                renderCollaborators();
+                renderCollaboratorAssignments();
+            }
+
+            async function saveCollaboratorTags() {
+                const status = document.getElementById('creditStatus');
+                const saveButton = document.querySelector('[data-save-collaborator-tags]');
+
+                if (collaborators.length === 0 && originalCollaborators.length === 0) {
+                    status.textContent = 'Add at least one collaborator first.';
+                    return;
+                }
+
+                status.textContent = 'Saving tags...';
+                if (saveButton) saveButton.disabled = true;
+
                 try {
+                    await removeDeletedCredits();
+
                     for (const collaborator of collaborators) {
-                        const data = await createCredit(collaborator, true, imageIds);
-                        (data.credits || []).forEach((credit) => {
-                            if (!credit?.id) return;
-                            if (String(credit.creditable_type || '').includes('PortfolioAlbum')) {
-                                collaborator.galleryCreditId = credit.id;
-                            } else {
-                                collaborator.imageCredits[String(credit.creditable_id)] = credit.id;
+                        const original = originalCollaborators.find((item) => Number(item.id) === Number(collaborator.id));
+                        const desiredImageIds = Object.keys(collaborator.imageCredits || {});
+                        const originalImageCredits = original?.imageCredits || {};
+                        const imagesToCreate = desiredImageIds.filter((imageId) => !originalImageCredits[imageId]);
+
+                        if (collaborator.galleryTagged && !collaborator.galleryCreditId) {
+                            const data = await createCredit(collaborator, true, []);
+                            const galleryCredit = (data.credits || []).find((credit) => String(credit.creditable_type || '').includes('PortfolioAlbum'));
+                            if (galleryCredit?.id) {
+                                collaborator.galleryCreditId = galleryCredit.id;
                             }
-                        });
+                        }
+
+                        if (!collaborator.galleryTagged && collaborator.galleryCreditId) {
+                            await deleteCredit(collaborator.galleryCreditId, false);
+                            collaborator.galleryCreditId = null;
+                        }
+
+                        if (imagesToCreate.length > 0) {
+                            const data = await createCredit(collaborator, false, imagesToCreate);
+                            (data.credits || []).forEach((credit) => {
+                                if (credit?.id && !String(credit.creditable_type || '').includes('PortfolioAlbum')) {
+                                    collaborator.imageCredits[String(credit.creditable_id)] = credit.id;
+                                }
+                            });
+                        }
                     }
 
-                    status.textContent = 'Collaborators tagged across the gallery.';
+                    originalCollaborators = JSON.parse(JSON.stringify(collaborators));
+                    status.textContent = 'Tags saved.';
                 } catch (error) {
-                    status.textContent = error.message || 'Could not tag collaborators.';
+                    status.textContent = error.message || 'Could not save tags.';
                 } finally {
+                    if (saveButton) saveButton.disabled = false;
                     renderCollaborators();
                     renderCollaboratorAssignments();
                 }
@@ -1477,7 +1516,35 @@
                 return data;
             }
 
-            async function removeCollaborator(collaboratorId) {
+            async function removeDeletedCredits() {
+                for (const original of originalCollaborators) {
+                    const current = collaborators.find((item) => Number(item.id) === Number(original.id));
+
+                    if (!current) {
+                        const creditIds = [
+                            original.galleryCreditId,
+                            ...Object.values(original.imageCredits || {}),
+                        ].filter(Boolean);
+
+                        for (const creditId of creditIds) {
+                            await deleteCredit(creditId, false);
+                        }
+                        continue;
+                    }
+
+                    if (original.galleryCreditId && !current.galleryTagged) {
+                        await deleteCredit(original.galleryCreditId, false);
+                    }
+
+                    for (const [imageId, creditId] of Object.entries(original.imageCredits || {})) {
+                        if (creditId && !Object.prototype.hasOwnProperty.call(current.imageCredits || {}, imageId)) {
+                            await deleteCredit(creditId, false);
+                        }
+                    }
+                }
+            }
+
+            function stageRemoveCollaborator(collaboratorId) {
                 const collaborator = collaborators.find((item) => Number(item.id) === Number(collaboratorId));
                 if (!collaborator) return;
 
@@ -1485,18 +1552,9 @@
                     return;
                 }
 
-                const creditIds = [
-                    collaborator.galleryCreditId,
-                    ...Object.values(collaborator.imageCredits || {}),
-                ].filter(Boolean);
-
-                for (const creditId of creditIds) {
-                    await deleteCredit(creditId, false);
-                }
-
                 collaborators = collaborators.filter((item) => Number(item.id) !== Number(collaboratorId));
                 activeCollaboratorId = collaborators[0]?.id || null;
-                document.getElementById('creditStatus').textContent = 'Collaborator removed.';
+                document.getElementById('creditStatus').textContent = 'Collaborator staged for removal. Press Save Tags to apply.';
                 renderCollaborators();
                 renderCollaboratorAssignments();
             }

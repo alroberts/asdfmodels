@@ -1528,6 +1528,22 @@
                     </article>
                 @endif
 
+                @if(($feedPosts ?? collect())->isNotEmpty())
+                    <article class="photographer-card feed-profile-section">
+                        <div class="photographer-card-header">
+                            <div>
+                                <p class="photographer-kicker">Activity</p>
+                                <h2 class="photographer-heading">Feed</h2>
+                            </div>
+                        </div>
+                        <div class="feed-profile-list">
+                            @foreach($feedPosts as $post)
+                                @include('feed.partials.post-card', ['post' => $post])
+                            @endforeach
+                        </div>
+                    </article>
+                @endif
+
                 <article class="photographer-card">
                     <div class="photographer-card-header">
                         <div>

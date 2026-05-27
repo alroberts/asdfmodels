@@ -1,63 +1,111 @@
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex flex-col gap-2">
-            <h2 class="font-semibold text-2xl text-gray-900 leading-tight">
-                {{ $dashboard['title'] }}
-            </h2>
-            <p class="text-sm text-gray-600">
-                {{ $dashboard['intro'] }}
-            </p>
+        <div class="feed-header">
+            <div>
+                <p class="feed-kicker">Member Feed</p>
+                <h1>Latest from your connections</h1>
+                <p>Share updates, new work, links, and tagged collaborations.</p>
+            </div>
+            <a href="#create-post" class="feed-primary-action"><i class="fas fa-plus"></i> Create Post</a>
         </div>
     </x-slot>
 
-    <div class="py-8 md:py-12">
-        <div class="max-w-7xl mx-auto space-y-6 sm:px-6 lg:px-8">
-            <div class="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 overflow-hidden shadow-sm sm:rounded-2xl">
-                <div class="px-6 py-8 md:px-8 md:py-10 text-white">
-                    <p class="text-sm uppercase tracking-[0.25em] text-gray-300">Welcome back</p>
-                    <h3 class="mt-3 text-3xl font-semibold">{{ auth()->user()->name }}</h3>
-                    <p class="mt-3 max-w-3xl text-sm md:text-base text-gray-200">
-                        Use this page as your working home base for the platform. The next steps, profile links, and core account shortcuts all live here.
-                    </p>
-                </div>
-            </div>
+    @push('styles')
+        <style>
+            .feed-shell { max-width: 1120px; margin: 0 auto; padding: 38px 20px 72px; }
+            .feed-header { align-items: center; display: flex; justify-content: space-between; gap: 24px; }
+            .feed-header h1 { color: #050505; font-size: clamp(30px, 4vw, 54px); font-weight: 900; letter-spacing: -0.055em; line-height: .92; margin: 4px 0 10px; }
+            .feed-header p { color: #5b6472; margin: 0; }
+            .feed-kicker { color: #6b7280; font-size: 12px; font-weight: 900; letter-spacing: .32em; text-transform: uppercase; }
+            .feed-primary-action, .feed-button { align-items: center; background: #050505; border: 1px solid #050505; border-radius: 999px; color: #fff; display: inline-flex; font-weight: 850; gap: 9px; padding: 12px 18px; text-decoration: none; }
+            .feed-layout { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr) 320px; }
+            .feed-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 26px; box-shadow: 0 18px 55px rgba(15, 23, 42, .06); overflow: hidden; }
+            .feed-create { padding: 22px; }
+            .feed-create textarea, .feed-create input[type="url"] { border: 1px solid #d1d5db; border-radius: 18px; color: #111827; display: block; font-size: 15px; padding: 14px 16px; width: 100%; }
+            .feed-create textarea { min-height: 118px; resize: vertical; }
+            .feed-create-grid { display: grid; gap: 14px; margin-top: 14px; }
+            .feed-muted { color: #6b7280; font-size: 13px; line-height: 1.5; }
+            .feed-post { padding: 22px; }
+            .feed-author { align-items: center; display: flex; gap: 12px; }
+            .feed-avatar { align-items: center; background: #111827; border-radius: 999px; color: #fff; display: flex; font-weight: 900; height: 44px; justify-content: center; overflow: hidden; width: 44px; }
+            .feed-avatar img { height: 100%; object-fit: cover; width: 100%; }
+            .feed-author strong { color: #0f172a; display: block; font-size: 15px; }
+            .feed-author span { color: #6b7280; display: block; font-size: 12px; margin-top: 2px; }
+            .feed-body { color: #1f2937; font-size: 15px; line-height: 1.65; margin: 16px 0 0; white-space: pre-line; }
+            .feed-images { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 16px; }
+            .feed-images img { aspect-ratio: 1 / 1; border-radius: 18px; object-fit: cover; width: 100%; }
+            .feed-link-card { align-items: stretch; border: 1px solid #e5e7eb; border-radius: 20px; display: grid; grid-template-columns: 150px minmax(0, 1fr); margin-top: 16px; overflow: hidden; text-decoration: none; }
+            .feed-link-card img, .feed-link-placeholder { background: #f3f4f6; height: 100%; min-height: 126px; object-fit: cover; width: 100%; }
+            .feed-link-body { padding: 14px; }
+            .feed-link-body strong { color: #111827; display: block; font-size: 15px; }
+            .feed-link-body p { color: #6b7280; font-size: 13px; line-height: 1.45; margin: 6px 0 0; }
+            .feed-panel { padding: 20px; }
+            .feed-panel h2 { color: #111827; font-size: 18px; font-weight: 900; margin: 0 0 10px; }
+            .feed-mention { border-top: 1px solid #e5e7eb; padding: 14px 0; }
+            .feed-mention:first-of-type { border-top: 0; }
+            .feed-mention-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+            .feed-mention-actions button { border: 1px solid #d1d5db; border-radius: 999px; font-size: 12px; font-weight: 850; padding: 8px 10px; }
+            .feed-empty { color: #6b7280; padding: 42px 22px; text-align: center; }
+            @media (max-width: 900px) { .feed-header, .feed-layout { display: block; } .feed-primary-action { margin-top: 18px; } .feed-card { margin-top: 18px; } }
+        </style>
+    @endpush
 
-            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                @foreach($dashboard['stats'] as $stat)
-                    <div class="bg-white overflow-hidden shadow-sm border border-gray-200 rounded-2xl">
-                        <div class="p-6">
-                            <p class="text-sm font-medium text-gray-500">{{ $stat['label'] }}</p>
-                            <p class="mt-3 text-3xl font-semibold text-gray-900">{{ $stat['value'] }}</p>
-                        </div>
+    <main class="feed-shell">
+        @if(session('status'))
+            <div class="mb-5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">{{ session('status') }}</div>
+        @endif
+        @if($errors->any())
+            <div class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">{{ $errors->first() }}</div>
+        @endif
+
+        <div class="feed-layout">
+            <section>
+                <form id="create-post" class="feed-card feed-create" method="POST" action="{{ route('feed.store') }}" enctype="multipart/form-data">
+                    @csrf
+                    <textarea name="body" placeholder="Share an update. Mention members with @username.">{{ old('body') }}</textarea>
+                    <div class="feed-create-grid">
+                        <input type="url" name="link_url" value="{{ old('link_url') }}" placeholder="Optional link, e.g. https://asdfmodels.com/galleries/12">
+                        <input type="file" name="images[]" accept="image/jpeg,image/jpg,image/png,image/webp" multiple>
+                        <p class="feed-muted">Emails and phone numbers are hidden automatically. External links require verification unless they point to ASDF Models.</p>
+                        <button class="feed-button" type="submit"><i class="fas fa-paper-plane"></i> Share Post</button>
                     </div>
-                @endforeach
-            </div>
+                </form>
 
-            <div class="bg-white overflow-hidden shadow-sm border border-gray-200 rounded-2xl">
-                <div class="px-6 py-5 border-b border-gray-200">
-                    <h3 class="text-lg font-semibold text-gray-900">Quick Actions</h3>
-                    <p class="mt-1 text-sm text-gray-600">Jump straight into the areas you’re most likely to use.</p>
+                <div class="mt-6 space-y-5">
+                    @forelse($posts as $post)
+                        @include('feed.partials.post-card', ['post' => $post])
+                    @empty
+                        <div class="feed-card feed-empty">
+                            <strong>No posts yet.</strong>
+                            <p class="mt-2">Connect with members or create the first post in your feed.</p>
+                        </div>
+                    @endforelse
                 </div>
-                <div class="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
-                    @foreach($dashboard['quickLinks'] as $link)
-                        <a href="{{ $link['route'] }}" class="group rounded-2xl border border-gray-200 bg-gray-50 p-5 transition hover:border-gray-400 hover:bg-white hover:shadow-sm">
-                            <div class="flex items-start justify-between gap-3">
-                                <div>
-                                    <h4 class="text-base font-semibold text-gray-900 group-hover:text-black">
-                                        {{ $link['label'] }}
-                                    </h4>
-                                    <p class="mt-2 text-sm leading-6 text-gray-600">
-                                        {{ $link['description'] }}
-                                    </p>
-                                </div>
-                                <span class="mt-1 text-gray-400 group-hover:text-gray-700">
-                                    <i class="fas fa-arrow-right"></i>
-                                </span>
-                            </div>
-                        </a>
-                    @endforeach
+
+                <div class="mt-6">{{ $posts->links() }}</div>
+            </section>
+
+            <aside>
+                <div class="feed-card feed-panel">
+                    <h2>Pending Mentions</h2>
+                    <p class="feed-muted">Choose whether tagged posts can appear on your profile feed.</p>
+                    @forelse($pendingMentions as $mention)
+                        <div class="feed-mention">
+                            <strong>{{ $mention->mentionedBy?->display_name ?: $mention->mentionedBy?->name }}</strong>
+                            <p class="feed-muted">Mentioned you in a post.</p>
+                            <form class="feed-mention-actions" method="POST" action="{{ route('feed.mentions.update', $mention) }}">
+                                @csrf
+                                @method('PATCH')
+                                <button name="status" value="accepted_visible" type="submit">Accept + show</button>
+                                <button name="status" value="accepted_hidden" type="submit">Accept only</button>
+                                <button name="status" value="rejected" type="submit">Reject</button>
+                            </form>
+                        </div>
+                    @empty
+                        <p class="feed-muted">Nothing waiting right now.</p>
+                    @endforelse
                 </div>
-            </div>
+            </aside>
         </div>
-    </div>
+    </main>
 </x-app-layout>

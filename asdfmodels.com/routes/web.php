@@ -1,10 +1,6 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
-use App\Models\Message;
-use App\Models\PhotographerPortfolioImage;
-use App\Models\PortfolioAlbum;
-use App\Models\PortfolioImage;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -46,66 +42,9 @@ Route::get('/', function () {
     ]);
 })->name('home');
 
-Route::get('/dashboard', function () {
-    $user = request()->user();
-
-    if ($user->is_admin) {
-        return redirect()->route('admin.dashboard');
-    }
-
-    $threadScope = function ($query) use ($user) {
-        $query->where(function ($threadQuery) use ($user) {
-            $threadQuery->where('user1_id', $user->id)
-                ->orWhere('user2_id', $user->id);
-        });
-    };
-
-    if ($user->is_photographer) {
-        $profile = $user->photographerProfile;
-        $dashboard = [
-            'title' => 'Photographer Dashboard',
-            'intro' => 'Everything important is in one place while we build out the richer feed experience.',
-            'stats' => [
-                ['label' => 'Galleries', 'value' => PortfolioAlbum::where('user_id', $user->id)->where('owner_role', 'photographer')->count()],
-                ['label' => 'Portfolio Images', 'value' => PhotographerPortfolioImage::where('photographer_id', $user->id)->count()],
-                ['label' => 'Unread Messages', 'value' => Message::whereHas('thread', $threadScope)->where('sender_id', '!=', $user->id)->where('is_read', false)->count()],
-                ['label' => 'Profile Visibility', 'value' => $profile && $profile->is_public ? 'Public' : 'Private'],
-            ],
-            'quickLinks' => [
-                ['label' => 'My Portfolio', 'description' => 'Manage galleries, uploads, and featured work.', 'route' => route('portfolio.index')],
-                ['label' => 'Edit Profile', 'description' => 'Update your public profile, branding, and contact details.', 'route' => route('photographers.profile.edit')],
-                ['label' => 'Public Profile', 'description' => 'See how your live photographer profile appears to visitors.', 'route' => route('photographers.show', $user->profileRouteIdentifier())],
-                ['label' => 'Find a Model', 'description' => 'Explore public model profiles and portfolios.', 'route' => route('models.browse')],
-                ['label' => 'Messages', 'description' => 'Open your conversations and reply to enquiries.', 'route' => route('messages.index')],
-                ['label' => 'Account Settings', 'description' => 'Manage email, password, and account-level preferences.', 'route' => route('profile.edit')],
-            ],
-        ];
-    } else {
-        $profile = $user->modelProfile;
-        $dashboard = [
-            'title' => 'Model Dashboard',
-            'intro' => 'This gives you a practical home base now, with room to grow into a fuller member feed later.',
-            'stats' => [
-                ['label' => 'Portfolio Images', 'value' => PortfolioImage::where('model_id', $user->id)->count()],
-                ['label' => 'Galleries', 'value' => PortfolioAlbum::where('user_id', $user->id)->count()],
-                ['label' => 'Unread Messages', 'value' => Message::whereHas('thread', $threadScope)->where('sender_id', '!=', $user->id)->where('is_read', false)->count()],
-                ['label' => 'Profile Visibility', 'value' => $profile && $profile->is_public ? 'Public' : 'Private'],
-            ],
-            'quickLinks' => [
-                ['label' => 'My Portfolio', 'description' => 'Add, organise, and update your portfolio images.', 'route' => route('portfolio.index')],
-                ['label' => 'Edit Profile', 'description' => 'Update your model profile, stats, and public details.', 'route' => route('profile.model.edit')],
-                ['label' => 'Public Profile', 'description' => 'Preview how your public model profile appears.', 'route' => route('models.show', $user->profileRouteIdentifier())],
-                ['label' => 'Find a Photographer', 'description' => 'Explore photographer profiles and portfolios.', 'route' => route('photographers.browse')],
-                ['label' => 'Messages', 'description' => 'Review conversations and follow up with photographers.', 'route' => route('messages.index')],
-                ['label' => 'Account Settings', 'description' => 'Manage email, password, and account-level preferences.', 'route' => route('profile.edit')],
-            ],
-        ];
-    }
-
-    return view('dashboard', [
-        'dashboard' => $dashboard,
-    ]);
-})->middleware(['auth', 'verified', 'profile.complete'])->name('dashboard');
+Route::get('/dashboard', [\App\Http\Controllers\FeedController::class, 'index'])
+    ->middleware(['auth', 'verified', 'profile.complete'])
+    ->name('dashboard');
 
 Route::middleware('auth')->group(function () {
     // Profile routes (accessible without profile completion - needed to complete profile)
@@ -200,6 +139,8 @@ Route::middleware(['auth', 'profile.complete'])->group(function () {
     Route::post('/connections/{connection}/block', [\App\Http\Controllers\ConnectionController::class, 'block'])->name('connections.block');
     Route::delete('/connections/{connection}', [\App\Http\Controllers\ConnectionController::class, 'destroy'])->name('connections.destroy');
     Route::post('/galleries/images/comments', [\App\Http\Controllers\PublicGalleryController::class, 'comment'])->name('public.galleries.comments.store');
+    Route::post('/feed', [\App\Http\Controllers\FeedController::class, 'store'])->name('feed.store');
+    Route::patch('/feed/mentions/{mention}', [\App\Http\Controllers\FeedController::class, 'updateMention'])->name('feed.mentions.update');
     
     // Browse Models
     Route::get('/models', [\App\Http\Controllers\ModelBrowseController::class, 'index'])->name('models.browse');

@@ -1402,6 +1402,22 @@
                         </section>
                     @endif
 
+                    @if(($feedPosts ?? collect())->isNotEmpty())
+                        <section class="model-profile-card feed-profile-section">
+                            <div class="model-profile-card-header">
+                                <div>
+                                    <p class="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Activity</p>
+                                    <h2 class="mt-1 text-2xl font-semibold text-black">Feed</h2>
+                                </div>
+                            </div>
+                            <div class="feed-profile-list">
+                                @foreach($feedPosts as $post)
+                                    @include('feed.partials.post-card', ['post' => $post])
+                                @endforeach
+                            </div>
+                        </section>
+                    @endif
+
                     <section class="model-profile-card">
                         <div class="model-profile-card-header">
                             <div>

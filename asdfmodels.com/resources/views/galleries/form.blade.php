@@ -108,6 +108,23 @@
 
                                 <p class="mt-3 hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700" data-create-upload-error></p>
                             </div>
+
+                            <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                                <label class="flex cursor-pointer items-start gap-4">
+                                    <span class="relative mt-0.5">
+                                        <input type="checkbox" name="share_in_feed" value="1" class="peer sr-only" @checked(old('share_in_feed'))>
+                                        <span class="flex h-6 w-6 items-center justify-center rounded-lg border-2 border-gray-300 bg-white transition-all peer-checked:border-gray-900 peer-checked:bg-gray-900">
+                                            <svg class="h-4 w-4" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                                                <path d="M5 13l4 4L19 7"></path>
+                                            </svg>
+                                        </span>
+                                    </span>
+                                    <span>
+                                        <span class="block text-sm font-semibold text-gray-900">Share in Feed</span>
+                                        <span class="mt-1 block text-sm text-gray-600">Create a feed post for this gallery so your connections can discover it from their dashboard.</span>
+                                    </span>
+                                </label>
+                            </div>
                         @endif
 
                         @if($isEditing && $coverImages->count() > 0)

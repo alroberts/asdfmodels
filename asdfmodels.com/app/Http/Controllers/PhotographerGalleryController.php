@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PhotographerPortfolioImage;
 use App\Models\PortfolioAlbum;
 use App\Models\PortfolioCredit;
+use App\Services\FeedPostService;
 use App\Services\PortfolioCleanupService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -47,6 +48,7 @@ class PhotographerGalleryController extends Controller
             'status' => ['required', 'in:draft,published'],
             'custom_visibility_users' => ['nullable', 'array'],
             'custom_visibility_users.*' => ['exists:users,id'],
+            'share_in_feed' => ['nullable', 'boolean'],
         ]);
 
         // Get the highest display_order
@@ -66,6 +68,10 @@ class PhotographerGalleryController extends Controller
                 : null,
             'is_public' => $validated['visibility'] === 'public',
         ]);
+
+        if ($request->boolean('share_in_feed')) {
+            app(FeedPostService::class)->createGalleryPost($user, $gallery);
+        }
 
         if ($request->wantsJson() || $request->expectsJson()) {
             return response()->json([

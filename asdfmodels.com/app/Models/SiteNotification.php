@@ -121,12 +121,37 @@ class SiteNotification extends Model
                 'actor_user_id' => $connection->requester_id,
                 'title' => 'New connection request',
                 'body' => "{$actorName} wants to connect with you.",
-                'action_url' => route('notifications.index'),
+                'action_url' => route('dashboard'),
                 'data' => [
                     'connection_id' => $connection->id,
                     'message' => $connection->message,
                     'requester_username' => $requester?->username,
                     'recipient_username' => $recipient?->username,
+                ],
+                'read_at' => null,
+            ]
+        );
+    }
+
+    public static function notifyFeedMention(FeedPostMention $mention): self
+    {
+        $actor = $mention->mentionedBy;
+        $actorName = $actor?->display_name ?: $actor?->name ?: 'A member';
+
+        return static::updateOrCreate(
+            [
+                'user_id' => $mention->mentioned_user_id,
+                'type' => 'feed_mention',
+                'group_key' => 'feed:mention:' . $mention->id,
+            ],
+            [
+                'actor_user_id' => $mention->mentioned_by_user_id,
+                'title' => 'New feed mention',
+                'body' => "{$actorName} mentioned you in a feed post.",
+                'action_url' => route('notifications.index'),
+                'data' => [
+                    'feed_post_id' => $mention->feed_post_id,
+                    'feed_post_mention_id' => $mention->id,
                 ],
                 'read_at' => null,
             ]

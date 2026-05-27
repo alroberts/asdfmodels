@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PortfolioAlbum;
 use App\Models\PortfolioCredit;
 use App\Models\PortfolioImage;
+use App\Services\FeedPostService;
 use App\Services\PortfolioCleanupService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -99,6 +100,7 @@ class PortfolioAlbumController extends Controller
             'custom_visibility_users' => ['nullable', 'array'],
             'custom_visibility_users.*' => ['exists:users,id'],
             'contains_nudity' => ['boolean'],
+            'share_in_feed' => ['nullable', 'boolean'],
         ]);
 
         // Verify cover image belongs to user
@@ -124,6 +126,10 @@ class PortfolioAlbumController extends Controller
             'is_public' => $validated['visibility'] === 'public',
             'display_order' => PortfolioAlbum::where('user_id', $user->id)->max('display_order') + 1,
         ]);
+
+        if ($request->boolean('share_in_feed')) {
+            app(FeedPostService::class)->createGalleryPost($user, $album);
+        }
 
         if ($request->wantsJson() || $request->expectsJson()) {
             return response()->json([

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PhotographerProfile;
 use App\Models\PhotographerPortfolioImage;
 use App\Models\Connection;
+use App\Models\FeedPost;
 use App\Models\PortfolioAlbum;
 use App\Models\PortfolioCredit;
 use App\Models\PortfolioImage;
@@ -90,6 +91,11 @@ class PhotographerProfileController extends Controller
         $pendingCredits = (Auth::check() && Auth::id() === $user->id)
             ? PortfolioCredit::awaitingResponse($user, 'photographer')->with(['creditable', 'owner'])->latest()->get()
             : collect();
+        $feedPosts = FeedPost::forProfile($user)
+            ->with(['user.modelProfile', 'user.photographerProfile', 'images', 'mentions.mentionedUser', 'related'])
+            ->latest()
+            ->limit(8)
+            ->get();
         $connections = $this->profileConnections($user);
         $viewerConnection = Auth::check() && Auth::id() !== $user->id
             ? Connection::with(['requester', 'recipient'])->between(Auth::id(), $user->id)->first()
@@ -150,6 +156,7 @@ class PhotographerProfileController extends Controller
             'featuredAlbumCredits' => $featuredAlbumCredits,
             'featuredImageCredits' => $featuredImageCredits,
             'pendingCredits' => $pendingCredits,
+            'feedPosts' => $feedPosts,
             'portfolioMediaGroups' => $portfolioMediaGroups,
             'ownerCanManage' => Auth::check() && Auth::id() === $user->id,
             'connections' => $connections,

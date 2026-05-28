@@ -140,6 +140,7 @@ Route::middleware(['auth', 'profile.complete'])->group(function () {
     Route::delete('/connections/{connection}', [\App\Http\Controllers\ConnectionController::class, 'destroy'])->name('connections.destroy');
     Route::post('/galleries/images/comments', [\App\Http\Controllers\PublicGalleryController::class, 'comment'])->name('public.galleries.comments.store');
     Route::post('/feed', [\App\Http\Controllers\FeedController::class, 'store'])->name('feed.store');
+    Route::get('/feed/link-preview', [\App\Http\Controllers\FeedController::class, 'previewLink'])->name('feed.link-preview');
     Route::patch('/feed/mentions/{mention}', [\App\Http\Controllers\FeedController::class, 'updateMention'])->name('feed.mentions.update');
     
     // Browse Models

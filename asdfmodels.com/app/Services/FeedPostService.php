@@ -67,6 +67,33 @@ class FeedPostService
         return $post;
     }
 
+    public function previewLink(User $user, ?string $url): array
+    {
+        $linkUrl = $this->normaliseLink($url);
+
+        if (!$linkUrl) {
+            throw ValidationException::withMessages([
+                'link_url' => 'Enter a valid link.',
+            ]);
+        }
+
+        if (!$this->canShareLink($user, $linkUrl)) {
+            throw ValidationException::withMessages([
+                'link_url' => 'External links are available to verified members. ASDF Models links are always allowed.',
+            ]);
+        }
+
+        $preview = $this->fetchLinkPreview($linkUrl);
+
+        return [
+            'url' => $linkUrl,
+            'host' => parse_url($linkUrl, PHP_URL_HOST),
+            'title' => $preview['title'] ?? parse_url($linkUrl, PHP_URL_HOST),
+            'description' => $preview['description'] ?? null,
+            'image' => $preview['image'] ?? null,
+        ];
+    }
+
     public function sanitiseBody(string $body, User $user): string
     {
         $body = strip_tags($body);
@@ -202,9 +229,24 @@ class FeedPostService
 
     private function metaValue(string $html, string $name): ?string
     {
-        $pattern = "/<meta[^>]+(?:property|name)=[\"']" . preg_quote($name, '/') . "[\"'][^>]+content=[\"']([^\"']+)[\"'][^>]*>/i";
-        if (preg_match($pattern, $html, $matches)) {
-            return html_entity_decode($matches[1], ENT_QUOTES | ENT_HTML5);
+        if (!preg_match_all('/<meta\b[^>]*>/i', $html, $tags)) {
+            return null;
+        }
+
+        foreach ($tags[0] as $tag) {
+            preg_match_all('/([a-zA-Z_:.-]+)\s*=\s*["\']([^"\']*)["\']/', $tag, $attrs);
+            $attributes = collect($attrs[1] ?? [])
+                ->mapWithKeys(fn ($attribute, $index) => [Str::lower($attribute) => $attrs[2][$index] ?? '']);
+
+            $metaName = $attributes->get('property') ?: $attributes->get('name');
+            if (!is_string($metaName) || Str::lower($metaName) !== Str::lower($name)) {
+                continue;
+            }
+
+            $content = $attributes->get('content');
+            if (is_string($content) && $content !== '') {
+                return html_entity_decode($content, ENT_QUOTES | ENT_HTML5);
+            }
         }
 
         return null;

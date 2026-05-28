@@ -24,6 +24,20 @@
             .feed-create textarea, .feed-create input[type="url"] { border: 1px solid #d1d5db; border-radius: 18px; color: #111827; display: block; font-size: 15px; padding: 14px 16px; width: 100%; }
             .feed-create textarea { min-height: 118px; resize: vertical; }
             .feed-create-grid { display: grid; gap: 14px; margin-top: 14px; }
+            .feed-file-control { align-items: center; border: 1px dashed #cbd5e1; border-radius: 18px; color: #475569; cursor: pointer; display: flex; gap: 12px; padding: 14px 16px; transition: border-color .2s ease, background .2s ease; }
+            .feed-file-control:hover { background: #f8fafc; border-color: #111827; }
+            .feed-file-control input { display: none; }
+            .feed-image-preview { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+            .feed-image-preview:empty { display: none; }
+            .feed-image-preview img { aspect-ratio: 1 / 1; border-radius: 16px; object-fit: cover; width: 100%; }
+            .feed-preview-card { align-items: stretch; border: 1px solid #e5e7eb; border-radius: 20px; display: none; grid-template-columns: 132px minmax(0, 1fr); overflow: hidden; }
+            .feed-preview-card.is-visible { display: grid; }
+            .feed-preview-card img, .feed-preview-placeholder { background: #f3f4f6; min-height: 108px; object-fit: cover; width: 100%; }
+            .feed-preview-card strong { color: #111827; display: block; font-size: 14px; line-height: 1.35; }
+            .feed-preview-card p { color: #6b7280; font-size: 12px; line-height: 1.4; margin: 5px 0 0; }
+            .feed-toast { background: #050505; border-radius: 999px; bottom: 28px; box-shadow: 0 18px 45px rgba(15, 23, 42, .2); color: #fff; font-size: 14px; font-weight: 800; opacity: 0; padding: 13px 18px; pointer-events: none; position: fixed; right: 28px; transform: translateY(10px); transition: opacity .2s ease, transform .2s ease; z-index: 80; }
+            .feed-toast.is-visible { opacity: 1; transform: translateY(0); }
+            .feed-toast.is-error { background: #991b1b; }
             .feed-muted { color: #6b7280; font-size: 13px; line-height: 1.5; }
             .feed-post { padding: 22px; }
             .feed-author { align-items: center; display: flex; gap: 12px; }
@@ -47,6 +61,7 @@
             .feed-mention-actions button { border: 1px solid #d1d5db; border-radius: 999px; font-size: 12px; font-weight: 850; padding: 8px 10px; }
             .feed-empty { color: #6b7280; padding: 42px 22px; text-align: center; }
             @media (max-width: 900px) { .feed-header, .feed-layout { display: block; } .feed-primary-action { margin-top: 18px; } .feed-card { margin-top: 18px; } }
+            @media (max-width: 640px) { .feed-preview-card { grid-template-columns: 1fr; } .feed-toast { bottom: 18px; left: 18px; right: 18px; text-align: center; } }
         </style>
     @endpush
 
@@ -60,18 +75,32 @@
 
         <div class="feed-layout">
             <section>
-                <form id="create-post" class="feed-card feed-create" method="POST" action="{{ route('feed.store') }}" enctype="multipart/form-data">
+                <form
+                    id="create-post"
+                    class="feed-card feed-create"
+                    method="POST"
+                    action="{{ route('feed.store') }}"
+                    enctype="multipart/form-data"
+                    data-feed-create-form
+                    data-link-preview-url="{{ route('feed.link-preview') }}"
+                >
                     @csrf
                     <textarea name="body" placeholder="Share an update. Mention members with @username.">{{ old('body') }}</textarea>
                     <div class="feed-create-grid">
                         <input type="url" name="link_url" value="{{ old('link_url') }}" placeholder="Optional link, e.g. https://asdfmodels.com/galleries/12">
-                        <input type="file" name="images[]" accept="image/jpeg,image/jpg,image/png,image/webp" multiple>
+                        <div class="feed-preview-card" data-feed-link-preview></div>
+                        <label class="feed-file-control">
+                            <i class="fas fa-images"></i>
+                            <span data-feed-file-label>Add images</span>
+                            <input type="file" name="images[]" accept="image/jpeg,image/jpg,image/png,image/webp" multiple data-feed-image-input>
+                        </label>
+                        <div class="feed-image-preview" data-feed-image-preview></div>
                         <p class="feed-muted">Emails and phone numbers are hidden automatically. External links require verification unless they point to ASDF Models.</p>
-                        <button class="feed-button" type="submit"><i class="fas fa-paper-plane"></i> Share Post</button>
+                        <button class="feed-button" type="submit" data-feed-submit><i class="fas fa-paper-plane"></i> <span data-feed-submit-label>Share Post</span></button>
                     </div>
                 </form>
 
-                <div class="mt-6 space-y-5">
+                <div class="mt-6 space-y-5" data-feed-posts>
                     @forelse($posts as $post)
                         @include('feed.partials.post-card', ['post' => $post])
                     @empty
@@ -93,7 +122,7 @@
                         <div class="feed-mention">
                             <strong>{{ $mention->mentionedBy?->display_name ?: $mention->mentionedBy?->name }}</strong>
                             <p class="feed-muted">Mentioned you in a post.</p>
-                            <form class="feed-mention-actions" method="POST" action="{{ route('feed.mentions.update', $mention) }}">
+                            <form class="feed-mention-actions" method="POST" action="{{ route('feed.mentions.update', $mention) }}" data-feed-mention-form>
                                 @csrf
                                 @method('PATCH')
                                 <button name="status" value="accepted_visible" type="submit">Accept + show</button>
@@ -107,5 +136,174 @@
                 </div>
             </aside>
         </div>
+        <div class="feed-toast" data-feed-toast></div>
     </main>
+
+    @push('scripts')
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const form = document.querySelector('[data-feed-create-form]');
+                const toast = document.querySelector('[data-feed-toast]');
+                const posts = document.querySelector('[data-feed-posts]');
+                const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+                const showToast = (message, type = 'success') => {
+                    if (!toast) return;
+                    toast.textContent = message;
+                    toast.classList.toggle('is-error', type === 'error');
+                    toast.classList.add('is-visible');
+                    window.setTimeout(() => toast.classList.remove('is-visible'), 3200);
+                };
+
+                if (form) {
+                    const imageInput = form.querySelector('[data-feed-image-input]');
+                    const imagePreview = form.querySelector('[data-feed-image-preview]');
+                    const fileLabel = form.querySelector('[data-feed-file-label]');
+                    const linkInput = form.querySelector('input[name="link_url"]');
+                    const linkPreview = form.querySelector('[data-feed-link-preview]');
+                    const submitButton = form.querySelector('[data-feed-submit]');
+                    const submitLabel = form.querySelector('[data-feed-submit-label]');
+                    let previewTimer = null;
+
+                    const setBusy = (busy) => {
+                        if (!submitButton) return;
+                        submitButton.disabled = busy;
+                        submitButton.style.opacity = busy ? '.65' : '1';
+                        submitButton.style.cursor = busy ? 'wait' : '';
+                        if (submitLabel) submitLabel.textContent = busy ? 'Sharing...' : 'Share Post';
+                    };
+
+                    const clearLinkPreview = () => {
+                        if (!linkPreview) return;
+                        linkPreview.innerHTML = '';
+                        linkPreview.classList.remove('is-visible');
+                    };
+
+                    const renderLinkPreview = (preview) => {
+                        if (!linkPreview || !preview) return;
+                        const image = preview.image
+                            ? `<img src="${preview.image}" alt="">`
+                            : '<span class="feed-preview-placeholder"></span>';
+                        linkPreview.innerHTML = `
+                            ${image}
+                            <span style="padding: 14px;">
+                                <strong>${preview.title || preview.host || 'Link preview'}</strong>
+                                ${preview.description ? `<p>${preview.description}</p>` : ''}
+                                ${preview.host ? `<p>${preview.host}</p>` : ''}
+                            </span>
+                        `;
+                        linkPreview.classList.add('is-visible');
+                    };
+
+                    const fetchLinkPreview = async () => {
+                        const url = linkInput?.value?.trim();
+                        clearLinkPreview();
+                        if (!url || url.length < 4) return;
+
+                        const params = new URLSearchParams({ url });
+                        try {
+                            const response = await fetch(`${form.dataset.linkPreviewUrl}?${params.toString()}`, {
+                                headers: {
+                                    Accept: 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                            });
+                            const payload = await response.json();
+                            if (!response.ok || !payload.success) {
+                                throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Unable to preview this link.');
+                            }
+                            renderLinkPreview(payload.preview);
+                        } catch (error) {
+                            showToast(error.message || 'Unable to preview this link.', 'error');
+                        }
+                    };
+
+                    imageInput?.addEventListener('change', () => {
+                        if (!imagePreview) return;
+                        imagePreview.innerHTML = '';
+                        const files = Array.from(imageInput.files || []).slice(0, 6);
+                        if (fileLabel) {
+                            fileLabel.textContent = files.length ? `${files.length} ${files.length === 1 ? 'image' : 'images'} selected` : 'Add images';
+                        }
+                        files.forEach((file) => {
+                            const img = document.createElement('img');
+                            img.src = URL.createObjectURL(file);
+                            img.alt = file.name;
+                            img.onload = () => URL.revokeObjectURL(img.src);
+                            imagePreview.appendChild(img);
+                        });
+                    });
+
+                    linkInput?.addEventListener('input', () => {
+                        window.clearTimeout(previewTimer);
+                        previewTimer = window.setTimeout(fetchLinkPreview, 700);
+                    });
+
+                    linkInput?.addEventListener('blur', fetchLinkPreview);
+
+                    form.addEventListener('submit', async (event) => {
+                        event.preventDefault();
+                        setBusy(true);
+
+                        try {
+                            const response = await fetch(form.action, {
+                                method: 'POST',
+                                body: new FormData(form),
+                                headers: {
+                                    Accept: 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'X-CSRF-TOKEN': csrf,
+                                },
+                            });
+                            const payload = await response.json();
+                            if (!response.ok || !payload.success) {
+                                throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Post could not be shared.');
+                            }
+                            posts?.insertAdjacentHTML('afterbegin', payload.post_html);
+                            form.reset();
+                            imagePreview.innerHTML = '';
+                            if (fileLabel) fileLabel.textContent = 'Add images';
+                            clearLinkPreview();
+                            showToast(payload.message || 'Post shared.');
+                        } catch (error) {
+                            showToast(error.message || 'Post could not be shared.', 'error');
+                        } finally {
+                            setBusy(false);
+                        }
+                    });
+                }
+
+                document.querySelectorAll('[data-feed-mention-form]').forEach((mentionForm) => {
+                    mentionForm.addEventListener('submit', async (event) => {
+                        event.preventDefault();
+                        const submitter = event.submitter;
+                        const formData = new FormData(mentionForm);
+                        if (submitter?.name) {
+                            formData.set(submitter.name, submitter.value);
+                        }
+
+                        try {
+                            const response = await fetch(mentionForm.action, {
+                                method: 'POST',
+                                body: formData,
+                                headers: {
+                                    Accept: 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'X-CSRF-TOKEN': csrf,
+                                },
+                            });
+                            const payload = await response.json();
+                            if (!response.ok || !payload.success) {
+                                throw new Error(payload.message || 'Mention preference could not be saved.');
+                            }
+                            mentionForm.closest('.feed-mention')?.remove();
+                            showToast(payload.message || 'Mention preference saved.');
+                        } catch (error) {
+                            showToast(error.message || 'Mention preference could not be saved.', 'error');
+                        }
+                    });
+                });
+            });
+        </script>
+    @endpush
 </x-app-layout>

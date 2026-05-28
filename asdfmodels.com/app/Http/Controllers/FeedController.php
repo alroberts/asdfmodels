@@ -7,6 +7,7 @@ use App\Models\FeedPostMention;
 use App\Models\SiteNotification;
 use App\Services\FeedPostService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -39,7 +40,7 @@ class FeedController extends Controller
         ]);
     }
 
-    public function store(Request $request, FeedPostService $feedPostService): RedirectResponse
+    public function store(Request $request, FeedPostService $feedPostService): RedirectResponse|JsonResponse
     {
         $validated = $request->validate([
             'body' => ['nullable', 'string', 'max:2000'],
@@ -52,12 +53,32 @@ class FeedController extends Controller
             return back()->withErrors(['body' => 'Write something, add images, or share a link.'])->withInput();
         }
 
-        $feedPostService->createPost(Auth::user(), $validated, $request->file('images', []));
+        $post = $feedPostService->createPost(Auth::user(), $validated, $request->file('images', []));
+
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Post shared.',
+                'post_html' => view('feed.partials.post-card', ['post' => $post])->render(),
+            ]);
+        }
 
         return back()->with('status', 'Post shared.');
     }
 
-    public function updateMention(Request $request, FeedPostMention $mention): RedirectResponse
+    public function previewLink(Request $request, FeedPostService $feedPostService): JsonResponse
+    {
+        $validated = $request->validate([
+            'url' => ['required', 'string', 'max:500'],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'preview' => $feedPostService->previewLink(Auth::user(), $validated['url']),
+        ]);
+    }
+
+    public function updateMention(Request $request, FeedPostMention $mention): RedirectResponse|JsonResponse
     {
         if ((int) $mention->mentioned_user_id !== (int) Auth::id()) {
             abort(403);
@@ -77,6 +98,13 @@ class FeedController extends Controller
             ->where('type', 'feed_mention')
             ->where('data->feed_post_mention_id', $mention->id)
             ->update(['read_at' => now()]);
+
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Feed mention preference saved.',
+            ]);
+        }
 
         return back()->with('status', 'Feed mention preference saved.');
     }

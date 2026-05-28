@@ -328,7 +328,9 @@
             @if(($connectionRequests ?? collect())->isNotEmpty())
                 <div class="notification-list">
                     @foreach($connectionRequests as $connection)
-                        @php($requester = $connection->requester)
+                        @php
+                            $requester = $connection->requester;
+                        @endphp
                         <div class="notification-row is-unread">
                             <div>
                                 <strong>{{ $requester?->display_name ?: $requester?->name ?: 'A member' }}</strong>

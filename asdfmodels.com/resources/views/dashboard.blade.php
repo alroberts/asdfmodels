@@ -35,6 +35,15 @@
             .feed-preview-card img, .feed-preview-placeholder { background: #f3f4f6; min-height: 108px; object-fit: cover; width: 100%; }
             .feed-preview-card strong { color: #111827; display: block; font-size: 14px; line-height: 1.35; }
             .feed-preview-card p { color: #6b7280; font-size: 12px; line-height: 1.4; margin: 5px 0 0; }
+            .feed-mention-field { position: relative; }
+            .feed-mention-menu { background: #fff; border: 1px solid #e5e7eb; border-radius: 20px; box-shadow: 0 22px 55px rgba(15, 23, 42, .16); display: none; left: 12px; max-height: 320px; overflow-y: auto; padding: 8px; position: absolute; right: 12px; top: calc(100% + 8px); z-index: 50; }
+            .feed-mention-menu.is-visible { display: grid; gap: 4px; }
+            .feed-mention-option { align-items: center; background: transparent; border: 0; border-radius: 16px; color: #111827; cursor: pointer; display: grid; gap: 12px; grid-template-columns: 42px minmax(0, 1fr); padding: 10px; text-align: left; width: 100%; }
+            .feed-mention-option:hover, .feed-mention-option.is-active { background: #f3f4f6; }
+            .feed-mention-avatar { align-items: center; background: #111827; border-radius: 999px; color: #fff; display: flex; font-size: 13px; font-weight: 900; height: 42px; justify-content: center; overflow: hidden; width: 42px; }
+            .feed-mention-avatar img { height: 100%; object-fit: cover; width: 100%; }
+            .feed-mention-option strong { display: block; font-size: 14px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .feed-mention-option span { color: #6b7280; display: block; font-size: 12px; margin-top: 3px; }
             .feed-toast { background: #050505; border-radius: 999px; bottom: 28px; box-shadow: 0 18px 45px rgba(15, 23, 42, .2); color: #fff; font-size: 14px; font-weight: 800; opacity: 0; padding: 13px 18px; pointer-events: none; position: fixed; right: 28px; transform: translateY(10px); transition: opacity .2s ease, transform .2s ease; z-index: 80; }
             .feed-toast.is-visible { opacity: 1; transform: translateY(0); }
             .feed-toast.is-error { background: #991b1b; }
@@ -83,9 +92,13 @@
                     enctype="multipart/form-data"
                     data-feed-create-form
                     data-link-preview-url="{{ route('feed.link-preview') }}"
+                    data-mention-search-url="{{ route('feed.mention-search') }}"
                 >
                     @csrf
-                    <textarea name="body" placeholder="Share an update. Mention members with @username.">{{ old('body') }}</textarea>
+                    <div class="feed-mention-field">
+                        <textarea name="body" placeholder="Share an update. Mention members with @username." data-feed-body>{{ old('body') }}</textarea>
+                        <div class="feed-mention-menu" data-feed-mention-menu></div>
+                    </div>
                     <div class="feed-create-grid">
                         <input type="url" name="link_url" value="{{ old('link_url') }}" placeholder="Optional link, e.g. https://asdfmodels.com/galleries/12">
                         <div class="feed-preview-card" data-feed-link-preview></div>
@@ -163,7 +176,13 @@
                     const linkPreview = form.querySelector('[data-feed-link-preview]');
                     const submitButton = form.querySelector('[data-feed-submit]');
                     const submitLabel = form.querySelector('[data-feed-submit-label]');
+                    const bodyInput = form.querySelector('[data-feed-body]');
+                    const mentionMenu = form.querySelector('[data-feed-mention-menu]');
                     let previewTimer = null;
+                    let mentionTimer = null;
+                    let mentionUsers = [];
+                    let activeMentionIndex = 0;
+                    let activeMentionRange = null;
 
                     const setBusy = (busy) => {
                         if (!submitButton) return;
@@ -217,6 +236,151 @@
                             showToast(error.message || 'Unable to preview this link.', 'error');
                         }
                     };
+
+                    const mentionQueryAtCaret = () => {
+                        if (!bodyInput) return null;
+                        const caret = bodyInput.selectionStart ?? 0;
+                        const before = bodyInput.value.slice(0, caret);
+                        const match = before.match(/(^|\s)@([a-zA-Z0-9-]{0,60})$/);
+
+                        if (!match) return null;
+
+                        const query = match[2] || '';
+                        return {
+                            query,
+                            start: caret - query.length - 1,
+                            end: caret,
+                        };
+                    };
+
+                    const hideMentionMenu = () => {
+                        if (!mentionMenu) return;
+                        mentionMenu.innerHTML = '';
+                        mentionMenu.classList.remove('is-visible');
+                        mentionUsers = [];
+                        activeMentionIndex = 0;
+                        activeMentionRange = null;
+                    };
+
+                    const renderMentionMenu = () => {
+                        if (!mentionMenu) return;
+                        mentionMenu.innerHTML = '';
+
+                        if (!mentionUsers.length || !activeMentionRange) {
+                            hideMentionMenu();
+                            return;
+                        }
+
+                        mentionUsers.forEach((user, index) => {
+                            const button = document.createElement('button');
+                            button.type = 'button';
+                            button.className = `feed-mention-option${index === activeMentionIndex ? ' is-active' : ''}`;
+                            button.dataset.index = String(index);
+                            const avatar = user.avatar
+                                ? `<img src="${user.avatar}" alt="">`
+                                : (user.label || user.username || '?').slice(0, 1).toUpperCase();
+                            button.innerHTML = `
+                                <span class="feed-mention-avatar">${avatar}</span>
+                                <span>
+                                    <strong>${user.label || user.username}</strong>
+                                    <span>@${user.username} · ${user.role}</span>
+                                </span>
+                            `;
+                            button.addEventListener('mousedown', (event) => {
+                                event.preventDefault();
+                                insertMention(user);
+                            });
+                            mentionMenu.appendChild(button);
+                        });
+
+                        mentionMenu.classList.add('is-visible');
+                    };
+
+                    const insertMention = (user) => {
+                        if (!bodyInput || !activeMentionRange || !user?.username) return;
+
+                        const before = bodyInput.value.slice(0, activeMentionRange.start);
+                        const after = bodyInput.value.slice(activeMentionRange.end);
+                        const mention = `@${user.username}`;
+                        bodyInput.value = `${before}${mention} ${after}`;
+                        const caret = before.length + mention.length + 1;
+                        bodyInput.focus();
+                        bodyInput.setSelectionRange(caret, caret);
+                        hideMentionMenu();
+                    };
+
+                    const fetchMentions = async () => {
+                        const active = mentionQueryAtCaret();
+                        if (!active || active.query.length < 2) {
+                            hideMentionMenu();
+                            return;
+                        }
+
+                        activeMentionRange = active;
+                        const params = new URLSearchParams({ q: active.query });
+
+                        try {
+                            const response = await fetch(`${form.dataset.mentionSearchUrl}?${params.toString()}`, {
+                                headers: {
+                                    Accept: 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                            });
+                            const payload = await response.json();
+                            if (!response.ok) {
+                                throw new Error(payload.message || 'Unable to search members.');
+                            }
+                            mentionUsers = payload.users || [];
+                            activeMentionIndex = 0;
+                            renderMentionMenu();
+                        } catch (error) {
+                            hideMentionMenu();
+                        }
+                    };
+
+                    bodyInput?.addEventListener('input', () => {
+                        window.clearTimeout(mentionTimer);
+                        mentionTimer = window.setTimeout(fetchMentions, 180);
+                    });
+
+                    bodyInput?.addEventListener('click', () => {
+                        window.clearTimeout(mentionTimer);
+                        mentionTimer = window.setTimeout(fetchMentions, 120);
+                    });
+
+                    bodyInput?.addEventListener('keydown', (event) => {
+                        if (!mentionMenu?.classList.contains('is-visible') || !mentionUsers.length) {
+                            return;
+                        }
+
+                        if (event.key === 'ArrowDown') {
+                            event.preventDefault();
+                            activeMentionIndex = (activeMentionIndex + 1) % mentionUsers.length;
+                            renderMentionMenu();
+                        }
+
+                        if (event.key === 'ArrowUp') {
+                            event.preventDefault();
+                            activeMentionIndex = (activeMentionIndex - 1 + mentionUsers.length) % mentionUsers.length;
+                            renderMentionMenu();
+                        }
+
+                        if (event.key === 'Enter' || event.key === 'Tab') {
+                            event.preventDefault();
+                            insertMention(mentionUsers[activeMentionIndex]);
+                        }
+
+                        if (event.key === 'Escape') {
+                            event.preventDefault();
+                            hideMentionMenu();
+                        }
+                    });
+
+                    document.addEventListener('click', (event) => {
+                        if (!form.contains(event.target)) {
+                            hideMentionMenu();
+                        }
+                    });
 
                     imageInput?.addEventListener('change', () => {
                         if (!imagePreview) return;

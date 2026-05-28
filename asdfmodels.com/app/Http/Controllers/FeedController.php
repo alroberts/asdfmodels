@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\FeedPost;
 use App\Models\FeedPostMention;
 use App\Models\SiteNotification;
+use App\Models\User;
 use App\Services\FeedPostService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
@@ -76,6 +77,63 @@ class FeedController extends Controller
             'success' => true,
             'preview' => $feedPostService->previewLink(Auth::user(), $validated['url']),
         ]);
+    }
+
+    public function mentionSearch(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:80'],
+        ]);
+
+        $search = ltrim(trim((string) ($validated['q'] ?? '')), '@');
+
+        if (mb_strlen($search) < 2) {
+            return response()->json(['users' => []]);
+        }
+
+        $viewer = Auth::user();
+
+        $users = User::query()
+            ->where('is_admin', false)
+            ->where('id', '!=', $viewer->id)
+            ->whereNotNull('username')
+            ->where(function ($query) {
+                $query
+                    ->whereHas('modelProfile', fn ($profileQuery) => $profileQuery->where('is_public', true))
+                    ->orWhereHas('photographerProfile', fn ($profileQuery) => $profileQuery->where('is_public', true));
+            })
+            ->where(function ($query) use ($search) {
+                $query
+                    ->where('username', 'like', "{$search}%")
+                    ->orWhere('username', 'like', "%{$search}%")
+                    ->orWhere('first_name', 'like', "{$search}%")
+                    ->orWhere('last_name', 'like', "{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%");
+            })
+            ->with(['modelProfile', 'photographerProfile'])
+            ->orderByRaw('CASE WHEN username LIKE ? THEN 0 ELSE 1 END', [$search . '%'])
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->limit(8)
+            ->get()
+            ->map(function (User $user) {
+                $profile = $user->is_photographer ? $user->photographerProfile : $user->modelProfile;
+                $route = $user->is_photographer
+                    ? route('photographers.show', $user->profileRouteIdentifier())
+                    : route('models.show', $user->profileRouteIdentifier());
+
+                return [
+                    'id' => $user->id,
+                    'label' => $profile?->display_name ?: $user->display_name ?: $user->name,
+                    'username' => $user->username,
+                    'role' => $user->is_photographer ? 'Photographer' : 'Model',
+                    'avatar' => $profile?->profile_photo_path ? asset($profile->profile_photo_path) : null,
+                    'url' => $route,
+                ];
+            })
+            ->values();
+
+        return response()->json(['users' => $users]);
     }
 
     public function updateMention(Request $request, FeedPostMention $mention): RedirectResponse|JsonResponse

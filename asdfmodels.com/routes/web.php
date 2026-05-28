@@ -142,6 +142,7 @@ Route::middleware(['auth', 'profile.complete'])->group(function () {
     Route::post('/feed', [\App\Http\Controllers\FeedController::class, 'store'])->name('feed.store');
     Route::get('/feed/link-preview', [\App\Http\Controllers\FeedController::class, 'previewLink'])->name('feed.link-preview');
     Route::get('/feed/mention-search', [\App\Http\Controllers\FeedController::class, 'mentionSearch'])->name('feed.mention-search');
+    Route::get('/feed/posts/{post}', [\App\Http\Controllers\FeedController::class, 'show'])->name('feed.posts.show');
     Route::patch('/feed/mentions/{mention}', [\App\Http\Controllers\FeedController::class, 'updateMention'])->name('feed.mentions.update');
     
     // Browse Models

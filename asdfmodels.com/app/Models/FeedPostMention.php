@@ -16,6 +16,7 @@ class FeedPostMention extends Model
         'feed_post_id',
         'mentioned_user_id',
         'mentioned_by_user_id',
+        'mention_handle',
         'status',
         'responded_at',
     ];

@@ -148,7 +148,7 @@ class SiteNotification extends Model
                 'actor_user_id' => $mention->mentioned_by_user_id,
                 'title' => 'New feed mention',
                 'body' => "{$actorName} mentioned you in a feed post.",
-                'action_url' => route('notifications.index'),
+                'action_url' => route('feed.posts.show', $mention->feed_post_id),
                 'data' => [
                     'feed_post_id' => $mention->feed_post_id,
                     'feed_post_mention_id' => $mention->id,

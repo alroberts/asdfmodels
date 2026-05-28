@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\FeedPost;
 use App\Models\FeedPostMention;
+use App\Models\Connection;
 use App\Models\SiteNotification;
 use App\Models\User;
 use App\Services\FeedPostService;
@@ -38,6 +39,30 @@ class FeedController extends Controller
         return view('dashboard', [
             'posts' => $posts,
             'pendingMentions' => $pendingMentions,
+        ]);
+    }
+
+    public function show(FeedPost $post): View
+    {
+        $user = Auth::user();
+
+        $post->load(['user.modelProfile', 'user.photographerProfile', 'images', 'mentions.mentionedUser.modelProfile', 'mentions.mentionedUser.photographerProfile', 'related']);
+
+        if (!$this->canViewPost($post, $user)) {
+            abort(403);
+        }
+
+        $pendingMention = $post->mentions
+            ->first(fn (FeedPostMention $mention) => (int) $mention->mentioned_user_id === (int) $user->id && $mention->status === FeedPostMention::STATUS_PENDING);
+
+        SiteNotification::where('user_id', $user->id)
+            ->where('type', 'feed_mention')
+            ->where('data->feed_post_id', $post->id)
+            ->update(['read_at' => now()]);
+
+        return view('feed.show', [
+            'post' => $post,
+            'pendingMention' => $pendingMention,
         ]);
     }
 
@@ -165,5 +190,24 @@ class FeedController extends Controller
         }
 
         return back()->with('status', 'Feed mention preference saved.');
+    }
+
+    private function canViewPost(FeedPost $post, User $user): bool
+    {
+        if ((int) $post->user_id === (int) $user->id) {
+            return true;
+        }
+
+        if ($post->mentions->contains(fn (FeedPostMention $mention) => (int) $mention->mentioned_user_id === (int) $user->id)) {
+            return true;
+        }
+
+        return Connection::acceptedFor($user)
+            ->where(function ($query) use ($post) {
+                $query
+                    ->where('requester_id', $post->user_id)
+                    ->orWhere('recipient_id', $post->user_id);
+            })
+            ->exists();
     }
 }

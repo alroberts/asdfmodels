@@ -355,6 +355,54 @@
         <section class="notification-section">
             <div class="notification-section-head">
                 <div>
+                    <h2>Feed Mentions</h2>
+                    <p>Review posts that mention you before they appear on your profile feed.</p>
+                </div>
+            </div>
+
+            @if(($pendingFeedMentions ?? collect())->isNotEmpty())
+                <div class="notification-list">
+                    @foreach($pendingFeedMentions as $mention)
+                        @php
+                            $actor = $mention->mentionedBy;
+                            $post = $mention->post;
+                        @endphp
+                        <div class="notification-row is-unread">
+                            <div>
+                                <strong>{{ $actor?->display_name ?: $actor?->name ?: 'A member' }} mentioned you</strong>
+                                <span>{{ \Illuminate\Support\Str::limit($post?->display_body ?: 'Review this feed mention.', 120) }}</span>
+                            </div>
+                            <div class="credit-actions">
+                                @if($post)
+                                    <a href="{{ route('feed.posts.show', $post) }}" class="secondary" style="align-items:center;display:inline-flex;text-decoration:none;">View Post</a>
+                                @endif
+                                <form method="POST" action="{{ route('feed.mentions.update', $mention) }}">
+                                    @csrf
+                                    @method('PATCH')
+                                    <button type="submit" name="status" value="accepted_visible" class="primary">Accept + Show</button>
+                                </form>
+                                <form method="POST" action="{{ route('feed.mentions.update', $mention) }}">
+                                    @csrf
+                                    @method('PATCH')
+                                    <button type="submit" name="status" value="accepted_hidden" class="secondary">Accept Hidden</button>
+                                </form>
+                                <form method="POST" action="{{ route('feed.mentions.update', $mention) }}">
+                                    @csrf
+                                    @method('PATCH')
+                                    <button type="submit" name="status" value="rejected" class="secondary">Reject</button>
+                                </form>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @else
+                <div class="notifications-empty">No feed mentions waiting for review.</div>
+            @endif
+        </section>
+
+        <section class="notification-section">
+            <div class="notification-section-head">
+                <div>
                     <h2>Messages & Account</h2>
                     <p>Messages, site updates, and future admin announcements will appear here.</p>
                 </div>

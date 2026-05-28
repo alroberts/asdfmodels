@@ -138,6 +138,7 @@ class FeedPostService
                 ],
                 [
                     'mentioned_by_user_id' => $actor->id,
+                    'mention_handle' => $mentionedUser->username,
                     'status' => FeedPostMention::STATUS_PENDING,
                 ]
             );

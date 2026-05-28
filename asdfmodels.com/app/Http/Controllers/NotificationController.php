@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\PortfolioCredit;
 use App\Models\Connection;
+use App\Models\FeedPostMention;
 use App\Models\SiteNotification;
 use App\Models\PortfolioAlbum;
 use Illuminate\Http\JsonResponse;
@@ -117,23 +118,29 @@ class NotificationController extends Controller
             ->with('requester')
             ->latest()
             ->get();
+        $pendingFeedMentions = FeedPostMention::where('mentioned_user_id', $user->id)
+            ->where('status', FeedPostMention::STATUS_PENDING)
+            ->with(['post.user.modelProfile', 'post.user.photographerProfile', 'mentionedBy'])
+            ->latest()
+            ->get();
 
         $notifications = SiteNotification::where('user_id', $user->id)
-            ->whereNotIn('type', ['credit_pending', 'message', 'connection_request'])
+            ->whereNotIn('type', ['credit_pending', 'message', 'connection_request', 'feed_mention'])
             ->with('actor')
             ->latest()
             ->paginate(20);
 
         $unreadOtherCount = SiteNotification::where('user_id', $user->id)
-            ->whereNotIn('type', ['credit_pending', 'message', 'connection_request'])
+            ->whereNotIn('type', ['credit_pending', 'message', 'connection_request', 'feed_mention'])
             ->unread()
             ->count();
 
         return view('notifications.index', [
             'creditGroups' => $creditGroups,
             'connectionRequests' => $connectionRequests,
+            'pendingFeedMentions' => $pendingFeedMentions,
             'notifications' => $notifications,
-            'unreadCount' => $pendingCredits->count() + $connectionRequests->count() + $unreadOtherCount,
+            'unreadCount' => $pendingCredits->count() + $connectionRequests->count() + $pendingFeedMentions->count() + $unreadOtherCount,
             'unreadOtherCount' => $unreadOtherCount,
         ]);
     }

@@ -12,6 +12,40 @@
     $linkImage = $post->link_image ?: ($galleryCover ? asset($galleryCover) : null);
     $linkTitle = $post->link_title ?: $gallery?->name ?: parse_url($post->link_url ?? '', PHP_URL_HOST);
     $linkDescription = $post->link_description ?: $gallery?->description;
+    $mentionMap = collect($post->mentions ?? [])
+        ->filter(fn ($mention) => $mention->mentionedUser && $mention->mentionedUser->username)
+        ->flatMap(function ($mention) {
+            $user = $mention->mentionedUser;
+            $profileUrl = $user->is_photographer
+                ? route('photographers.show', $user->profileRouteIdentifier())
+                : route('models.show', $user->profileRouteIdentifier());
+
+            return collect([$mention->mention_handle, $user->username])
+                ->filter()
+                ->mapWithKeys(fn ($handle) => [
+                    \Illuminate\Support\Str::lower($handle) => [
+                        'label' => '@' . $user->username,
+                        'url' => $profileUrl,
+                    ],
+                ]);
+        });
+
+    $renderFeedBody = function (?string $body) use ($mentionMap): string {
+        $body = (string) $body;
+        $parts = preg_split('/(@[a-z0-9][a-z0-9-]{1,60})/i', $body, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+        return collect($parts)->map(function ($part) use ($mentionMap) {
+            if (preg_match('/^@([a-z0-9][a-z0-9-]{1,60})$/i', $part, $matches)) {
+                $mention = $mentionMap->get(\Illuminate\Support\Str::lower($matches[1]));
+
+                if ($mention) {
+                    return '<a class="feed-inline-mention" href="' . e($mention['url']) . '">' . e($mention['label']) . '</a>';
+                }
+            }
+
+            return e($part);
+        })->join('');
+    };
 @endphp
 
 @once
@@ -73,6 +107,16 @@
                 font-size: 15px;
                 line-height: 1.65;
                 margin-top: 16px;
+            }
+
+            .feed-inline-mention {
+                color: #111827;
+                font-weight: 800;
+                text-decoration: none;
+            }
+
+            .feed-inline-mention:hover {
+                text-decoration: underline;
             }
 
             .feed-images {
@@ -168,7 +212,7 @@
     </a>
 
     @if($post->display_body)
-        <div class="feed-body">{!! nl2br(e($post->display_body)) !!}</div>
+        <div class="feed-body">{!! nl2br($renderFeedBody($post->display_body)) !!}</div>
     @endif
 
     @if($post->images->isNotEmpty())
@@ -199,7 +243,14 @@
     @if($post->mentions->isNotEmpty())
         <p class="feed-muted mt-4">
             Featuring
-            {{ $post->mentions->map(fn($mention) => '@' . $mention->mentionedUser?->username)->filter()->join(', ') }}
+            {!! $post->mentions->filter(fn($mention) => $mention->mentionedUser?->username)->map(function ($mention) {
+                $user = $mention->mentionedUser;
+                $profileUrl = $user->is_photographer
+                    ? route('photographers.show', $user->profileRouteIdentifier())
+                    : route('models.show', $user->profileRouteIdentifier());
+
+                return '<a class="feed-inline-mention" href="' . e($profileUrl) . '">@' . e($user->username) . '</a>';
+            })->join(', ') !!}
         </p>
     @endif
 </article>

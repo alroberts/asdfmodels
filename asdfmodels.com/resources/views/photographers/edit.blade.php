@@ -1,1078 +1,679 @@
+@php
+    $countries = $countries ?? config('countries');
+    $specialtiesOptions = $specialtiesOptions ?? \App\Helpers\PhotographerOptions::specialties('photographer');
+    $servicesOptions = $servicesOptions ?? \App\Helpers\PhotographerOptions::services();
+
+    $nameParts = preg_split('/\s+/', trim((string) $user->getRawOriginal('name'))) ?: [];
+    $initialFirstName = old('first_name', $user->first_name ?: ($nameParts[0] ?? ''));
+    $initialLastName = old('last_name', $user->last_name ?: (count($nameParts) > 1 ? end($nameParts) : ''));
+    $companyName = old('professional_name', $profile->professional_name ?? '');
+    $isVerifiedProfile = $profile->isVerified();
+    $canEditUsername = $profile->isVerified();
+    $initialUsername = old('username', $user->username ?? '');
+    $hasChangedUsernameBefore = $user->hasChangedUsernameBefore();
+
+    $firstInitial = $initialFirstName !== '' ? mb_substr($initialFirstName, 0, 1) . '.' : '';
+    $lastInitial = $initialLastName !== '' ? mb_substr($initialLastName, 0, 1) . '.' : '';
+    $fullName = trim($initialFirstName . ' ' . $initialLastName);
+    $initialDisplayNameFormat = old('display_name_format', $profile->display_name_format ?: 'first_name_last_initial');
+    if (!$isVerifiedProfile && in_array($initialDisplayNameFormat, ['professional_name', 'full_name'], true)) {
+        $initialDisplayNameFormat = 'first_name_last_initial';
+    }
+
+    $displayNameFormatOptions = [
+        [
+            'value' => 'professional_name',
+            'label' => $companyName ? 'Company: ' . $companyName : 'Company / professional name',
+            'description' => 'Show your studio or trading name as the primary profile name.',
+            'locked' => !$isVerifiedProfile,
+        ],
+        [
+            'value' => 'full_name',
+            'label' => $fullName ?: 'Full name',
+            'description' => 'Show your full first and last name.',
+            'locked' => !$isVerifiedProfile,
+        ],
+        [
+            'value' => 'first_name_last_initial',
+            'label' => trim($initialFirstName . ' ' . $lastInitial) ?: 'First name + last initial',
+            'description' => 'Show your first name with a redacted last name.',
+        ],
+        [
+            'value' => 'first_name',
+            'label' => $initialFirstName ?: 'First name only',
+            'description' => 'Show only your first name.',
+        ],
+        [
+            'value' => 'initials',
+            'label' => trim($firstInitial . $lastInitial) ?: 'Initials',
+            'description' => 'Show only initials.',
+        ],
+    ];
+
+    $selectedSpecialties = old('specialties', $profile->specialties ?? []);
+    $selectedServices = old('services_offered', $profile->services_offered ?? []);
+    $equipment = old('equipment', $profile->equipment ?? []);
+    $equipment = is_array($equipment) ? $equipment : [];
+    $equipmentText = fn ($key) => implode("\n", array_filter($equipment[$key] ?? []));
+    $locationCountryCode = old('location_country_code', $profile->location_country_code ?? '');
+    $socialPlatformOptions = [
+        ['value' => 'instagram', 'label' => 'Instagram'],
+        ['value' => 'facebook', 'label' => 'Facebook'],
+        ['value' => 'x', 'label' => 'X'],
+        ['value' => 'tiktok', 'label' => 'TikTok'],
+        ['value' => 'youtube', 'label' => 'YouTube'],
+        ['value' => 'behance', 'label' => 'Behance'],
+        ['value' => 'linkedin', 'label' => 'LinkedIn'],
+        ['value' => 'website', 'label' => 'Website / Portfolio'],
+    ];
+    $initialSocialLinks = collect(old('social_links', $profile->social_links ?? []))
+        ->filter(fn ($link) => filled($link['platform'] ?? null) || filled($link['url'] ?? null))
+        ->values()
+        ->map(fn ($link) => [
+            'platform' => $link['platform'] ?? '',
+            'url' => $link['url'] ?? '',
+            'uid' => uniqid('social_', true),
+        ])
+        ->all();
+
+    if ($initialSocialLinks === []) {
+        foreach ([
+            ['platform' => 'instagram', 'value' => old('instagram', $profile->instagram)],
+            ['platform' => 'facebook', 'value' => old('facebook', $profile->facebook)],
+            ['platform' => 'x', 'value' => old('twitter', $profile->twitter)],
+            ['platform' => 'website', 'value' => old('portfolio_website', $profile->portfolio_website)],
+        ] as $legacyLink) {
+            if (filled($legacyLink['value'])) {
+                $initialSocialLinks[] = [
+                    'platform' => $legacyLink['platform'],
+                    'url' => $legacyLink['value'],
+                    'uid' => uniqid('social_', true),
+                ];
+            }
+        }
+    }
+@endphp
+
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            {{ __('Photographer Profile') }}
-        </h2>
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.35em] text-gray-500">Photographer Profile</p>
+                <h2 class="mt-1 text-2xl font-semibold leading-tight text-gray-900">Edit Your Profile</h2>
+                <p class="mt-2 max-w-2xl text-sm text-gray-600">
+                    Update your public details, professional services, equipment, and contact preferences in one place.
+                </p>
+            </div>
+            <a href="{{ route('photographers.show', $user->profileRouteIdentifier()) }}" class="inline-flex items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50">
+                View Profile
+            </a>
+        </div>
     </x-slot>
-    
-    @push('styles')
-    <!-- Cropper.js CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
-    @endpush
-    
-    @push('scripts')
-    <!-- Cropper.js JS -->
-    <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
-    @endpush
 
-    <div class="py-12">
-        <div class="max-w-6xl mx-auto sm:px-6 lg:px-8">
-            @if (session('status'))
-                <div class="mb-4 p-4 bg-green-100 border-2 border-green-500 rounded-lg">
-                    <p class="text-green-800 font-medium">{{ session('status') }}</p>
-                </div>
-            @endif
-
-            <!-- Verification Banner (Dismissable) -->
-            @if(!$profile->isVerified())
-                <div x-data="{ dismissed: localStorage.getItem('verification_banner_dismissed') === 'true' }" 
-                     x-show="!dismissed"
-                     x-transition
-                     class="mb-6 relative bg-gradient-to-br from-yellow-50 via-yellow-100 to-yellow-200 border-2 border-yellow-400 rounded-lg shadow-lg overflow-hidden">
-                    <button @click="dismissed = true; localStorage.setItem('verification_banner_dismissed', 'true')" 
-                            class="absolute top-3 right-3 text-yellow-700 hover:text-yellow-900 transition-colors z-10">
-                        <i class="fas fa-times text-lg"></i>
+    <div class="py-10" x-data="photographerProfileEditor()" x-init="init()">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div
+                x-show="toast.show"
+                x-cloak
+                x-transition:enter="transform ease-out duration-300"
+                x-transition:enter-start="translate-y-2 opacity-0"
+                x-transition:enter-end="translate-y-0 opacity-100"
+                x-transition:leave="transform ease-in duration-200"
+                x-transition:leave-start="translate-y-0 opacity-100"
+                x-transition:leave-end="translate-y-2 opacity-0"
+                class="fixed right-6 top-24 z-[70] max-w-sm rounded-xl border px-4 py-3 text-sm shadow-lg"
+                :class="toast.type === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-green-200 bg-green-50 text-green-800'"
+            >
+                <div class="flex items-start gap-3">
+                    <i class="fas mt-0.5" :class="toast.type === 'error' ? 'fa-exclamation-circle text-red-600' : 'fa-check-circle text-green-600'"></i>
+                    <p class="flex-1 font-medium" x-text="toast.message"></p>
+                    <button type="button" @click="toast.show = false" class="transition hover:text-black">
+                        <i class="fas fa-times text-xs"></i>
                     </button>
-                    <div class="p-6 pr-12">
-                        <div class="flex items-start gap-4">
-                            <div class="flex-shrink-0">
-                                <div class="w-12 h-12 bg-yellow-500 rounded-lg flex items-center justify-center">
-                                    <i class="fas fa-shield-check text-white text-xl"></i>
-                                </div>
-                            </div>
-                            <div class="flex-1">
-                                <div class="flex items-center gap-2 mb-1">
-                                    <span class="inline-block bg-yellow-600 text-white text-xs font-semibold px-2 py-1 rounded uppercase">Premium</span>
-                                    <h3 class="text-lg font-bold text-yellow-900">Get Verified</h3>
-                                </div>
-                                <p class="text-yellow-800 mb-3 text-sm">Unlock your professional potential with verified status:</p>
-                                <ul class="grid grid-cols-1 md:grid-cols-2 gap-1.5 mb-4 text-yellow-800 text-sm">
-                                    <li class="flex items-center gap-2"><i class="fas fa-check text-yellow-600"></i> Increased credibility</li>
-                                    <li class="flex items-center gap-2"><i class="fas fa-check text-yellow-600"></i> Featured on homepage</li>
-                                    <li class="flex items-center gap-2"><i class="fas fa-check text-yellow-600"></i> More portfolio uploads</li>
-                                    <li class="flex items-center gap-2"><i class="fas fa-check text-yellow-600"></i> Exclusive features</li>
-                                </ul>
-                                <a href="{{ route('verification.create') }}" 
-                                   class="inline-flex items-center gap-2 bg-yellow-600 text-white font-semibold px-6 py-2.5 rounded-lg hover:bg-yellow-700 transition-colors shadow-sm">
-                                    <i class="fas fa-arrow-right"></i>
-                                    <span>Get Verified Now</span>
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            @endif
-
-            @php
-                $specialtiesOptions = \App\Helpers\PhotographerOptions::specialties();
-                $servicesOptions = \App\Helpers\PhotographerOptions::services();
-                $oldSpecialties = old('specialties', $profile->specialties ?? []);
-                $oldServices = old('services_offered', $profile->services_offered ?? []);
-                
-                if (!is_array($oldSpecialties)) {
-                    $oldSpecialties = [];
-                }
-                if (!is_array($oldServices)) {
-                    $oldServices = [];
-                }
-                
-                $oldEquipment = old('equipment', $profile->equipment ?? []);
-                if (is_array($oldEquipment) && !isset($oldEquipment['cameras'])) {
-                    $equipment = [
-                        'cameras' => [],
-                        'lenses' => [],
-                        'lighting' => [],
-                        'other' => $oldEquipment
-                    ];
-                } else {
-                    $equipment = [
-                        'cameras' => $oldEquipment['cameras'] ?? [],
-                        'lenses' => $oldEquipment['lenses'] ?? [],
-                        'lighting' => $oldEquipment['lighting'] ?? [],
-                        'other' => $oldEquipment['other'] ?? []
-                    ];
-                }
-                
-                $locationCountryCode = old('location_country_code', $profile->location_country_code ?? null);
-                $locationCity = old('location_city', $profile->location_city ?? null);
-                $locationGeonameId = old('location_geoname_id', $profile->location_geoname_id ?? null);
-                
-                $initialData = [
-                    'specialties' => $oldSpecialties,
-                    'services' => $oldServices,
-                    'equipment' => $equipment,
-                    'locationCountryCode' => $locationCountryCode ?: '',
-                    'locationCity' => $locationCity ?: '',
-                    'locationGeonameId' => $locationGeonameId ?: null
-                ];
-            @endphp
-
-            <script>
-                window.photographerProfileInitialData = @json($initialData);
-            </script>
-
-            <!-- Wizard Access Banner -->
-            <div class="mb-6 bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <i class="fas fa-magic text-blue-600 text-xl"></i>
-                        <div>
-                            <h3 class="font-semibold text-blue-900">Complete Your Profile with the Wizard</h3>
-                            <p class="text-sm text-blue-700">Use the step-by-step wizard to ensure all required fields are filled</p>
-                        </div>
-                    </div>
-                    <a href="{{ route('photographers.profile.edit', ['wizard' => 1]) }}" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors font-medium">
-                        <i class="fas fa-wand-magic-sparkles mr-2"></i>Open Wizard
-                    </a>
                 </div>
             </div>
 
-            <!-- Tabbed Interface -->
-            <div x-data="{ activeTab: 'basic' }" class="bg-white shadow-lg rounded-xl overflow-hidden">
-                <!-- Tab Navigation -->
-                <div class="border-b-2 border-gray-200 bg-gray-50">
-                    <div class="flex overflow-x-auto">
-                        <button @click="activeTab = 'basic'" 
-                                :class="activeTab === 'basic' ? 'border-b-4 border-black text-black font-semibold bg-white' : 'text-gray-600 hover:text-black hover:bg-gray-100'"
-                                class="px-6 py-4 text-sm font-medium transition-all whitespace-nowrap">
-                            <i class="fas fa-user mr-2"></i>Basic Info
-                        </button>
-                        <button @click="activeTab = 'professional'" 
-                                :class="activeTab === 'professional' ? 'border-b-4 border-black text-black font-semibold bg-white' : 'text-gray-600 hover:text-black hover:bg-gray-100'"
-                                class="px-6 py-4 text-sm font-medium transition-all whitespace-nowrap">
-                            <i class="fas fa-briefcase mr-2"></i>Professional
-                        </button>
-                        <button @click="activeTab = 'equipment'" 
-                                :class="activeTab === 'equipment' ? 'border-b-4 border-black text-black font-semibold bg-white' : 'text-gray-600 hover:text-black hover:bg-gray-100'"
-                                class="px-6 py-4 text-sm font-medium transition-all whitespace-nowrap">
-                            <i class="fas fa-camera mr-2"></i>Equipment
-                        </button>
-                        <button @click="activeTab = 'contact'" 
-                                :class="activeTab === 'contact' ? 'border-b-4 border-black text-black font-semibold bg-white' : 'text-gray-600 hover:text-black hover:bg-gray-100'"
-                                class="px-6 py-4 text-sm font-medium transition-all whitespace-nowrap">
-                            <i class="fas fa-envelope mr-2"></i>Contact & Social
-                        </button>
-                        <button @click="activeTab = 'settings'" 
-                                :class="activeTab === 'settings' ? 'border-b-4 border-black text-black font-semibold bg-white' : 'text-gray-600 hover:text-black hover:bg-gray-100'"
-                                class="px-6 py-4 text-sm font-medium transition-all whitespace-nowrap">
-                            <i class="fas fa-cog mr-2"></i>Settings
-                        </button>
-                    </div>
+            <div class="mb-6 md:hidden">
+                <div class="overflow-x-auto">
+                    <nav class="flex min-w-max gap-2 rounded-2xl border border-gray-200 bg-white p-2 shadow-sm">
+                        <a href="#section-basics" class="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-black">Basics</a>
+                        <a href="#section-professional" class="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-black">Professional</a>
+                        <a href="#section-equipment" class="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-black">Equipment</a>
+                        <a href="#section-contact" class="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-black">Contact</a>
+                        <a href="#section-visibility" class="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-black">Visibility</a>
+                    </nav>
                 </div>
+            </div>
 
-                <form method="POST" action="{{ route('photographers.profile.update') }}"
-                      enctype="multipart/form-data"
-                      x-data="photographerProfileForm()"
-                      x-init="init(window.photographerProfileInitialData || {})"
-                      @submit.prevent="submitForm($event)">
+            <div class="md:flex md:items-start md:gap-8">
+                <aside class="hidden md:block md:w-1/4 md:max-w-xs md:flex-none md:self-start md:sticky md:top-24">
+                    <div class="max-h-[calc(100vh-7rem)] overflow-y-auto rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                        <div class="mb-4">
+                            <h3 class="text-base font-semibold text-gray-900">Profile Editor</h3>
+                            <p class="mt-1 text-sm text-gray-500">Jump between profile areas while you edit.</p>
+                        </div>
+
+                        <nav class="space-y-1 text-sm">
+                            <a href="#section-basics" class="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-700 transition hover:bg-gray-100 hover:text-black">
+                                <i class="fas fa-id-card w-4 text-center text-gray-400"></i>
+                                <span>Basic Information</span>
+                            </a>
+                            <a href="#section-professional" class="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-700 transition hover:bg-gray-100 hover:text-black">
+                                <i class="fas fa-briefcase w-4 text-center text-gray-400"></i>
+                                <span>Professional Details</span>
+                            </a>
+                            <a href="#section-equipment" class="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-700 transition hover:bg-gray-100 hover:text-black">
+                                <i class="fas fa-camera w-4 text-center text-gray-400"></i>
+                                <span>Equipment</span>
+                            </a>
+                            <a href="#section-contact" class="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-700 transition hover:bg-gray-100 hover:text-black">
+                                <i class="fas fa-envelope w-4 text-center text-gray-400"></i>
+                                <span>Contact & Links</span>
+                            </a>
+                            <a href="#section-visibility" class="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-700 transition hover:bg-gray-100 hover:text-black">
+                                <i class="fas fa-eye w-4 text-center text-gray-400"></i>
+                                <span>Visibility</span>
+                            </a>
+                        </nav>
+
+                        <div class="mt-6 border-t border-gray-200 pt-5">
+                            @if(!$profile->isVerified())
+                                <div class="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
+                                    <p class="text-sm font-medium text-yellow-900">Verification Recommended</p>
+                                    <p class="mt-1 text-xs leading-5 text-yellow-800">
+                                        Verification unlocks company-name display and full-name display options.
+                                    </p>
+                                    <a href="{{ route('verification.create') }}" class="mt-3 inline-flex items-center rounded-md bg-yellow-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-yellow-700">
+                                        Submit Verification
+                                    </a>
+                                </div>
+                            @else
+                                <div class="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+                                    Your profile is verified.
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                </aside>
+
+                <form method="POST" action="{{ route('photographers.profile.update') }}" enctype="multipart/form-data" class="min-w-0 md:w-3/4 md:flex-1" @submit.prevent="submitProfile($event)">
                     @csrf
                     @method('patch')
 
-                    <div class="p-6 md:p-8">
-                        <!-- Basic Information Tab -->
-                        <div x-show="activeTab === 'basic'" x-transition class="space-y-6">
-                            <div>
-                                <h3 class="text-xl font-bold text-black mb-4">Basic Information</h3>
-                                
-                                @php
-                                    $countriesData = config('countries');
-                                    $hasLocation = ($profile->location_country_code || $profile->location_city);
-                                    $displayCountry = $profile->location_country_code ? ($countriesData[$profile->location_country_code] ?? $profile->location_country ?? '') : '';
-                                    $displayCity = $profile->location_city ?? '';
-                                    $displayLocation = trim(($displayCity ? $displayCity . ', ' : '') . ($displayCountry ?: ''));
-                                @endphp
+                    <div>
+                        <section id="section-basics">
+                            <div class="mb-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
+                                <div class="mb-6">
+                                    <h3 class="flex items-center gap-3 text-lg font-semibold text-gray-900">
+                                        <i class="fas fa-id-card text-gray-400"></i>
+                                        <span>Basic Information</span>
+                                    </h3>
+                                    <p class="mt-2 text-sm leading-6 text-gray-600">The main public details that set the tone for your photographer profile.</p>
+                                </div>
 
-                                <!-- Contact Card Layout -->
-                                <div class="bg-white border-2 border-gray-800 rounded-lg p-6 md:p-8">
-                                    <div class="flex flex-col md:flex-row gap-6 md:gap-8">
-                                        <!-- Left: Profile Photo and Logo -->
-                                        <div class="flex-shrink-0 flex flex-col items-center gap-4">
-                                            <div x-data="imageCropper('profile_photo', false)">
-                                                <div class="relative group cursor-pointer" @click="$refs.profilePhotoInput.click()">
-                                                    <div class="relative w-32 h-32 md:w-40 md:h-40 rounded-lg border-2 border-gray-800 overflow-hidden bg-gray-100">
-                                                        @if($profile->profile_photo_path)
-                                                            <img src="{{ asset($profile->profile_photo_path) }}" alt="Profile photo" class="w-full h-full object-cover" x-show="!previewUrl">
-                                                        @else
-                                                            <div class="w-full h-full flex items-center justify-center bg-gray-200">
-                                                                <i class="fas fa-user text-4xl text-gray-400"></i>
-                                                            </div>
-                                                        @endif
-                                                        <img x-show="previewUrl" :src="previewUrl" alt="Preview" class="w-full h-full object-cover absolute inset-0">
-                                                        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex items-center justify-center">
-                                                            <span class="text-white opacity-0 group-hover:opacity-100 transition-opacity text-sm font-medium">
-                                                                <i class="fas fa-camera mr-1"></i>Change Photo
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <input type="file" x-ref="profilePhotoInput" id="profile_photo" name="profile_photo" @change="handleFileSelect($event)" accept="image/jpeg,image/jpg,image/png,image/heic,image/heif" style="display: none;">
-                                                    <input type="hidden" name="profile_photo_crop_data" x-model="cropData" />
-                                                    
-                                                    <!-- Crop Modal -->
-                                                    <div x-show="showCropModal" x-cloak class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
-                                                        <div class="bg-white rounded-lg p-6 w-full max-w-5xl max-h-[95vh] flex flex-col" @click.stop>
-                                                            <h4 class="text-xl font-bold mb-2">Crop Your Photo</h4>
-                                                            <p class="text-sm text-gray-600 mb-4">Drag the crop area to position your photo. Drag the handles to resize.</p>
-                                                            <div class="flex-1 overflow-auto flex items-center justify-center" style="min-height: 500px; max-height: calc(95vh - 200px);">
-                                                                <div class="w-full" style="max-width: 800px;">
-                                                                    <img x-ref="cropImage" style="display: block; max-width: 100%; max-height: 70vh;" @load="initCropper()">
-                                                                </div>
-                                                            </div>
-                                                            <div class="mt-4 flex justify-end gap-4">
-                                                                <button type="button" @click="cancelCrop()" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">Cancel</button>
-                                                                <button type="button" @click="applyCrop()" class="px-4 py-2 bg-black text-white rounded hover:bg-gray-800">Apply Crop</button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            <!-- Company Logo -->
-                                            @if($profile->logo_path)
-                                            <div x-data="logoUploader()" class="w-32 h-32 md:w-40 md:h-40">
-                                                <img x-show="!previewUrl" src="{{ asset($profile->logo_path) }}" alt="Company logo" class="w-full h-full object-contain cursor-pointer hover:opacity-75 transition-opacity" @click.stop="$refs.logoInput.click()">
-                                                <img x-show="previewUrl" :src="previewUrl" alt="Logo preview" class="w-full h-full object-contain cursor-pointer hover:opacity-75 transition-opacity" @click.stop="$refs.logoInput.click()">
-                                                <input type="file" x-ref="logoInput" id="logo" name="logo" accept="image/jpeg,image/jpg,image/png" style="display: none;" @change="handleFileSelect($event)">
-                                            </div>
+                                <div class="grid gap-6 md:grid-cols-2">
+                                    <div>
+                                        <x-input-label for="first_name" value="First Name" />
+                                        <x-text-input id="first_name" name="first_name" type="text" class="mt-1 block w-full border-gray-300" value="{{ $initialFirstName }}" required />
+                                        <p class="mt-2 text-xs text-gray-500">Used for safe public name formats and account communication.</p>
+                                    </div>
+                                    <div>
+                                        <x-input-label for="last_name" value="Last Name" />
+                                        <x-text-input id="last_name" name="last_name" type="text" class="mt-1 block w-full border-gray-300" value="{{ $initialLastName }}" required />
+                                        <p class="mt-2 text-xs text-gray-500">Stored separately so it can be hidden from public display.</p>
+                                    </div>
+                                </div>
+
+                                <div class="mt-6">
+                                    <x-input-label for="username" value="Username" />
+                                    <div class="mt-1 max-w-xl rounded-2xl border border-gray-200 bg-white p-2 shadow-sm transition focus-within:border-black focus-within:ring-1 focus-within:ring-black">
+                                        <div class="flex items-center gap-2">
+                                            <span class="inline-flex h-10 items-center rounded-xl bg-gray-100 px-3 text-sm font-bold text-gray-500">@</span>
+                                            <input
+                                                id="username"
+                                                name="username"
+                                                type="text"
+                                                class="h-10 min-w-0 flex-1 rounded-xl border-0 bg-transparent px-2 text-sm font-semibold text-gray-900 shadow-none focus:border-0 focus:bg-gray-50 focus:ring-0 disabled:cursor-default disabled:text-gray-700"
+                                                value="{{ $initialUsername }}"
+                                                pattern="[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+                                                x-ref="usernameInput"
+                                                :readonly="!usernameEditing"
+                                                @if(!$canEditUsername) disabled @endif
+                                            />
+                                            @if($canEditUsername)
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-bold transition focus:outline-none focus:ring-2 focus:ring-black"
+                                                    :class="usernameEditing ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                                                    :title="usernameEditing ? 'Lock username field' : 'Edit username'"
+                                                    @click="usernameEditing = !usernameEditing; if (usernameEditing) { $nextTick(() => $refs.usernameInput.focus()) }"
+                                                >
+                                                    <i :class="usernameEditing ? 'fas fa-check text-xs' : 'fas fa-pencil-alt text-xs'"></i>
+                                                    <span x-text="usernameEditing ? 'Done' : 'Edit'"></span>
+                                                </button>
                                             @else
-                                            <div x-data="logoUploader()" class="w-32 h-32 md:w-40 md:h-40">
-                                                <div x-show="!previewUrl" class="w-full h-full border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-gray-500 transition-colors bg-gray-50" @click.stop="$refs.logoInput.click()" title="Add company logo">
-                                                    <i class="fas fa-image text-gray-400 text-2xl"></i>
-                                                </div>
-                                                <img x-show="previewUrl" :src="previewUrl" alt="Logo preview" class="w-full h-full object-contain cursor-pointer hover:opacity-75 transition-opacity" @click.stop="$refs.logoInput.click()">
-                                                <input type="file" x-ref="logoInput" id="logo" name="logo" accept="image/jpeg,image/jpg,image/png" style="display: none;" @change="handleFileSelect($event)">
-                                            </div>
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex h-10 items-center gap-2 rounded-xl bg-gray-100 px-4 text-sm font-bold text-gray-600 transition hover:bg-gray-200 hover:text-black focus:outline-none focus:ring-2 focus:ring-black"
+                                                    @click="usernameLockInfo = !usernameLockInfo"
+                                                >
+                                                    <i class="fas fa-lock text-xs"></i>
+                                                    Verify Your Profile
+                                                </button>
                                             @endif
                                         </div>
-
-                                        <!-- Right: Contact Info -->
-                                        <div class="flex-1 space-y-4">
-                                            <!-- Name -->
-                                            <div class="group relative" 
-                                                 x-data="{ editing: false, value: @js(old('name', $user->name ?? '')) }"
-                                                 x-init="originalValue = value">
-                                                <div class="flex items-center justify-between">
-                                                    <div class="flex-1">
-                                                        <div x-show="!editing" 
-                                                             @click="editing = true"
-                                                             class="cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
-                                                            <div class="text-xs text-gray-500 mb-1">Name</div>
-                                                            <div class="text-xl font-bold text-black" x-text="value || 'Click to add name'"></div>
-                                                        </div>
-                                                        <div x-show="editing" x-transition class="relative">
-                                                            <x-text-input 
-                                                                type="text" 
-                                                                x-model="value"
-                                                                @blur="editing = false"
-                                                                @keydown.enter="editing = false"
-                                                                @keydown.escape="editing = false; value = originalValue"
-                                                                class="block w-full text-xl font-bold" 
-                                                                placeholder="Your name"
-                                                                autofocus />
-                                                            <input type="hidden" name="name" x-model="value" />
-                                                        </div>
-                                                    </div>
+                                    </div>
+                                    <p class="mt-2 text-xs text-gray-500">
+                                        {{ $canEditUsername ? 'Click the pencil to change your public handle. Use lowercase letters, numbers, and hyphens.' : 'Your username is generated automatically. Custom usernames are available after verification.' }}
+                                    </p>
+                                    @unless($canEditUsername)
+                                        <div x-show="usernameLockInfo" x-cloak x-transition class="mt-3 max-w-xl rounded-2xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-900">
+                                            <div class="flex items-start gap-3">
+                                                <i class="fas fa-shield-halved mt-0.5 text-yellow-700"></i>
+                                                <div>
+                                                    <p class="font-bold">Verification unlocks custom usernames.</p>
+                                                    <p class="mt-1 text-yellow-800">It helps members trust your profile and gives you access to profile display controls such as custom handles and verified-only name options.</p>
+                                                    <a href="{{ route('verification.create') }}" class="mt-3 inline-flex rounded-full bg-black px-4 py-2 text-xs font-bold text-white">Start Verification</a>
                                                 </div>
                                             </div>
+                                        </div>
+                                    @endunless
+                                    @if($canEditUsername && $hasChangedUsernameBefore)
+                                        <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                            <i class="fas fa-triangle-exclamation mr-2"></i>
+                                            Changing your username again will stop your current custom username from working. Update any external links where you have shared it.
+                                        </div>
+                                    @endif
+                                    <x-input-error :messages="$errors->get('username')" class="mt-2" />
+                                </div>
 
-                                            <!-- Company Name -->
-                                            <div class="group relative" 
-                                                 x-data="{ editing: false, value: @js(old('professional_name', $profile->professional_name ?? '')) }"
-                                                 x-init="originalValue = value">
-                                                <div x-show="!editing" 
-                                                     @click="editing = true"
-                                                     class="cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
-                                                    <div class="text-xs text-gray-500 mb-1">Company</div>
-                                                    <div class="text-lg font-semibold text-gray-700" x-text="value || 'Click to add company name'"></div>
-                                                </div>
-                                                <div x-show="editing" x-transition class="relative">
-                                                    <x-text-input 
-                                                        type="text" 
-                                                        x-model="value"
-                                                        @blur="editing = false"
-                                                        @keydown.enter="editing = false"
-                                                        @keydown.escape="editing = false; value = originalValue"
-                                                        class="block w-full text-lg font-semibold" 
-                                                        placeholder="Company name"
-                                                        autofocus />
-                                                    <input type="hidden" name="professional_name" x-model="value" />
-                                                </div>
+                                <div class="mt-6">
+                                    <x-input-label for="professional_name" value="Company / Professional Name" />
+                                    <x-text-input id="professional_name" name="professional_name" type="text" class="mt-1 block w-full border-gray-300" value="{{ $companyName }}" placeholder="ALR Photography" />
+                                    <p class="mt-2 text-xs text-gray-500">Shown beneath your name when enabled, or as the main display name when that option is unlocked.</p>
+                                </div>
+
+                                <div class="mt-6 rounded-2xl border border-gray-200 p-5 {{ !$isVerifiedProfile ? 'bg-gray-50 opacity-75' : 'bg-white' }}">
+                                    <div class="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="flex items-center gap-4">
+                                            <div class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-gray-100">
+                                                @if($profile->logo_path)
+                                                    <img src="{{ asset($profile->logo_path) }}" alt="Current company logo" class="h-full w-full object-contain p-2">
+                                                @else
+                                                    <i class="fas fa-building text-2xl text-gray-400"></i>
+                                                @endif
                                             </div>
-
-                                            <!-- Location -->
-                                            <div class="group relative" 
-                                                 x-data="{ 
-                                                     editing: false,
-                                                     init() {
-                                                         this.editing = !@js($hasLocation);
-                                                     }
-                                                 }">
-                                                <div x-show="!editing && @js($hasLocation)" 
-                                                     @click="editing = true"
-                                                     class="cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
-                                                    <div class="text-xs text-gray-500 mb-1">Location</div>
-                                                    <div class="text-base text-gray-700">{{ $displayLocation ?: 'Not set' }}</div>
-                                                </div>
-                                                <div x-show="editing || !@js($hasLocation)" 
-                                                     x-transition
-                                                     class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    <div>
-                                                        <div class="text-xs text-gray-500 mb-1">Country</div>
-                                                        <div class="relative" 
-                                                             x-data="searchableDropdown()" 
-                                                             x-init="initCountries(@js($countriesData), '{{ old('location_country_code', $profile->location_country_code) }}')">
-                                                            <div class="relative">
-                                                                <x-text-input 
-                                                                    id="location_country_code" 
-                                                                    type="text" 
-                                                                    x-model="searchInput"
-                                                                    @input="filterCountries()"
-                                                                    @focus="showDropdown = true; if(filteredCountries.length === 0 && countries.length > 0) { filteredCountries = countries.slice(0, 50); }"
-                                                                    @blur="setTimeout(() => showDropdown = false, 200)"
-                                                                    @keydown.arrow-down.prevent="highlightNext()"
-                                                                    @keydown.arrow-up.prevent="highlightPrevious()"
-                                                                    @keydown.enter.prevent="selectHighlighted()"
-                                                                    @keydown.escape="showDropdown = false"
-                                                                    class="block w-full pr-10" 
-                                                                    placeholder="Type to search countries..." 
-                                                                    autocomplete="off" />
-                                                                <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
-                                                                    <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
-                                                                </div>
-                                                            </div>
-                                                            <input type="hidden" name="location_country_code" x-model="selectedValue" />
-                                                            <div x-show="showDropdown && filteredCountries.length > 0" 
-                                                                 x-cloak
-                                                                 x-transition
-                                                                 x-init="
-                                                                    $watch('showDropdown', value => {
-                                                                        if (value) {
-                                                                            setTimeout(() => {
-                                                                                const dropdown = $el;
-                                                                                const input = dropdown.previousElementSibling.querySelector('input');
-                                                                                const rect = input.getBoundingClientRect();
-                                                                                const viewportHeight = window.innerHeight;
-                                                                                const spaceBelow = viewportHeight - rect.bottom;
-                                                                                const spaceAbove = rect.top;
-                                                                                
-                                                                                if (spaceBelow < 200 && spaceAbove > spaceBelow) {
-                                                                                    dropdown.classList.add('bottom-full');
-                                                                                    dropdown.classList.remove('mt-1');
-                                                                                    dropdown.classList.add('mb-1');
-                                                                                    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
-                                                                                } else {
-                                                                                    dropdown.classList.remove('bottom-full', 'mb-1');
-                                                                                    dropdown.classList.add('mt-1');
-                                                                                    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
-                                                                                }
-                                                                            }, 10);
-                                                                        }
-                                                                    });
-                                                                 "
-                                                                 class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
-                                                                 style="max-height: 240px;">
-                                                                <template x-for="(country, index) in filteredCountries" :key="country.code">
-                                                                    <div @click="selectCountry(country); $dispatch('location-updated', {country: country.code})" 
-                                                                         @mouseenter="highlightedIndex = index"
-                                                                         :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === country.code, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== country.code }"
-                                                                         class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
-                                                                        <div class="font-medium" x-text="country.name"></div>
-                                                                    </div>
-                                                                </template>
-                                                            </div>
-                                                            <div x-show="showDropdown && filteredCountries.length === 0" 
-                                                                 x-cloak
-                                                                 class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl p-4 text-center text-gray-500">
-                                                                No countries found
-                                                            </div>
-                                                        </div>
-                                                        <x-input-error :messages="$errors->get('location_country_code')" class="mt-2" />
-                                                    </div>
-
-                                                    <div>
-                                                        <div class="text-xs text-gray-500 mb-1">City</div>
-                                                        <div class="relative"
-                                                             x-data="locationAutocomplete()" 
-                                                             x-init="init('{{ old('location_country_code', $profile->location_country_code) }}', '{{ old('location_city', $profile->location_city) }}', {{ old('location_geoname_id', $profile->location_geoname_id ?? 'null') }})">
-                                                            <x-text-input 
-                                                                id="location_city" 
-                                                                name="location_city" 
-                                                                type="text" 
-                                                                x-model="cityInput"
-                                                                @input="searchCities()"
-                                                                @focus="showSuggestions = true"
-                                                                @blur="setTimeout(() => showSuggestions = false, 200)"
-                                                                class="block w-full" 
-                                                                placeholder="Start typing city name..." 
-                                                                autocomplete="off" />
-                                                            <input type="hidden" name="location_geoname_id" x-model="selectedGeonameId" />
-                                                            <input type="hidden" name="location_country" x-model="selectedCountryName" />
-                                                            
-                                                            <div x-show="showSuggestions && suggestions.length > 0" 
-                                                                 x-cloak
-                                                                 x-init="
-                                                                    $watch('showSuggestions', value => {
-                                                                        if (value) {
-                                                                            setTimeout(() => {
-                                                                                const dropdown = $el;
-                                                                                const input = dropdown.previousElementSibling.previousElementSibling;
-                                                                                const rect = input.getBoundingClientRect();
-                                                                                const viewportHeight = window.innerHeight;
-                                                                                const spaceBelow = viewportHeight - rect.bottom;
-                                                                                const spaceAbove = rect.top;
-                                                                                
-                                                                                if (spaceBelow < 200 && spaceAbove > spaceBelow) {
-                                                                                    dropdown.classList.add('bottom-full');
-                                                                                    dropdown.classList.remove('mt-1');
-                                                                                    dropdown.classList.add('mb-1');
-                                                                                    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
-                                                                                } else {
-                                                                                    dropdown.classList.remove('bottom-full', 'mb-1');
-                                                                                    dropdown.classList.add('mt-1');
-                                                                                    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 240) + 'px';
-                                                                                }
-                                                                            }, 10);
-                                                                        }
-                                                                    });
-                                                                 "
-                                                                 class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
-                                                                 style="max-height: 240px;">
-                                                                <template x-for="(suggestion, index) in suggestions" :key="index">
-                                                                    <div @click="selectCity(suggestion); $dispatch('location-updated', {city: suggestion.city, geonameId: suggestion.id})" 
-                                                                         class="px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
-                                                                        <div class="font-medium text-black" x-text="suggestion.city"></div>
-                                                                        <div class="text-sm text-gray-600" x-text="suggestion.label"></div>
-                                                                    </div>
-                                                                </template>
-                                                            </div>
-                                                        </div>
-                                                        <x-input-error :messages="$errors->get('location_city')" class="mt-2" />
-                                                    </div>
-                                                </div>
+                                            <div>
+                                                <h4 class="text-sm font-semibold text-gray-900">Company Logo</h4>
+                                                <p class="mt-1 text-sm text-gray-500">
+                                                    {{ $isVerifiedProfile ? 'Upload a logo for your studio or company branding.' : 'Logo uploads are available to verified photographer profiles.' }}
+                                                </p>
+                                                @if(!$isVerifiedProfile)
+                                                    <a href="{{ route('verification.create') }}" class="mt-2 inline-flex items-center text-sm font-medium text-yellow-700 hover:text-yellow-900">
+                                                        <i class="fas fa-lock mr-2 text-xs"></i>
+                                                        Verification required
+                                                    </a>
+                                                @endif
                                             </div>
+                                        </div>
 
-                                            <!-- Bio -->
-                                            <div class="group relative" 
-                                                 x-data="{ editing: false, value: @js(old('bio', $profile->bio ?? '')) }"
-                                                 x-init="originalValue = value">
-                                                <div x-show="!editing" 
-                                                     @click="editing = true"
-                                                     class="cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
-                                                    <div class="text-xs text-gray-500 mb-1">Bio</div>
-                                                    <div class="text-sm text-gray-700 whitespace-pre-line" x-text="value || 'Click to add bio'"></div>
-                                                </div>
-                                                <div x-show="editing" x-transition class="relative">
-                                                    <textarea 
-                                                        x-model="value"
-                                                        @blur="editing = false"
-                                                        @keydown.escape="editing = false; value = originalValue"
-                                                        rows="4"
-                                                        class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 text-gray-900 placeholder-gray-400" 
-                                                        placeholder="Tell us about yourself and your photography style..."
-                                                        autofocus></textarea>
-                                                    <input type="hidden" name="bio" x-model="value" />
-                                                </div>
-                                                <x-input-error :messages="$errors->get('bio')" class="mt-2" />
-                                            </div>
+                                        <div class="sm:w-72">
+                                            <label for="logo" class="sr-only">Company Logo</label>
+                                            <input
+                                                id="logo"
+                                                name="logo"
+                                                type="file"
+                                                accept="image/jpeg,image/png"
+                                                @disabled(!$isVerifiedProfile)
+                                                class="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm file:mr-3 file:rounded-md file:border-0 file:bg-black file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100"
+                                            >
+                                            <p class="mt-2 text-xs text-gray-500">JPG or PNG. Max 2MB.</p>
                                         </div>
                                     </div>
                                 </div>
-                                
-                                <!-- Additional Basic Info Fields -->
-                                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <!-- Gender -->
+
+                                <div class="mt-6 grid gap-6 md:grid-cols-2">
                                     <div>
-                                        <x-input-label for="gender" :value="__('Gender')" />
-                                        @php
-                                            $hasGender = $profile->gender && in_array($profile->gender, ['male', 'female', 'other']);
-                                            $displayGender = $hasGender ? ucfirst($profile->gender) : '';
-                                        @endphp
-                                        <div x-data="{ editing: !@js($hasGender) }">
-                                            <div x-show="!editing && @js($hasGender)" class="mt-1">
-                                                <div class="flex items-center justify-between p-3 border-2 border-gray-300 rounded-md bg-gray-50">
-                                                    <span class="text-gray-900 font-medium">{{ $displayGender }}</span>
-                                                    <button type="button" @click="editing = true" class="text-sm text-gray-600 hover:text-black underline">
-                                                        <i class="fas fa-edit mr-1"></i>Edit
+                                        <x-input-label value="Display Name As" />
+                                        <div class="relative mt-1" @click.outside="displayNameDropdownOpen = false">
+                                            <input type="hidden" name="display_name_format" x-model="displayNameFormat">
+                                            <button type="button" @click="displayNameDropdownOpen = !displayNameDropdownOpen" class="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-left shadow-sm transition hover:border-gray-400 focus:border-black focus:outline-none focus:ring-1 focus:ring-black">
+                                                <span x-text="displayNameFormatLabel()" class="text-gray-900"></span>
+                                                <i class="fas fa-chevron-down text-xs text-gray-500"></i>
+                                            </button>
+                                            <div x-show="displayNameDropdownOpen" x-cloak x-transition x-init="$watch('displayNameDropdownOpen', value => { if (value) { setTimeout(() => { window.positionFloatingDropdown($el); }, 10); } });" class="absolute z-50 w-full overflow-y-auto rounded-md border border-gray-300 bg-white shadow-xl">
+                                                <template x-for="option in displayNameFormatOptions" :key="option.value">
+                                                    <button type="button" @click="selectDisplayNameFormat(option.value)" class="flex w-full items-start justify-between gap-3 px-3 py-3 text-left text-sm transition hover:bg-gray-50" :class="displayNameFormat === option.value ? 'bg-gray-100 text-black' : option.locked ? 'bg-gray-50 text-gray-400' : 'text-gray-700'">
+                                                        <span>
+                                                            <span class="block font-medium" x-text="option.label"></span>
+                                                            <span class="mt-0.5 block text-xs text-gray-500" x-text="option.description"></span>
+                                                        </span>
+                                                        <i x-show="option.locked" class="fas fa-lock mt-1 text-xs text-gray-400"></i>
                                                     </button>
-                                                </div>
-                                            </div>
-                                            <div x-show="editing || !@js($hasGender)" 
-                                                 x-transition
-                                                 class="relative mt-1" 
-                                                 x-data="customSelect({
-                                                     options: [
-                                                         { value: '', label: 'Select...' },
-                                                         { value: 'male', label: 'Male' },
-                                                         { value: 'female', label: 'Female' },
-                                                         { value: 'other', label: 'Other' }
-                                                     ],
-                                                     selectedValue: '{{ old('gender', $profile->gender) }}',
-                                                     onSelect: (value) => { }
-                                                 })">
-                                                <input type="hidden" name="gender" x-model="selectedValue" />
-                                                <div @click="showDropdown = !showDropdown" 
-                                                     @click.outside="showDropdown = false"
-                                                     class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
-                                                    <span x-text="selectedLabel || 'Select...'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
-                                                </div>
-                                                <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
-                                                    <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
-                                                </div>
-                                                <div x-show="showDropdown" 
-                                                     x-cloak
-                                                     x-transition
-                                                     class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
-                                                     style="max-height: 240px;">
-                                                    <template x-for="(option, index) in options" :key="index">
-                                                        <div @click="selectOption(option.value)" 
-                                                             @mouseenter="highlightedIndex = index"
-                                                             :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === option.value, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== option.value }"
-                                                             class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
-                                                            <div class="font-medium" x-text="option.label"></div>
-                                                        </div>
-                                                    </template>
-                                                </div>
+                                                </template>
                                             </div>
                                         </div>
-                                        <x-input-error :messages="$errors->get('gender')" class="mt-2" />
+                                        <p class="mt-2 text-xs text-gray-500">Locked options are visible for clarity but require verification.</p>
                                     </div>
-                                    
-                                    <!-- Date of Birth -->
-                                    <div>
-                                        <x-input-label for="date_of_birth" :value="__('Date of Birth')" />
-                                        @php
-                                            $hasDateOfBirth = $profile->date_of_birth;
-                                            $displayDateOfBirth = '';
-                                            if ($hasDateOfBirth) {
-                                                try {
-                                                    $displayDateOfBirth = is_string($profile->date_of_birth) ? $profile->date_of_birth : $profile->date_of_birth->format('Y-m-d');
-                                                } catch (\Exception $e) {
-                                                    $displayDateOfBirth = is_string($profile->date_of_birth) ? $profile->date_of_birth : '';
-                                                }
-                                            }
-                                        @endphp
-                                        <div x-data="{ editing: !@js($hasDateOfBirth), value: @js(old('date_of_birth', $displayDateOfBirth)) }"
-                                             x-init="originalValue = value">
-                                            <!-- Hidden input to ensure value is always submitted -->
-                                            <input type="hidden" name="date_of_birth" :value="value" />
-                                            
-                                            <div x-show="!editing && @js($hasDateOfBirth) && value" 
-                                                 @click="editing = true"
-                                                 class="mt-1 cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
-                                                <div class="flex items-center justify-between p-3 border-2 border-gray-300 rounded-md bg-gray-50">
-                                                    <span class="text-gray-900 font-medium" x-text="value ? new Date(value).toLocaleDateString() : ''"></span>
-                                                    <button type="button" @click.stop="editing = true" class="text-sm text-gray-600 hover:text-black underline">
-                                                        <i class="fas fa-edit mr-1"></i>Edit
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div x-show="editing || !@js($hasDateOfBirth) || !value" 
-                                                 x-transition
-                                                 class="mt-1">
-                                                <x-text-input 
-                                                    id="date_of_birth" 
-                                                    name="date_of_birth" 
-                                                    type="date" 
-                                                    x-model="value"
-                                                    @blur="editing = false"
-                                                    @keydown.enter="editing = false"
-                                                    @keydown.escape="editing = false; value = originalValue"
-                                                    class="block w-full" 
-                                                    max="{{ date('Y-m-d', strtotime('-13 years')) }}"
-                                                    required />
-                                                <p class="mt-1 text-xs text-gray-500">Must be at least 13 years old</p>
-                                            </div>
-                                        </div>
-                                        <x-input-error :messages="$errors->get('date_of_birth')" class="mt-2" />
-                                    </div>
+
+                                    <label class="flex items-start gap-3 rounded-xl border border-gray-200 px-4 py-4 {{ !$isVerifiedProfile ? 'opacity-60' : '' }}">
+                                        <input type="checkbox" name="show_company_on_profile" value="1" @checked(old('show_company_on_profile', $profile->show_company_on_profile)) @disabled(!$isVerifiedProfile) class="mt-1 rounded border-gray-300 text-black shadow-sm focus:ring-black">
+                                        <span>
+                                            <span class="block text-sm font-medium text-gray-900" x-text="companyDisplayLabel()"></span>
+                                            <span class="block text-sm text-gray-500" x-text="companyDisplayHelp()"></span>
+                                        </span>
+                                    </label>
                                 </div>
-                            </div>
-                        </div>
 
-                        <!-- Professional Information Tab -->
-                        <div x-show="activeTab === 'professional'" x-transition class="space-y-6">
-                            <div>
-                                <h3 class="text-xl font-bold text-black mb-4">Professional Information</h3>
-                                
-                                @php
-                                    $experienceLevels = [
-                                        'beginner' => 'Beginner',
-                                        'intermediate' => 'Intermediate',
-                                        'professional' => 'Professional'
-                                    ];
-                                    $hasExperienceLevel = $profile->experience_level && isset($experienceLevels[$profile->experience_level]);
-                                    $displayExperienceLevel = $hasExperienceLevel ? $experienceLevels[$profile->experience_level] : '';
-                                @endphp
+                                <div class="mt-6">
+                                    <x-input-label for="bio" value="Bio" />
+                                    <textarea id="bio" name="bio" rows="6" class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-black focus:ring-black" placeholder="Tell models and collaborators about your style, experience, and approach.">{{ old('bio', $profile->bio) }}</textarea>
+                                    <p class="mt-2 text-xs text-gray-500">Plain text only. Line breaks are preserved; HTML and embeds are stripped.</p>
+                                </div>
 
-                                <div class="mb-6">
-                                    <x-input-label for="experience_level" :value="__('Experience Level')" />
-                                    <div x-data="{ editing: !@js($hasExperienceLevel) }">
-                                        <div x-show="!editing && @js($hasExperienceLevel)" class="mt-1">
-                                            <div class="flex items-center justify-between p-3 border-2 border-gray-300 rounded-md bg-gray-50">
-                                                <span class="text-gray-900 font-medium">{{ $displayExperienceLevel }}</span>
-                                                <button type="button" @click="editing = true" class="text-sm text-gray-600 hover:text-black underline">
-                                                    <i class="fas fa-edit mr-1"></i>Edit
+                                <div class="mt-6 grid gap-6 md:grid-cols-2">
+                                    <div>
+                                        <x-input-label value="Country" />
+                                        <input type="hidden" name="location_country_code" x-model="selectedCountry">
+                                        <input type="hidden" name="location_country" x-model="selectedCountryName">
+                                        <div
+                                            class="relative mt-1"
+                                            x-data="searchableCountryDropdown({ countries: countries, selectedCode: selectedCountry, onSelect: (country) => selectCountry(country) })"
+                                            x-init="init()"
+                                            @click.outside="showDropdown = false"
+                                        >
+                                            <input
+                                                type="text"
+                                                x-model="searchInput"
+                                                @focus="showDropdown = true; filterCountries()"
+                                                @input="showDropdown = true; filterCountries()"
+                                                @keydown.arrow-down.prevent="highlightNext()"
+                                                @keydown.arrow-up.prevent="highlightPrevious()"
+                                                @keydown.enter.prevent="selectHighlighted()"
+                                                class="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-black focus:ring-black"
+                                                placeholder="Type to search country..."
+                                            >
+                                            <div x-show="showDropdown" x-cloak x-transition x-init="$watch('showDropdown', value => { if (value) { setTimeout(() => { window.positionFloatingDropdown($el); }, 10); } });" class="absolute z-50 w-full overflow-y-auto rounded-md border border-gray-300 bg-white shadow-xl">
+                                                <template x-for="(country, index) in filteredCountries" :key="country.code">
+                                                    <button type="button" @click="selectCountry(country)" class="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50" :class="index === highlightedIndex ? 'bg-gray-100' : ''">
+                                                        <span x-text="country.name"></span>
+                                                        <span class="text-xs text-gray-400" x-text="country.code"></span>
+                                                    </button>
+                                                </template>
+                                                <p x-show="filteredCountries.length === 0" class="px-3 py-2 text-sm text-gray-500">No countries found.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="relative">
+                                        <x-input-label for="location_city" value="City" />
+                                        <input type="hidden" name="location_geoname_id" x-model="selectedGeonameId">
+                                        <x-text-input id="location_city" name="location_city" type="text" class="mt-1 block w-full border-gray-300" x-model="cityInput" @input="searchCities()" @focus="searchCities()" placeholder="Start typing your city..." />
+                                        <div x-show="showSuggestions" x-cloak class="absolute z-40 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-gray-300 bg-white shadow-xl">
+                                            <template x-for="suggestion in suggestions" :key="suggestion.id">
+                                                <button type="button" @click="selectCity(suggestion)" class="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50">
+                                                    <span class="font-medium" x-text="suggestion.city"></span>
+                                                    <span class="text-gray-500" x-text="suggestion.admin_name ? ', ' + suggestion.admin_name : ''"></span>
                                                 </button>
-                                            </div>
+                                            </template>
                                         </div>
-                                        <div x-show="editing || !@js($hasExperienceLevel)" 
-                                             x-transition
-                                             class="relative mt-1" 
-                                             x-data="customSelect({
-                                                 options: [
-                                                     { value: '', label: 'Select...' },
-                                                     { value: 'beginner', label: 'Beginner' },
-                                                     { value: 'intermediate', label: 'Intermediate' },
-                                                     { value: 'professional', label: 'Professional' }
-                                                 ],
-                                                 selectedValue: '{{ old('experience_level', $profile->experience_level) }}',
-                                                 onSelect: (value) => { }
-                                             })">
-                                            <input type="hidden" name="experience_level" x-model="selectedValue" />
-                                            <div @click="showDropdown = !showDropdown" 
-                                                 @click.outside="showDropdown = false"
-                                                 class="block w-full border-2 border-gray-800 rounded-md shadow-sm focus:border-gray-600 focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 transition-all duration-200 px-3 py-2 pr-10 text-gray-900 bg-white cursor-pointer hover:border-gray-700">
-                                                <span x-text="selectedLabel || 'Select...'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
-                                            </div>
-                                            <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
-                                                <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
-                                            </div>
-                                            <div x-show="showDropdown" 
-                                                 x-cloak
-                                                 x-transition
-                                                 class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
-                                                 style="max-height: 240px;">
-                                                <template x-for="(option, index) in options" :key="index">
-                                                    <div @click="selectOption(option.value)" 
-                                                         @mouseenter="highlightedIndex = index"
-                                                         :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === option.value, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== option.value }"
-                                                         class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
-                                                        <div class="font-medium" x-text="option.label"></div>
-                                                    </div>
+                                    </div>
+
+                                    <div>
+                                        <x-input-label for="date_of_birth" value="Date of Birth" />
+                                        <x-text-input id="date_of_birth" name="date_of_birth" type="date" class="mt-1 block w-full border-gray-300" value="{{ old('date_of_birth', optional($profile->date_of_birth)->format('Y-m-d')) }}" required />
+                                    </div>
+
+                                    <div>
+                                        <x-input-label value="Gender" />
+                                        <div class="relative mt-1" x-data="customSelect({ options: genderOptions, selectedValue: @js(old('gender', $profile->gender ?? '')) })" @click.outside="showDropdown = false">
+                                            <input type="hidden" name="gender" x-model="selectedValue">
+                                            <button type="button" @click="showDropdown = !showDropdown" class="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-left shadow-sm transition hover:border-gray-400 focus:border-black focus:outline-none focus:ring-1 focus:ring-black">
+                                                <span x-text="selectedLabel || 'Select gender...'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                                <i class="fas fa-chevron-down text-xs text-gray-500"></i>
+                                            </button>
+                                            <div x-show="showDropdown" x-cloak x-transition class="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-gray-300 bg-white shadow-xl">
+                                                <template x-for="option in options" :key="option.value">
+                                                    <button type="button" @click="selectOption(option.value)" class="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50" x-text="option.label"></button>
                                                 </template>
                                             </div>
                                         </div>
                                     </div>
-                                    <x-input-error :messages="$errors->get('experience_level')" class="mt-2" />
+                                </div>
+                            </div>
+                        </section>
+
+                        <section id="section-professional">
+                            <div class="mb-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
+                                <div class="mb-6">
+                                    <h3 class="flex items-center gap-3 text-lg font-semibold text-gray-900">
+                                        <i class="fas fa-briefcase text-gray-400"></i>
+                                        <span>Professional Details</span>
+                                    </h3>
+                                    <p class="mt-2 text-sm leading-6 text-gray-600">Help members quickly understand your experience, location, and the types of shoots you offer.</p>
                                 </div>
 
-                                <div>
-                                    <x-input-label for="experience_start_year" :value="__('What year did you start photography?')" />
-                                    @php
-                                        $hasStartYear = $profile->experience_start_year && $profile->experience_start_year >= 1900 && $profile->experience_start_year <= date('Y');
-                                        $displayStartYear = $hasStartYear ? $profile->experience_start_year : '';
-                                    @endphp
-                                    <div x-data="{ editing: !@js($hasStartYear), value: @js(old('experience_start_year', $profile->experience_start_year ?? '')) }"
-                                         x-init="originalValue = value">
-                                        <div x-show="!editing && @js($hasStartYear)" 
-                                             @click="editing = true"
-                                             class="mt-1 cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded transition-colors">
-                                            <div class="flex items-center justify-between p-3 border-2 border-gray-300 rounded-md bg-gray-50">
-                                                <span class="text-gray-900 font-medium">{{ $displayStartYear }}</span>
-                                                <button type="button" @click.stop="editing = true" class="text-sm text-gray-600 hover:text-black underline">
-                                                    <i class="fas fa-edit mr-1"></i>Edit
-                                                </button>
+                                <div class="grid gap-6 md:grid-cols-2">
+                                    <div>
+                                        <x-input-label value="Experience Level" />
+                                        <div class="relative mt-1" x-data="customSelect({ options: experienceOptions, selectedValue: @js(old('experience_level', $profile->experience_level ?? '')) })" @click.outside="showDropdown = false">
+                                            <input type="hidden" name="experience_level" x-model="selectedValue">
+                                            <button type="button" @click="showDropdown = !showDropdown" class="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-left shadow-sm transition hover:border-gray-400 focus:border-black focus:outline-none focus:ring-1 focus:ring-black">
+                                                <span x-text="selectedLabel || 'Select experience...'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                                <i class="fas fa-chevron-down text-xs text-gray-500"></i>
+                                            </button>
+                                            <div x-show="showDropdown" x-cloak x-transition class="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-gray-300 bg-white shadow-xl">
+                                                <template x-for="option in options" :key="option.value">
+                                                    <button type="button" @click="selectOption(option.value)" class="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50" x-text="option.label"></button>
+                                                </template>
                                             </div>
                                         </div>
-                                        <div x-show="editing || !@js($hasStartYear)" 
-                                             x-transition
-                                             class="mt-1">
-                                            <x-text-input 
-                                                id="experience_start_year" 
-                                                name="experience_start_year" 
-                                                type="number" 
-                                                x-model="value"
-                                                @blur="editing = false"
-                                                @keydown.enter="editing = false"
-                                                @keydown.escape="editing = false; value = originalValue"
-                                                class="block w-full" 
-                                                min="1900" 
-                                                max="{{ date('Y') }}" 
-                                                placeholder="e.g., 2015" />
-                                            <p class="mt-1 text-xs text-gray-500">Optional - helps show your experience level</p>
+                                    </div>
+
+                                    <div>
+                                        <x-input-label for="experience_start_year" value="Started Photography In" />
+                                        <x-text-input id="experience_start_year" name="experience_start_year" type="number" min="1900" max="{{ date('Y') }}" class="mt-1 block w-full border-gray-300" value="{{ old('experience_start_year', $profile->experience_start_year) }}" placeholder="{{ date('Y') - 5 }}" />
+                                    </div>
+
+                                    <div>
+                                        <x-input-label for="studio_location" value="Studio / Base Location" />
+                                        <x-text-input id="studio_location" name="studio_location" type="text" class="mt-1 block w-full border-gray-300" value="{{ old('studio_location', $profile->studio_location) }}" placeholder="Cluj-Napoca, Romania" />
+                                    </div>
+
+                                    <label class="flex items-start gap-3 rounded-xl border border-gray-200 px-4 py-4">
+                                        <input type="checkbox" name="available_for_travel" value="1" @checked(old('available_for_travel', $profile->available_for_travel)) class="mt-1 rounded border-gray-300 text-black shadow-sm focus:ring-black">
+                                        <span>
+                                            <span class="block text-sm font-medium text-gray-900">Available for travel</span>
+                                            <span class="block text-sm text-gray-500">Let members know you can work outside your base location.</span>
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <div class="mt-8 grid gap-8 lg:grid-cols-2">
+                                    <div>
+                                        <h4 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Specialties</h4>
+                                        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                            @foreach($specialtiesOptions as $key => $label)
+                                                <label class="flex items-start gap-3 rounded-xl border border-gray-200 px-3 py-3 text-sm">
+                                                    <input type="checkbox" name="specialties[]" value="{{ $key }}" @checked(in_array($key, $selectedSpecialties, true)) class="mt-0.5 rounded border-gray-300 text-black shadow-sm focus:ring-black">
+                                                    <span>{{ $label }}</span>
+                                                </label>
+                                            @endforeach
                                         </div>
                                     </div>
-                                    <x-input-error :messages="$errors->get('experience_start_year')" class="mt-2" />
-                                </div>
 
-                                <div class="mb-6">
-                                    <x-input-label for="specialties" :value="__('Specialties')" />
-                                    <p class="text-sm text-gray-600 mb-3">Select your photography specialties</p>
-                                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                        @foreach($specialtiesOptions as $key => $label)
-                                            <label class="flex items-center cursor-pointer p-2 rounded hover:bg-gray-50 transition">
-                                                <input type="checkbox" 
-                                                       name="specialties[]" 
-                                                       value="{{ $key }}"
-                                                       @change="toggleSpecialty('{{ $key }}')"
-                                                       :checked="specialties.includes('{{ $key }}')"
-                                                       class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500 w-5 h-5">
-                                                <span class="ml-2 text-sm text-gray-700">{{ $label }}</span>
-                                            </label>
-                                        @endforeach
+                                    <div>
+                                        <h4 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Services</h4>
+                                        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                            @foreach($servicesOptions as $key => $label)
+                                                <label class="flex items-start gap-3 rounded-xl border border-gray-200 px-3 py-3 text-sm">
+                                                    <input type="checkbox" name="services_offered[]" value="{{ $key }}" @checked(in_array($key, $selectedServices, true)) class="mt-0.5 rounded border-gray-300 text-black shadow-sm focus:ring-black">
+                                                    <span>{{ $label }}</span>
+                                                </label>
+                                            @endforeach
+                                        </div>
                                     </div>
-                                    <input type="hidden" name="specialties_json" :value="JSON.stringify(specialties)">
-                                    <x-input-error :messages="$errors->get('specialties')" class="mt-2" />
+                                </div>
+                            </div>
+                        </section>
+
+                        <section id="section-equipment">
+                            <div class="mb-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
+                                <div class="mb-6">
+                                    <h3 class="flex items-center gap-3 text-lg font-semibold text-gray-900">
+                                        <i class="fas fa-camera text-gray-400"></i>
+                                        <span>Equipment</span>
+                                    </h3>
+                                    <p class="mt-2 text-sm leading-6 text-gray-600">Keep this practical. Add one item per line so it stays easy to scan on your profile.</p>
                                 </div>
 
-                                <div class="mb-6">
-                                    <x-input-label for="services_offered" :value="__('Services Offered')" />
-                                    <p class="text-sm text-gray-600 mb-3">Select the services you offer</p>
-                                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                        @foreach($servicesOptions as $key => $label)
-                                            <label class="flex items-center cursor-pointer p-2 rounded hover:bg-gray-50 transition">
-                                                <input type="checkbox" 
-                                                       name="services_offered[]" 
-                                                       value="{{ $key }}"
-                                                       @change="toggleService('{{ $key }}')"
-                                                       :checked="services.includes('{{ $key }}')"
-                                                       class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500 w-5 h-5">
-                                                <span class="ml-2 text-sm text-gray-700">{{ $label }}</span>
-                                            </label>
-                                        @endforeach
+                                <div class="grid gap-6 md:grid-cols-2">
+                                    <div>
+                                        <x-input-label for="equipment_cameras" value="Cameras" />
+                                        <textarea id="equipment_cameras" name="equipment_cameras" rows="5" class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-black focus:ring-black" placeholder="Canon R5&#10;Sony A7 IV">{{ old('equipment_cameras', $equipmentText('cameras')) }}</textarea>
                                     </div>
-                                    <input type="hidden" name="services_json" :value="JSON.stringify(services)">
-                                    <x-input-error :messages="$errors->get('services_offered')" class="mt-2" />
+                                    <div>
+                                        <x-input-label for="equipment_lenses" value="Lenses" />
+                                        <textarea id="equipment_lenses" name="equipment_lenses" rows="5" class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-black focus:ring-black" placeholder="50mm f/1.2&#10;24-70mm f/2.8">{{ old('equipment_lenses', $equipmentText('lenses')) }}</textarea>
+                                    </div>
+                                    <div>
+                                        <x-input-label for="equipment_lighting" value="Lighting" />
+                                        <textarea id="equipment_lighting" name="equipment_lighting" rows="5" class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-black focus:ring-black" placeholder="Profoto B10&#10;Softbox kit">{{ old('equipment_lighting', $equipmentText('lighting')) }}</textarea>
+                                    </div>
+                                    <div>
+                                        <x-input-label for="equipment_other" value="Other Kit" />
+                                        <textarea id="equipment_other" name="equipment_other" rows="5" class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-black focus:ring-black" placeholder="Backdrop system&#10;Tethering station">{{ old('equipment_other', $equipmentText('other')) }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section id="section-contact">
+                            <div class="mb-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
+                                <div class="mb-6">
+                                    <h3 class="flex items-center gap-3 text-lg font-semibold text-gray-900">
+                                        <i class="fas fa-envelope text-gray-400"></i>
+                                        <span>Contact & Links</span>
+                                    </h3>
+                                    <p class="mt-2 text-sm leading-6 text-gray-600">Requests are handled through the platform; this email is used for notifications rather than being exposed publicly.</p>
                                 </div>
 
-                                <div class="mb-6">
-                                    <x-input-label for="studio_location" :value="__('Studio Location')" />
-                                    @php
-                                        $countriesData = config('countries');
-                                        // Parse studio location - handle edge cases with multiple commas
-                                        $studioLocationCity = '';
-                                        $studioLocationCountry = '';
-                                        if ($profile->studio_location) {
-                                            // Split by ', ' first, then handle any remaining commas
-                                            $parts = explode(', ', $profile->studio_location, 2);
-                                            $studioLocationCity = trim($parts[0] ?? '');
-                                            $studioLocationCountry = trim($parts[1] ?? '');
-                                            
-                                            // Clean up any extra commas in the city name
-                                            $studioLocationCity = preg_replace('/,+/', '', $studioLocationCity);
-                                            $studioLocationCity = trim($studioLocationCity);
-                                        }
-                                        $locationCountry = $profile->location_country_code ? (config('countries')[$profile->location_country_code] ?? $profile->location_country ?? '') : ($profile->location_country ?? '');
-                                    @endphp
-                                    <div x-data="{ 
-                                        showStudioLocationEditor: false, 
-                                        studioLocationCity: @js($studioLocationCity), 
-                                        studioLocationCountry: @js($studioLocationCountry), 
-                                        locationCity: @js($profile->location_city ?? ''), 
-                                        locationCountry: @js($locationCountry),
-                                        updateStudioLocation(data) {
-                                            if (data.city) this.studioLocationCity = data.city;
-                                            if (data.country) this.studioLocationCountry = data.country;
-                                        }
-                                    }" @studio-location-updated.window="updateStudioLocation($event.detail)">
-                                        <div x-show="!showStudioLocationEditor" class="mt-1">
-                                            <div class="flex items-center justify-between p-3 border-2 border-gray-800 rounded-md bg-white">
-                                                <div>
-                                                    <span x-show="studioLocationCity || studioLocationCountry" class="text-gray-900 font-medium">
-                                                        <span x-text="studioLocationCity || ''"></span><span x-show="studioLocationCity && studioLocationCountry">, </span><span x-text="studioLocationCountry || ''"></span>
-                                                    </span>
-                                                    <span x-show="!studioLocationCity && !studioLocationCountry" class="text-gray-400 italic">
-                                                        <span x-show="locationCity || locationCountry">
-                                                            <span x-text="locationCity || ''"></span><span x-show="locationCity && locationCountry">, </span><span x-text="locationCountry || ''"></span>
-                                                            <span class="text-xs ml-2">(using main location)</span>
-                                                        </span>
-                                                        <span x-show="!locationCity && !locationCountry">No location set</span>
-                                                    </span>
-                                                </div>
-                                                <button type="button" @click="showStudioLocationEditor = true" class="text-sm text-gray-600 hover:text-black underline">
-                                                    Change Studio Location
-                                                </button>
+                                <div class="space-y-6">
+                                    <div class="grid gap-6 md:grid-cols-2">
+                                    <div>
+                                        <x-input-label for="public_email" value="Professional Email" />
+                                        <x-text-input id="public_email" name="public_email" type="email" class="mt-1 block w-full border-gray-300" value="{{ old('public_email', $profile->public_email ?: $user->email) }}" />
+                                    </div>
+                                    <div>
+                                        <x-input-label for="phone" value="Phone (optional)" />
+                                        <x-text-input id="phone" name="phone" type="text" class="mt-1 block w-full border-gray-300" value="{{ old('phone', $profile->phone) }}" />
+                                    </div>
+                                    </div>
+
+                                    <div>
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <x-input-label value="Social Links" />
+                                                <p class="mt-2 text-sm text-gray-500">Add whichever public platforms you actually want shown on your profile.</p>
                                             </div>
+                                            <button type="button" @click="addSocialLink()" class="inline-flex items-center justify-center rounded-md border border-black px-3 py-2 text-sm font-medium text-black transition hover:bg-gray-100">
+                                                <i class="fas fa-plus mr-2 text-xs"></i>
+                                                Add Link
+                                            </button>
                                         </div>
-                                        
-                                        <div x-show="showStudioLocationEditor" 
-                                             x-transition
-                                             class="mt-1"
-                                             x-data="locationAutocomplete()" 
-                                             x-init="init('{{ old('studio_location_country_code', '') }}', '{{ old('studio_location_city', $studioLocationCity) }}', {{ old('studio_location_geoname_id', 'null') }})">
-                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div>
-                                                    <x-input-label for="studio_location_country_code" :value="__('Country')" />
-                                                    <div class="relative mt-1" 
-                                                         x-data="searchableDropdown()" 
-                                                         x-init="initCountries(@js($countriesData), '{{ old('studio_location_country_code', '') }}')">
-                                                        <div class="relative">
-                                                            <x-text-input 
-                                                                id="studio_location_country_code" 
-                                                                type="text" 
-                                                                x-model="searchInput"
-                                                                @input="filterCountries()"
-                                                                @focus="showDropdown = true; if(filteredCountries.length === 0 && countries.length > 0) { filteredCountries = countries.slice(0, 50); }"
-                                                                @blur="setTimeout(() => showDropdown = false, 200)"
-                                                                @keydown.arrow-down.prevent="highlightNext()"
-                                                                @keydown.arrow-up.prevent="highlightPrevious()"
-                                                                @keydown.enter.prevent="selectHighlighted()"
-                                                                @keydown.escape="showDropdown = false"
-                                                                class="block w-full pr-10" 
-                                                                placeholder="Type to search countries..." 
-                                                                autocomplete="off" />
-                                                            <div class="absolute right-0 flex items-center pointer-events-none" style="top: 50%; transform: translateY(-50%); right: 12px;">
-                                                                <i class="fas fa-chevron-down text-gray-600 text-sm"></i>
+
+                                        <div class="mt-4 space-y-3" x-show="socialLinks.length > 0">
+                                            <template x-for="(link, index) in socialLinks" :key="link.uid">
+                                                <div class="grid gap-3 rounded-xl border border-gray-200 p-4 xl:grid-cols-[220px_minmax(0,1fr)_auto]">
+                                                    <div>
+                                                        <label class="mb-1 block text-sm font-medium text-gray-700">Platform</label>
+                                                        <div class="relative" x-data="customSelect({
+                                                            options: @js($socialPlatformOptions),
+                                                            selectedValue: link.platform || '',
+                                                            onSelect: (value) => { link.platform = value; }
+                                                        })" x-init="init()" x-effect="syncFromExternal(link.platform || '')">
+                                                            <input type="hidden" :name="`social_links[${index}][platform]`" x-model="selectedValue">
+                                                            <button type="button" @click="showDropdown = !showDropdown" @click.outside="showDropdown = false" class="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-left shadow-sm transition hover:border-gray-400 focus:border-black focus:outline-none focus:ring-1 focus:ring-black">
+                                                                <span x-text="selectedLabel || 'Select platform...'" :class="selectedValue ? 'text-gray-900' : 'text-gray-400'"></span>
+                                                                <i class="fas fa-chevron-down text-xs text-gray-500"></i>
+                                                            </button>
+                                                            <div x-show="showDropdown" x-cloak x-transition x-init="$watch('showDropdown', value => { if (value) { setTimeout(() => { window.positionFloatingDropdown($el); }, 10); } });" class="absolute z-50 w-full overflow-y-auto rounded-md border border-gray-300 bg-white shadow-xl">
+                                                                <template x-for="(option, optionIndex) in options" :key="`social-platform-${option.value || optionIndex}`">
+                                                                    <button type="button" @click="selectOption(option.value)" class="block w-full border-b border-gray-100 px-4 py-2 text-left last:border-b-0 hover:bg-gray-50" :class="selectedValue === option.value ? 'bg-gray-100 text-black' : 'text-gray-700'">
+                                                                        <span x-text="option.label"></span>
+                                                                    </button>
+                                                                </template>
                                                             </div>
                                                         </div>
-                                                        <input type="hidden" name="studio_location_country_code" x-model="selectedValue" />
-                                                        <div x-show="showDropdown && filteredCountries.length > 0" 
-                                                             x-cloak
-                                                             x-transition
-                                                             class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
-                                                             style="max-height: 240px;">
-                                                            <template x-for="(country, index) in filteredCountries" :key="country.code">
-                                                                <div @click="selectCountry(country); $dispatch('studio-location-updated', {country: country.name})" 
-                                                                     @mouseenter="highlightedIndex = index"
-                                                                     :class="{ 'bg-gray-800 text-white': index === highlightedIndex || selectedValue === country.code, 'bg-white text-gray-900 hover:bg-gray-50': index !== highlightedIndex && selectedValue !== country.code }"
-                                                                     class="px-4 py-2.5 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
-                                                                    <div class="font-medium" x-text="country.name"></div>
-                                                                </div>
-                                                            </template>
-                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <label class="mb-1 block text-sm font-medium text-gray-700">URL</label>
+                                                        <input type="url" x-model="link.url" class="block w-full rounded-md border border-gray-300 shadow-sm focus:border-black focus:ring-black" :placeholder="socialPlaceholder(link.platform)">
+                                                    </div>
+
+                                                    <div class="flex items-end">
+                                                        <button type="button" @click="removeSocialLink(index)" class="inline-flex items-center rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50">
+                                                            Remove
+                                                        </button>
                                                     </div>
                                                 </div>
+                                            </template>
+                                        </div>
 
-                                                <div>
-                                                    <x-input-label for="studio_location_city" :value="__('City')" />
-                                                    <div class="relative mt-1">
-                                                        <x-text-input 
-                                                            id="studio_location_city" 
-                                                            name="studio_location_city" 
-                                                            type="text" 
-                                                            x-model="cityInput"
-                                                            @input="searchCities()"
-                                                            @focus="showSuggestions = true"
-                                                            @blur="setTimeout(() => showSuggestions = false, 200)"
-                                                            class="block w-full" 
-                                                            placeholder="Start typing city name..." 
-                                                            autocomplete="off" />
-                                                        <input type="hidden" name="studio_location_geoname_id" x-model="selectedGeonameId" />
-                                                        <input type="hidden" name="studio_location_country" x-model="selectedCountryName" />
-                                                        
-                                                        <div x-show="showSuggestions && suggestions.length > 0" 
-                                                             x-cloak
-                                                             class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-800 rounded-md shadow-xl overflow-y-auto"
-                                                             style="max-height: 240px;">
-                                                            <template x-for="(suggestion, index) in suggestions" :key="index">
-                                                                <div @click="selectCity(suggestion); const countryParts = suggestion.label.split(', '); $dispatch('studio-location-updated', {city: suggestion.city, country: countryParts.length > 1 ? countryParts[1] : ''})" 
-                                                                     class="px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors duration-150">
-                                                                    <div class="font-medium text-black" x-text="suggestion.city"></div>
-                                                                    <div class="text-sm text-gray-600" x-text="suggestion.label"></div>
-                                                                </div>
-                                                            </template>
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                        <div x-show="socialLinks.length === 0" class="mt-4 rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500">
+                                            No social links added yet.
+                                        </div>
+
+                                        <template x-for="(link, index) in socialLinks" :key="`hidden-social-${link.uid}`">
+                                            <div>
+                                                <input type="hidden" :name="`social_links[${index}][platform]`" :value="link.platform">
+                                                <input type="hidden" :name="`social_links[${index}][url]`" :value="link.url">
                                             </div>
-                                            <div class="mt-2 flex items-center gap-4">
-                                                <button type="button" @click="showStudioLocationEditor = false" class="text-sm text-gray-600 hover:text-black underline">
-                                                    Cancel
-                                                </button>
-                                                <button type="button" @click="showStudioLocationEditor = false" class="text-sm bg-black text-white px-4 py-2 rounded hover:bg-gray-800">
-                                                    Save Location
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <input type="hidden" name="studio_location" :value="(studioLocationCity && studioLocationCountry) ? studioLocationCity + ', ' + studioLocationCountry : (locationCity && locationCountry) ? locationCity + ', ' + locationCountry : ''" />
+                                        </template>
                                     </div>
-                                    <p class="mt-1 text-xs text-gray-500">Optional - Where is your studio located? If not set, your main location will be used.</p>
-                                    <x-input-error :messages="$errors->get('studio_location')" class="mt-2" />
+                                </div>
+                            </div>
+                        </section>
+
+                        <section id="section-visibility">
+                            <div class="mb-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
+                                <div class="mb-6">
+                                    <h3 class="flex items-center gap-3 text-lg font-semibold text-gray-900">
+                                        <i class="fas fa-eye text-gray-400"></i>
+                                        <span>Visibility</span>
+                                    </h3>
+                                    <p class="mt-2 text-sm leading-6 text-gray-600">Control whether the profile is visible and whether portfolio content needs NSFW handling.</p>
                                 </div>
 
-                                <div class="mb-6">
-                                    <label class="flex items-center">
-                                        <input type="checkbox" name="available_for_travel" value="1" {{ old('available_for_travel', $profile->available_for_travel) ? 'checked' : '' }} class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500 w-5 h-5">
-                                        <span class="ml-2 text-sm text-gray-700">Available for travel</span>
+                                <div class="grid gap-4 xl:grid-cols-2">
+                                    <label class="flex items-start gap-3 rounded-xl border border-gray-200 px-4 py-4">
+                                        <input type="checkbox" name="is_public" value="1" @checked(old('is_public', $profile->is_public ?? true)) class="mt-1 rounded border-gray-300 text-black shadow-sm focus:ring-black">
+                                        <span>
+                                            <span class="block text-sm font-medium text-gray-900">Public profile</span>
+                                            <span class="block text-sm text-gray-500">Allow visitors and members to view your photographer profile.</span>
+                                        </span>
+                                    </label>
+
+                                    <label class="flex items-start gap-3 rounded-xl border border-gray-200 px-4 py-4">
+                                        <input type="checkbox" name="contains_nudity" value="1" @checked(old('contains_nudity', $profile->contains_nudity)) class="mt-1 rounded border-gray-300 text-black shadow-sm focus:ring-black">
+                                        <span>
+                                            <span class="block text-sm font-medium text-gray-900">Portfolio contains NSFW content</span>
+                                            <span class="block text-sm text-gray-500">Used for visibility warnings and age-gated presentation where needed.</span>
+                                        </span>
                                     </label>
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- Equipment Tab -->
-                        <div x-show="activeTab === 'equipment'" x-transition class="space-y-6">
-                            <div>
-                                <h3 class="text-xl font-bold text-black mb-4">Equipment</h3>
-                                <p class="text-sm text-gray-600 mb-6">List your photography equipment to showcase your capabilities</p>
-                                
-                                <!-- Cameras -->
-                                <div class="mb-6">
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Cameras</label>
-                                    <div class="flex flex-wrap gap-2 mb-2">
-                                        <template x-for="(item, index) in equipment.cameras" :key="index">
-                                            <span class="bg-gray-200 px-3 py-1 rounded-full text-sm flex items-center">
-                                                <span x-text="item"></span>
-                                                <button type="button" @click="equipment.cameras.splice(index, 1)" class="ml-2 text-gray-600 hover:text-red-600">
-                                                    <i class="fas fa-times"></i>
-                                                </button>
-                                            </span>
-                                        </template>
-                                    </div>
-                                    <div class="flex gap-2">
-                                        <x-text-input type="text" x-model="newCamera" @keyup.enter.prevent="if(newCamera.trim()) { equipment.cameras.push(newCamera.trim()); newCamera = ''; }" placeholder="e.g., Canon EOS R5" class="flex-1" />
-                                        <button type="button" @click="if(newCamera.trim()) { equipment.cameras.push(newCamera.trim()); newCamera = ''; }" class="bg-black text-white px-4 py-2 rounded hover:bg-gray-800">
-                                            <i class="fas fa-plus"></i>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Lenses -->
-                                <div class="mb-6">
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Lenses</label>
-                                    <div class="flex flex-wrap gap-2 mb-2">
-                                        <template x-for="(item, index) in equipment.lenses" :key="index">
-                                            <span class="bg-gray-200 px-3 py-1 rounded-full text-sm flex items-center">
-                                                <span x-text="item"></span>
-                                                <button type="button" @click="equipment.lenses.splice(index, 1)" class="ml-2 text-gray-600 hover:text-red-600">
-                                                    <i class="fas fa-times"></i>
-                                                </button>
-                                            </span>
-                                        </template>
-                                    </div>
-                                    <div class="flex gap-2">
-                                        <x-text-input type="text" x-model="newLens" @keyup.enter.prevent="if(newLens.trim()) { equipment.lenses.push(newLens.trim()); newLens = ''; }" placeholder="e.g., 24-70mm f/2.8" class="flex-1" />
-                                        <button type="button" @click="if(newLens.trim()) { equipment.lenses.push(newLens.trim()); newLens = ''; }" class="bg-black text-white px-4 py-2 rounded hover:bg-gray-800">
-                                            <i class="fas fa-plus"></i>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Lighting -->
-                                <div class="mb-6">
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Lighting Equipment</label>
-                                    <div class="flex flex-wrap gap-2 mb-2">
-                                        <template x-for="(item, index) in equipment.lighting" :key="index">
-                                            <span class="bg-gray-200 px-3 py-1 rounded-full text-sm flex items-center">
-                                                <span x-text="item"></span>
-                                                <button type="button" @click="equipment.lighting.splice(index, 1)" class="ml-2 text-gray-600 hover:text-red-600">
-                                                    <i class="fas fa-times"></i>
-                                                </button>
-                                            </span>
-                                        </template>
-                                    </div>
-                                    <div class="flex gap-2">
-                                        <x-text-input type="text" x-model="newLighting" @keyup.enter.prevent="if(newLighting.trim()) { equipment.lighting.push(newLighting.trim()); newLighting = ''; }" placeholder="e.g., Profoto B10" class="flex-1" />
-                                        <button type="button" @click="if(newLighting.trim()) { equipment.lighting.push(newLighting.trim()); newLighting = ''; }" class="bg-black text-white px-4 py-2 rounded hover:bg-gray-800">
-                                            <i class="fas fa-plus"></i>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Other Equipment -->
-                                <div class="mb-6">
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Other Equipment</label>
-                                    <div class="flex flex-wrap gap-2 mb-2">
-                                        <template x-for="(item, index) in equipment.other" :key="index">
-                                            <span class="bg-gray-200 px-3 py-1 rounded-full text-sm flex items-center">
-                                                <span x-text="item"></span>
-                                                <button type="button" @click="equipment.other.splice(index, 1)" class="ml-2 text-gray-600 hover:text-red-600">
-                                                    <i class="fas fa-times"></i>
-                                                </button>
-                                            </span>
-                                        </template>
-                                    </div>
-                                    <div class="flex gap-2">
-                                        <x-text-input type="text" x-model="newOther" @keyup.enter.prevent="if(newOther.trim()) { equipment.other.push(newOther.trim()); newOther = ''; }" placeholder="e.g., Tripod, Backdrops, etc." class="flex-1" />
-                                        <button type="button" @click="if(newOther.trim()) { equipment.other.push(newOther.trim()); newOther = ''; }" class="bg-black text-white px-4 py-2 rounded hover:bg-gray-800">
-                                            <i class="fas fa-plus"></i>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <input type="hidden" name="equipment" :value="JSON.stringify(equipment)">
-                                <x-input-error :messages="$errors->get('equipment')" class="mt-2" />
-                            </div>
-                        </div>
-
-                        <!-- Contact & Social Tab -->
-                        <div x-show="activeTab === 'contact'" x-transition class="space-y-6">
-                            <div>
-                                <h3 class="text-xl font-bold text-black mb-4">Contact & Social Media</h3>
-                                
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <x-input-label for="public_email" :value="__('Public Email')" />
-                                        <x-text-input id="public_email" name="public_email" type="email" class="block mt-1 w-full" :value="old('public_email', $profile->public_email)" />
-                                        <x-input-error :messages="$errors->get('public_email')" class="mt-2" />
-                                    </div>
-
-                                    <div>
-                                        <x-input-label for="phone" :value="__('Phone')" />
-                                        <x-text-input id="phone" name="phone" type="text" class="block mt-1 w-full" :value="old('phone', $profile->phone)" />
-                                        <x-input-error :messages="$errors->get('phone')" class="mt-2" />
-                                    </div>
-
-                                    <div>
-                                        <x-input-label for="instagram" :value="__('Instagram')" />
-                                        <x-text-input id="instagram" name="instagram" type="text" class="block mt-1 w-full" :value="old('instagram', $profile->instagram)" placeholder="@username" />
-                                        <x-input-error :messages="$errors->get('instagram')" class="mt-2" />
-                                    </div>
-
-                                    <div>
-                                        <x-input-label for="facebook" :value="__('Facebook')" />
-                                        <x-text-input id="facebook" name="facebook" type="text" class="block mt-1 w-full" :value="old('facebook', $profile->facebook)" />
-                                        <x-input-error :messages="$errors->get('facebook')" class="mt-2" />
-                                    </div>
-
-                                    <div>
-                                        <x-input-label for="twitter" :value="__('Twitter/X')" />
-                                        <x-text-input id="twitter" name="twitter" type="text" class="block mt-1 w-full" :value="old('twitter', $profile->twitter)" />
-                                        <x-input-error :messages="$errors->get('twitter')" class="mt-2" />
-                                    </div>
-
-                                    <div class="md:col-span-2">
-                                        <x-input-label for="portfolio_website" :value="__('Portfolio Website')" />
-                                        <x-text-input id="portfolio_website" name="portfolio_website" type="url" class="block mt-1 w-full" :value="old('portfolio_website', $profile->portfolio_website)" />
-                                        <x-input-error :messages="$errors->get('portfolio_website')" class="mt-2" />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Settings Tab -->
-                        <div x-show="activeTab === 'settings'" x-transition class="space-y-6">
-                            <div>
-                                <h3 class="text-xl font-bold text-black mb-4">Profile Settings</h3>
-                                
-                                <div class="space-y-4">
-                                    <label class="flex items-center p-4 border-2 border-gray-200 rounded-lg hover:border-gray-300 transition cursor-pointer">
-                                        <input type="checkbox" name="is_public" value="1" {{ old('is_public', $profile->is_public ?? true) ? 'checked' : '' }} class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500 w-5 h-5">
-                                        <div class="ml-3">
-                                            <span class="text-sm font-medium text-gray-700">Make profile public</span>
-                                            <p class="text-xs text-gray-500">Allow others to view your profile</p>
-                                        </div>
-                                    </label>
-
-                                    <label class="flex items-center p-4 border-2 border-gray-200 rounded-lg hover:border-gray-300 transition cursor-pointer">
-                                        <input type="checkbox" name="contains_nudity" value="1" {{ old('contains_nudity', $profile->contains_nudity) ? 'checked' : '' }} class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500 w-5 h-5">
-                                        <div class="ml-3">
-                                            <span class="text-sm font-medium text-gray-700">Restrict to users 18+</span>
-                                            <p class="text-xs text-gray-500">Enable this if your portfolio contains content that should only be viewed by users 18 years or older. This includes artistic nude photography, mature themes, or any content that may not be suitable for minors.</p>
-                                        </div>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
+                        </section>
                     </div>
 
-                    <!-- Save Button (Fixed at bottom) -->
-                    <div class="border-t-2 border-gray-200 bg-gray-50 px-6 py-4 flex items-center justify-between">
-                        <!-- Status Message -->
-                        <div x-show="statusMessage" 
-                             x-text="statusMessage"
-                             :class="statusType === 'success' ? 'text-green-600 font-medium' : 'text-red-600 font-medium'"
-                             class="text-sm"
-                             x-transition></div>
-                        <div class="flex-1"></div>
-                        <button 
-                            type="submit"
-                            class="px-8 py-3 bg-black text-white rounded-lg font-semibold hover:bg-gray-800 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
-                            :disabled="isSubmitting">
-                            <span x-show="!isSubmitting">
-                                <i class="fas fa-save mr-2"></i>{{ __('Save Profile') }}
-                            </span>
-                            <span x-show="isSubmitting" class="flex items-center">
-                                <i class="fas fa-spinner fa-spin mr-2"></i>{{ __('Saving...') }}
-                            </span>
+                    <div class="flex flex-col gap-3 border-t border-gray-200 pt-6 sm:flex-row sm:items-center sm:justify-end">
+                        <a href="{{ route('photographers.show', $user->profileRouteIdentifier()) }}" class="inline-flex items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50">
+                            Cancel
+                        </a>
+                        <button type="submit" :disabled="saving" class="inline-flex items-center justify-center rounded-md bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60">
+                            <i x-show="saving" class="fas fa-spinner fa-spin mr-2"></i>
+                            <span x-text="saving ? 'Saving...' : 'Save Profile'"></span>
                         </button>
                     </div>
                 </form>
@@ -1082,615 +683,316 @@
 </x-app-layout>
 
 <script>
-    document.addEventListener('alpine:init', () => {
-        Alpine.data('photographerProfileForm', () => ({
-            specialties: [],
-            services: [],
-            equipment: {
-                cameras: [],
-                lenses: [],
-                lighting: [],
-                other: []
-            },
-            newCamera: '',
-            newLens: '',
-            newLighting: '',
-            newOther: '',
-            selectedCountry: '',
-            cityInput: '',
-            selectedGeonameId: null,
-            selectedCountryName: '',
-            suggestions: [],
-            showSuggestions: false,
-            highlightedIndex: -1,
-            searchTimeout: null,
-            isSubmitting: false,
-            statusMessage: '',
-            statusType: 'success',
-            init(initial) {
-                if (!initial || typeof initial !== 'object') {
-                    initial = {};
-                }
-                
-                this.specialties = initial.specialties || [];
-                this.services = initial.services || [];
-                this.equipment = {
-                    cameras: initial.equipment?.cameras || [],
-                    lenses: initial.equipment?.lenses || [],
-                    lighting: initial.equipment?.lighting || [],
-                    other: initial.equipment?.other || []
-                };
-                
-                this.selectedCountry = initial.locationCountryCode || '';
-                this.cityInput = initial.locationCity || '';
-                this.selectedGeonameId = initial.locationGeonameId || null;
-                
-                if (this.selectedCountry) {
-                    const countries = @json(config('countries'));
-                    this.selectedCountryName = countries[this.selectedCountry] || '';
-                }
-            },
-            toggleSpecialty(value) {
-                const index = this.specialties.indexOf(value);
-                if (index > -1) {
-                    this.specialties.splice(index, 1);
-                } else {
-                    this.specialties.push(value);
-                }
-            },
-            toggleService(value) {
-                const index = this.services.indexOf(value);
-                if (index > -1) {
-                    this.services.splice(index, 1);
-                } else {
-                    this.services.push(value);
-                }
-            },
-            onCountryChange() {
-                this.cityInput = '';
-                this.selectedGeonameId = null;
-                this.selectedCountryName = '';
-                this.suggestions = [];
-                this.showSuggestions = false;
-            },
-            searchCities() {
-                if (this.searchTimeout) {
-                    clearTimeout(this.searchTimeout);
-                }
-                
-                if (!this.selectedCountry || this.cityInput.length < 2) {
-                    this.suggestions = [];
-                    this.showSuggestions = false;
-                    return;
-                }
-                
-                this.searchTimeout = setTimeout(() => {
-                    fetch(`/api/locations?q=${encodeURIComponent(this.cityInput)}&country=${this.selectedCountry}&limit=10`)
-                        .then(response => response.json())
-                        .then(data => {
-                            this.suggestions = data.data || [];
-                            this.showSuggestions = this.suggestions.length > 0;
-                            this.highlightedIndex = -1;
-                        })
-                        .catch(error => {
-                            console.error('Error fetching cities:', error);
-                            this.suggestions = [];
-                        });
-                }, 300);
-            },
-            selectCity(suggestion) {
-                this.cityInput = suggestion.city;
-                this.selectedGeonameId = suggestion.id;
-                this.selectedCountryName = suggestion.country_name;
-                this.suggestions = [];
-                this.showSuggestions = false;
-            },
-            showStatus(message, type = 'success') {
-                this.statusMessage = message;
-                this.statusType = type;
-                setTimeout(() => {
-                    this.statusMessage = '';
-                }, 5000);
-            },
-            async submitForm(event) {
-                console.log('submitForm called');
-                event.preventDefault();
-                event.stopPropagation();
-                
-                this.isSubmitting = true;
-                this.statusMessage = '';
-                
-                const form = event.target;
-                const formData = new FormData(form);
-                
-                // Ensure date_of_birth is included (it might be hidden by Alpine.js)
-                const dateOfBirthInput = form.querySelector('input[name="date_of_birth"]');
-                if (dateOfBirthInput) {
-                    // Get the value from the hidden input or visible input
-                    const dateOfBirthValue = dateOfBirthInput.value;
-                    if (dateOfBirthValue) {
-                        formData.set('date_of_birth', dateOfBirthValue);
-                    }
-                }
-                
-                // Debug: Log form data to see what's being sent
-                console.log('Form data being sent:');
-                for (let [key, value] of formData.entries()) {
-                    console.log(key + ':', value);
-                }
-                
-                // Ensure checkboxes are included even when unchecked
-                const isPublicCheckbox = form.querySelector('input[name="is_public"]');
-                if (isPublicCheckbox && !isPublicCheckbox.checked) {
-                    formData.append('is_public', '0');
-                }
-                
-                const containsNudityCheckbox = form.querySelector('input[name="contains_nudity"]');
-                if (containsNudityCheckbox && !containsNudityCheckbox.checked) {
-                    formData.append('contains_nudity', '0');
-                }
-                
-                const availableForTravelCheckbox = form.querySelector('input[name="available_for_travel"]');
-                if (availableForTravelCheckbox && !availableForTravelCheckbox.checked) {
-                    formData.append('available_for_travel', '0');
-                }
-                
-                // Get CSRF token
-                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || 
-                                 form.querySelector('input[name="_token"]')?.value;
-                
-                console.log('Submitting form via AJAX to:', form.action);
-                
-                try {
-                    const response = await fetch(form.action, {
-                        method: 'POST',
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'X-CSRF-TOKEN': csrfToken,
-                            'Accept': 'application/json'
-                        },
-                        body: formData
-                    });
-                    
-                    console.log('Response status:', response.status);
-                    console.log('Response content-type:', response.headers.get('content-type'));
-                    
-                    // Check if response is JSON
-                    const contentType = response.headers.get('content-type');
-                    if (!contentType || !contentType.includes('application/json')) {
-                        // If not JSON, it might be a redirect - reload the page
-                        console.warn('Response is not JSON, might be redirect. Reloading page.');
-                        const text = await response.text();
-                        console.log('Response text:', text.substring(0, 200));
-                        this.isSubmitting = false;
-                        window.location.reload();
-                        return;
-                    }
-                    
-                    const data = await response.json();
-                    console.log('Response data:', data);
-                    
-                    if (response.ok) {
-                        this.showStatus(data.message || 'Profile updated successfully!', 'success');
-                        
-                        // Clear any preview URLs first so actual images show
-                        const cropperInstances = document.querySelectorAll('[x-data*="imageCropper"]');
-                        cropperInstances.forEach(el => {
-                            const alpine = Alpine.$data(el);
-                            if (alpine && alpine.previewUrl) {
-                                alpine.previewUrl = null;
-                            }
-                        });
-                        
-                        const logoInstances = document.querySelectorAll('[x-data*="logoUploader"]');
-                        logoInstances.forEach(el => {
-                            const alpine = Alpine.$data(el);
-                            if (alpine && alpine.previewUrl) {
-                                alpine.previewUrl = null;
-                            }
-                        });
-                        
-                        // Update any changed images in the UI
-                        if (data.profile_photo_path) {
-                            // Find all profile photo images and update them
-                            const photoImgs = document.querySelectorAll('img[alt="Profile photo"]');
-                            photoImgs.forEach(photoImg => {
-                                photoImg.src = data.profile_photo_path + '?t=' + Date.now();
-                            });
-                            
-                            // Also update via Alpine.js if needed
-                            cropperInstances.forEach(el => {
-                                const alpine = Alpine.$data(el);
-                                if (alpine) {
-                                    // Force Alpine to re-evaluate
-                                    alpine.$nextTick(() => {
-                                        const img = el.querySelector('img[alt="Profile photo"]');
-                                        if (img) {
-                                            img.src = data.profile_photo_path + '?t=' + Date.now();
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                        
-                        if (data.logo_path) {
-                            // Find all logo images and update them
-                            const logoImgs = document.querySelectorAll('img[alt="Company logo"]');
-                            logoImgs.forEach(logoImg => {
-                                logoImg.src = data.logo_path + '?t=' + Date.now();
-                            });
-                            
-                            // Also update via Alpine.js if needed
-                            logoInstances.forEach(el => {
-                                const alpine = Alpine.$data(el);
-                                if (alpine) {
-                                    // Force Alpine to re-evaluate
-                                    alpine.$nextTick(() => {
-                                        const img = el.querySelector('img[alt="Company logo"]');
-                                        if (img) {
-                                            img.src = data.logo_path + '?t=' + Date.now();
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                        
-                        // Reset form file inputs (keep other data)
-                        const fileInputs = form.querySelectorAll('input[type="file"]');
-                        fileInputs.forEach(input => {
-                            input.value = '';
-                        });
-                        
-                    } else {
-                        // Handle validation errors
-                        if (data.errors) {
-                            const errorMessages = Object.values(data.errors).flat();
-                            this.showStatus(errorMessages.join(', '), 'error');
-                        } else {
-                            this.showStatus(data.message || 'An error occurred while saving.', 'error');
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error submitting form:', error);
-                    if (error instanceof SyntaxError) {
-                        // Response was not JSON - might be HTML redirect
-                        console.warn('Response was not JSON, might be redirect. Reloading page.');
-                        this.isSubmitting = false;
-                        window.location.reload();
-                        return;
-                    }
-                    this.showStatus('An error occurred while saving. Please try again.', 'error');
-                } finally {
-                    // Always reset submitting state
-                    this.isSubmitting = false;
-                }
-            }
-        }));
-    });
-    
-    function searchableDropdown() {
-        return {
-            countries: [],
-            filteredCountries: [],
-            searchInput: '',
-            selectedValue: '',
-            selectedLabel: '',
-            showDropdown: false,
-            highlightedIndex: -1,
-            
-            initCountries(countriesList, selectedCode) {
-                if (!countriesList || typeof countriesList !== 'object' || Object.keys(countriesList).length === 0) {
-                    console.error('No countries data provided', countriesList);
-                    this.filteredCountries = [];
-                    return;
-                }
-                
-                this.countries = Object.keys(countriesList).map(code => ({
-                    code: code,
-                    name: countriesList[code]
-                })).sort((a, b) => a.name.localeCompare(b.name));
-                
-                this.filteredCountries = this.countries.slice(0, 50);
-                
-                if (selectedCode) {
-                    const selected = this.countries.find(c => c.code === selectedCode);
-                    if (selected) {
-                        this.selectedValue = selected.code;
-                        this.selectedLabel = selected.name;
-                        this.searchInput = selected.name;
-                    }
-                }
-            },
-            
-            filterCountries() {
-                if (!this.countries || this.countries.length === 0) {
-                    return;
-                }
-                
-                const search = this.searchInput.toLowerCase().trim();
-                if (!search) {
-                    this.filteredCountries = this.countries.slice(0, 50);
-                } else {
-                    this.filteredCountries = this.countries.filter(country => 
-                        country.name.toLowerCase().includes(search) || 
-                        country.code.toLowerCase().includes(search)
-                    );
-                }
-                this.highlightedIndex = -1;
-            },
-            
-            selectCountry(country) {
-                this.selectedValue = country.code;
-                this.selectedLabel = country.name;
-                this.searchInput = country.name;
-                this.showDropdown = false;
-                if (window.locationAutocompleteInstance) {
-                    window.locationAutocompleteInstance.selectedCountry = country.code;
-                    window.locationAutocompleteInstance.onCountryChange();
-                }
-            },
-            
-            highlightNext() {
-                if (this.highlightedIndex < this.filteredCountries.length - 1) {
-                    this.highlightedIndex++;
-                }
-            },
-            
-            highlightPrevious() {
-                if (this.highlightedIndex > 0) {
-                    this.highlightedIndex--;
-                }
-            },
-            
-            selectHighlighted() {
-                if (this.highlightedIndex !== -1 && this.filteredCountries[this.highlightedIndex]) {
-                    this.selectCountry(this.filteredCountries[this.highlightedIndex]);
-                }
-            }
-        };
-    }
-    
     function customSelect(config) {
         return {
             options: config.options || [],
             selectedValue: config.selectedValue || '',
             selectedLabel: '',
             showDropdown: false,
-            highlightedIndex: -1,
-            
+
             init() {
-                const selected = this.options.find(opt => opt.value === this.selectedValue);
-                if (selected) {
-                    this.selectedLabel = selected.label;
-                }
+                this.syncSelectedLabel();
             },
-            
-            selectOption(value) {
-                this.selectedValue = value;
-                const selected = this.options.find(opt => opt.value === value);
+
+            syncSelectedLabel() {
+                const selected = this.options.find((option) => option.value === this.selectedValue);
                 this.selectedLabel = selected ? selected.label : '';
+            },
+
+            syncFromExternal(value) {
+                if (this.selectedValue !== value) {
+                    this.selectedValue = value;
+                }
+                this.syncSelectedLabel();
+            },
+
+            selectOption(value) {
+                const selected = this.options.find((option) => option.value === value);
+                if (selected && selected.locked) {
+                    return;
+                }
+
+                this.selectedValue = value;
+                this.syncSelectedLabel();
                 this.showDropdown = false;
-                if (config.onSelect) {
+
+                if (typeof config.onSelect === 'function') {
                     config.onSelect(value);
                 }
-            }
+            },
         };
     }
-    
-    function locationAutocomplete() {
+
+    function searchableCountryDropdown(config = {}) {
         return {
-            selectedCountry: '',
-            cityInput: '',
-            selectedGeonameId: null,
-            selectedCountryName: '',
-            suggestions: [],
-            showSuggestions: false,
+            countries: [],
+            filteredCountries: [],
+            searchInput: '',
+            showDropdown: false,
             highlightedIndex: -1,
-            searchTimeout: null,
-            
-            init(countryCode, cityName, geonameId) {
-                this.selectedCountry = countryCode || '';
-                this.cityInput = cityName || '';
-                this.selectedGeonameId = geonameId || null;
-                
-                window.locationAutocompleteInstance = this;
-                
-                if (countryCode) {
-                    const countries = @json(config('countries'));
-                    this.selectedCountryName = countries[countryCode] || '';
+
+            init() {
+                this.countries = Object.keys(config.countries || {}).map((code) => ({
+                    code,
+                    name: config.countries[code],
+                })).sort((a, b) => a.name.localeCompare(b.name));
+
+                const selected = this.countries.find((country) => country.code === config.selectedCode);
+                if (selected) {
+                    this.searchInput = selected.name;
+                }
+
+                this.filteredCountries = this.countries.slice(0, 50);
+            },
+
+            filterCountries() {
+                const query = this.searchInput.toLowerCase().trim();
+                this.filteredCountries = query
+                    ? this.countries.filter((country) => country.name.toLowerCase().includes(query) || country.code.toLowerCase().includes(query))
+                    : this.countries.slice(0, 50);
+                this.highlightedIndex = -1;
+            },
+
+            selectCountry(country) {
+                this.searchInput = country.name;
+                this.showDropdown = false;
+                if (typeof config.onSelect === 'function') {
+                    config.onSelect(country);
                 }
             },
-            
-            onCountryChange() {
-                this.cityInput = '';
+
+            highlightNext() {
+                if (this.highlightedIndex < this.filteredCountries.length - 1) {
+                    this.highlightedIndex++;
+                }
+            },
+
+            highlightPrevious() {
+                if (this.highlightedIndex > 0) {
+                    this.highlightedIndex--;
+                }
+            },
+
+            selectHighlighted() {
+                if (this.highlightedIndex >= 0 && this.filteredCountries[this.highlightedIndex]) {
+                    this.selectCountry(this.filteredCountries[this.highlightedIndex]);
+                }
+            },
+        };
+    }
+
+    window.positionFloatingDropdown = function positionFloatingDropdown(dropdown) {
+        if (!dropdown) {
+            return;
+        }
+
+        const container = dropdown.parentElement;
+        const trigger = container ? container.querySelector('input[type="text"], button') : null;
+
+        if (!trigger || typeof trigger.getBoundingClientRect !== 'function') {
+            dropdown.classList.remove('bottom-full', 'mb-1');
+            dropdown.classList.add('mt-1');
+            dropdown.style.maxHeight = '240px';
+            return;
+        }
+
+        const rect = trigger.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+
+        if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+            dropdown.classList.add('bottom-full', 'mb-1');
+            dropdown.classList.remove('mt-1');
+            dropdown.style.maxHeight = Math.min(spaceAbove - 20, 240) + 'px';
+            return;
+        }
+
+        dropdown.classList.remove('bottom-full', 'mb-1');
+        dropdown.classList.add('mt-1');
+        dropdown.style.maxHeight = Math.min(Math.max(spaceBelow - 20, 120), 240) + 'px';
+    };
+
+    function photographerProfileEditor() {
+        return {
+            countries: @json($countries),
+            selectedCountry: @json($locationCountryCode),
+            selectedCountryName: @json($locationCountryCode ? ($countries[$locationCountryCode] ?? old('location_country', $profile->location_country ?? '')) : old('location_country', $profile->location_country ?? '')),
+            cityInput: @json(old('location_city', $profile->location_city ?? '')),
+            selectedGeonameId: @json(old('location_geoname_id', $profile->location_geoname_id ?? null)),
+            usernameEditing: @json($errors->has('username')),
+            usernameLockInfo: false,
+            displayNameFormat: @json($initialDisplayNameFormat),
+            displayNameFormatOptions: @json($displayNameFormatOptions),
+            displayNameDropdownOpen: false,
+            socialLinks: @json($initialSocialLinks),
+            genderOptions: [
+                { value: 'male', label: 'Male' },
+                { value: 'female', label: 'Female' },
+                { value: 'other', label: 'Other' },
+            ],
+            experienceOptions: [
+                { value: 'beginner', label: 'Beginner' },
+                { value: 'intermediate', label: 'Intermediate' },
+                { value: 'advanced', label: 'Advanced' },
+                { value: 'professional', label: 'Professional' },
+            ],
+            suggestions: [],
+            showSuggestions: false,
+            searchTimeout: null,
+            saving: false,
+            toast: {
+                show: false,
+                type: 'success',
+                message: @json(session('status')),
+            },
+
+            init() {
+                if (this.toast.message) {
+                    this.showToast(this.toast.message);
+                }
+            },
+
+            displayNameFormatLabel() {
+                const selected = this.displayNameFormatOptions.find((option) => option.value === this.displayNameFormat);
+                return selected ? selected.label : 'Choose display format...';
+            },
+
+            companyDisplayLabel() {
+                return this.displayNameFormat === 'professional_name'
+                    ? 'Show your name on profile'
+                    : 'Show company name on profile';
+            },
+
+            companyDisplayHelp() {
+                if (!@json($isVerifiedProfile)) {
+                    return 'This display option is available to verified profiles.';
+                }
+
+                return this.displayNameFormat === 'professional_name'
+                    ? 'Show your personal display name beneath your company name, before your @username.'
+                    : 'Show your company name beside your @username beneath your profile name.';
+            },
+
+            selectDisplayNameFormat(value) {
+                const selected = this.displayNameFormatOptions.find((option) => option.value === value);
+                if (selected && selected.locked) {
+                    return;
+                }
+
+                this.displayNameFormat = value;
+                this.displayNameDropdownOpen = false;
+            },
+
+            selectCountry(country) {
+                this.selectedCountry = country.code;
+                this.selectedCountryName = country.name;
                 this.selectedGeonameId = null;
-                this.selectedCountryName = '';
+                this.cityInput = '';
                 this.suggestions = [];
                 this.showSuggestions = false;
             },
-            
+
             searchCities() {
                 if (this.searchTimeout) {
                     clearTimeout(this.searchTimeout);
                 }
-                
+
                 if (!this.selectedCountry || this.cityInput.length < 2) {
                     this.suggestions = [];
                     this.showSuggestions = false;
                     return;
                 }
-                
-                this.searchTimeout = setTimeout(() => {
-                    fetch(`/api/locations?q=${encodeURIComponent(this.cityInput)}&country=${this.selectedCountry}&limit=10`)
-                        .then(response => response.json())
-                        .then(data => {
-                            this.suggestions = data.data || [];
-                            this.showSuggestions = this.suggestions.length > 0;
-                            this.highlightedIndex = -1;
-                        })
-                        .catch(error => {
-                            console.error('Error fetching cities:', error);
-                            this.suggestions = [];
-                        });
-                }, 300);
+
+                this.searchTimeout = setTimeout(async () => {
+                    try {
+                        const response = await fetch(`/api/locations?q=${encodeURIComponent(this.cityInput)}&country=${encodeURIComponent(this.selectedCountry)}`);
+                        const data = await response.json();
+                        this.suggestions = data.data || [];
+                        this.showSuggestions = this.suggestions.length > 0;
+                    } catch (error) {
+                        this.suggestions = [];
+                        this.showSuggestions = false;
+                    }
+                }, 250);
             },
-            
+
             selectCity(suggestion) {
                 this.cityInput = suggestion.city;
                 this.selectedGeonameId = suggestion.id;
                 this.selectedCountryName = suggestion.country_name;
-                this.suggestions = [];
                 this.showSuggestions = false;
-            }
-        };
-    }
-    
-    function imageCropper(fieldName, isRequired = false) {
-        return {
-            showCropModal: false,
-            previewUrl: null,
-            cropData: null,
-            originalFile: null,
-            cropper: null,
-            fieldName: fieldName, // Store fieldName for use in closures
-            
-            handleFileSelect(event) {
-                const file = event.target.files[0];
-                if (!file) return;
-                
-                this.originalFile = file;
-                const reader = new FileReader();
-                
-                reader.onload = (e) => {
-                    const img = this.$refs.cropImage;
-                    // Reset image source to trigger load event
-                    img.src = '';
-                    this.showCropModal = true;
-                    // Wait for modal to show, then set image source
-                    this.$nextTick(() => {
-                        img.src = e.target.result;
-                        // Cropper will initialize when image loads (@load event)
-                    });
+            },
+
+            socialPlaceholder(platform) {
+                const placeholders = {
+                    instagram: 'https://instagram.com/yourname',
+                    facebook: 'https://facebook.com/yourname',
+                    x: 'https://x.com/yourname',
+                    tiktok: 'https://tiktok.com/@yourname',
+                    youtube: 'https://youtube.com/@yourname',
+                    behance: 'https://behance.net/yourname',
+                    linkedin: 'https://linkedin.com/in/yourname',
+                    website: 'https://yourportfolio.com',
                 };
-                
-                reader.readAsDataURL(file);
+
+                return placeholders[platform] || 'https://example.com';
             },
-            
-            initCropper() {
-                const image = this.$refs.cropImage;
-                if (!image || !image.complete) return;
-                
-                // Destroy existing cropper if any
-                if (this.cropper) {
-                    this.cropper.destroy();
-                    this.cropper = null;
-                }
-                
-                // Wait a tiny bit to ensure image is fully rendered
-                setTimeout(() => {
-                    if (!image || !this.showCropModal) return;
-                    
-                    // Initialize Cropper.js with square aspect ratio (1:1)
-                    this.cropper = new Cropper(image, {
-                        aspectRatio: 1,
-                        viewMode: 1,
-                        dragMode: 'move',
-                        autoCropArea: 0.8,
-                        restore: false,
-                        guides: true,
-                        center: true,
-                        highlight: false,
-                        cropBoxMovable: true,
-                        cropBoxResizable: true,
-                        toggleDragModeOnDblclick: false,
-                        minCropBoxWidth: 50,
-                        minCropBoxHeight: 50,
-                        ready: () => {
-                            // Cropper is ready
-                            console.log('Cropper initialized');
-                        }
-                    });
-                }, 100);
-            },
-            
-            cancelCrop() {
-                if (this.cropper) {
-                    this.cropper.destroy();
-                    this.cropper = null;
-                }
-                // Clear the image source
-                const img = this.$refs.cropImage;
-                if (img) {
-                    img.src = '';
-                }
-                this.showCropModal = false;
-                // Don't clear originalFile - allow reopening
-            },
-            
-            applyCrop() {
-                if (!this.cropper) return;
-                
-                // Get cropped canvas from Cropper.js
-                const canvas = this.cropper.getCroppedCanvas({
-                    width: 800,
-                    height: 800,
-                    imageSmoothingEnabled: true,
-                    imageSmoothingQuality: 'high',
+
+            addSocialLink() {
+                this.socialLinks.push({
+                    platform: '',
+                    url: '',
+                    uid: `social_${Date.now()}_${Math.random().toString(36).slice(2)}`,
                 });
-                
-                // Store crop data
-                const cropData = this.cropper.getData();
-                this.cropData = JSON.stringify(cropData);
-                
-                // Create preview
-                this.previewUrl = canvas.toDataURL('image/jpeg', 0.9);
-                
-                // Update file input with cropped image
-                canvas.toBlob((blob) => {
-                    const croppedFile = new File([blob], this.originalFile.name, { type: 'image/jpeg' });
-                    const dataTransfer = new DataTransfer();
-                    dataTransfer.items.add(croppedFile);
-                    // Use the stored fieldName to find the correct input
-                    const fileInput = this.$refs.profilePhotoInput || document.getElementById(this.fieldName);
-                    if (fileInput) {
-                        fileInput.files = dataTransfer.files;
-                    }
-                }, 'image/jpeg', 0.9);
-                
-                // Clean up
-                this.cropper.destroy();
-                this.cropper = null;
-                this.showCropModal = false;
-            }
-        };
-    }
-    
-    function logoUploader() {
-        return {
-            previewUrl: null,
-            
-            handleFileSelect(event) {
-                console.log('Logo file selected');
-                const file = event.target.files[0];
-                if (!file) {
-                    console.log('No file selected');
+            },
+
+            removeSocialLink(index) {
+                this.socialLinks.splice(index, 1);
+            },
+
+            showToast(message, type = 'success') {
+                this.toast = { show: true, message, type };
+                setTimeout(() => {
+                    this.toast.show = false;
+                }, 3200);
+            },
+
+            async submitProfile(event) {
+                if (this.saving) {
                     return;
                 }
-                
-                console.log('File details:', {
-                    name: file.name,
-                    type: file.type,
-                    size: file.size
-                });
-                
-                // Just show preview - let server handle resizing
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    this.previewUrl = e.target.result;
-                    console.log('Preview set, file ready for upload');
-                };
-                reader.readAsDataURL(file);
-            }
+
+                this.saving = true;
+                const form = event.target;
+                const formData = new FormData(form);
+
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                    });
+
+                    const payload = await response.json().catch(() => ({}));
+
+                    if (!response.ok) {
+                        const firstError = payload.errors
+                            ? Object.values(payload.errors).flat()[0]
+                            : payload.message;
+                        this.showToast(firstError || 'Unable to save profile.', 'error');
+                        return;
+                    }
+
+                    this.showToast(payload.message || 'Profile updated successfully.');
+                } catch (error) {
+                    this.showToast('Unable to save profile. Please try again.', 'error');
+                } finally {
+                    this.saving = false;
+                }
+            },
         };
     }
 </script>

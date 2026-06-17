@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\ModelProfile;
 use App\Models\ModelVerification;
+use App\Models\PhotographerProfile;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -66,7 +67,7 @@ class VerificationController extends Controller
      */
     public function approve(Request $request, string $id): RedirectResponse
     {
-        $verification = ModelVerification::findOrFail($id);
+        $verification = ModelVerification::with('user')->findOrFail($id);
         
         if ($verification->status !== 'pending') {
             return back()->withErrors(['verification' => 'This verification has already been processed.']);
@@ -78,8 +79,10 @@ class VerificationController extends Controller
             'reviewed_at' => now(),
         ]);
 
-        // Mark model profile as verified
-        $profile = ModelProfile::where('user_id', $verification->user_id)->first();
+        // Mark the relevant public profile as verified.
+        $profile = $verification->user?->is_photographer
+            ? PhotographerProfile::where('user_id', $verification->user_id)->first()
+            : ModelProfile::where('user_id', $verification->user_id)->first();
         if ($profile) {
             $profile->update([
                 'verified_at' => now(),
@@ -88,7 +91,7 @@ class VerificationController extends Controller
         }
 
         return redirect()->route('admin.verification.index')
-            ->with('status', 'Verification approved and model marked as verified.');
+            ->with('status', 'Verification approved and profile marked as verified.');
     }
 
     /**
@@ -117,4 +120,3 @@ class VerificationController extends Controller
             ->with('status', 'Verification rejected.');
     }
 }
-

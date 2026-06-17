@@ -28,6 +28,14 @@
                         <p class="font-medium text-black">{{ ucfirst(str_replace('_', ' ', $verification->verification_type)) }}</p>
                     </div>
                     <div>
+                        <p class="text-sm text-gray-500">Capture Method</p>
+                        <p class="font-medium text-black">{{ $verification->capture_method ? ucfirst(str_replace('_', ' ', $verification->capture_method)) : 'Legacy upload' }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Liveness Code</p>
+                        <p class="font-mono text-lg font-bold tracking-widest text-black">{{ $verification->liveness_code ?: 'Not recorded' }}</p>
+                    </div>
+                    <div>
                         <p class="text-sm text-gray-500">Submitted</p>
                         <p class="font-medium text-black">{{ $verification->created_at->format('M d, Y g:i A') }}</p>
                     </div>
@@ -47,11 +55,14 @@
             @endif
 
             <!-- Video -->
-            @if($verification->video_path)
+            @if($verification->liveness_video_path || $verification->video_path)
                 <div class="bg-white shadow sm:rounded-lg p-6 mb-6">
-                    <h3 class="text-xl font-semibold text-black mb-4">Video Identification</h3>
+                    <h3 class="text-xl font-semibold text-black mb-2">Liveness Verification Video</h3>
+                    @if($verification->liveness_code)
+                        <p class="mb-4 text-sm text-gray-600">Expected spoken code: <span class="font-mono font-bold tracking-widest text-black">{{ $verification->liveness_code }}</span></p>
+                    @endif
                     <video controls class="w-full border-2 border-black rounded">
-                        <source src="{{ asset($verification->video_path) }}" type="video/mp4">
+                        <source src="{{ asset($verification->liveness_video_path ?: $verification->video_path) }}">
                         Your browser does not support the video tag.
                     </video>
                 </div>
@@ -81,4 +92,3 @@
         </div>
     </div>
 </x-app-layout>
-

@@ -32,7 +32,9 @@ class UserController extends Controller
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
+                $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('name', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%");
             });
         }
@@ -77,7 +79,8 @@ class UserController extends Controller
         $user = User::findOrFail($id);
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
             'is_photographer' => ['boolean'],
             'is_admin' => ['boolean'],
@@ -87,8 +90,17 @@ class UserController extends Controller
         if ($request->has('is_admin') && !Auth::user()->is_admin) {
             unset($validated['is_admin']);
         }
+        $user->first_name = $validated['first_name'];
+        $user->last_name = $validated['last_name'];
+        $user->name = trim($validated['first_name'] . ' ' . $validated['last_name']);
+        $user->email = $validated['email'];
+        $user->is_photographer = $validated['is_photographer'] ?? false;
 
-        $user->update($validated);
+        if (array_key_exists('is_admin', $validated)) {
+            $user->is_admin = (bool) $validated['is_admin'];
+        }
+
+        $user->save();
 
         return redirect()->route('admin.users.show', $user->id)
             ->with('status', 'User updated successfully.');
@@ -111,4 +123,3 @@ class UserController extends Controller
             ->with('status', 'User deleted successfully.');
     }
 }
-

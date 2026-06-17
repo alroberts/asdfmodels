@@ -9,10 +9,10 @@
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
             <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
                 <div class="mb-6">
-                    <img src="{{ asset($image->medium_path) }}" alt="{{ $image->title }}" class="max-w-full h-auto rounded-lg border-2 border-black">
+                    <img src="{{ asset($image->full_path ?? $image->thumbnail_path) }}" alt="{{ $image->title }}" class="max-w-full h-auto rounded-lg border-2 border-black">
                 </div>
 
-                <form method="POST" action="{{ route('photographers.portfolio.update', $image->id) }}">
+                <form method="POST" action="{{ route('portfolio.update', $image->id) }}">
                     @csrf
                     @method('patch')
 
@@ -87,7 +87,7 @@
                     </div>
 
                     <div class="flex items-center justify-end space-x-4">
-                        <a href="{{ route('photographers.portfolio.index') }}" class="text-gray-600 hover:text-gray-800">Cancel</a>
+                        <a href="{{ route('portfolio.index') }}" class="text-gray-600 hover:text-gray-800">Cancel</a>
                         <x-primary-button>
                             {{ __('Update Image') }}
                         </x-primary-button>
@@ -97,4 +97,3 @@
         </div>
     </div>
 </x-app-layout>
-

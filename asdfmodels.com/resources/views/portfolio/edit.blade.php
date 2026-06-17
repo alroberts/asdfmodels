@@ -44,7 +44,7 @@
                         </div>
 
                         <div>
-                            <x-input-label for="album_id" :value="__('Album')" />
+                            <x-input-label for="album_id" :value="__('Gallery')" />
                             <select id="album_id" name="album_id" class="block mt-1 w-full border-2 border-black rounded-md shadow-sm focus:border-gray-500 focus:ring focus:ring-gray-200 focus:ring-opacity-50">
                                 <option value="">None</option>
                                 @foreach($albums as $album)
@@ -105,4 +105,3 @@
         </div>
     </div>
 </x-app-layout>
-

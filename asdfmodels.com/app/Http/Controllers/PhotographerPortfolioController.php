@@ -3,11 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\PhotographerPortfolioImage;
-use App\Models\PhotographerGallery;
+use App\Models\PortfolioAlbum;
+use App\Services\PortfolioCleanupService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
@@ -25,8 +25,14 @@ class PhotographerPortfolioController extends Controller
             abort(403, 'Only photographers can manage portfolios.');
         }
 
-        $galleries = PhotographerGallery::where('photographer_id', $user->id)
-            ->withCount('images')
+        $galleries = PortfolioAlbum::where('user_id', $user->id)
+            ->select('portfolio_albums.*')
+            ->selectSub(function ($query) use ($user) {
+                $query->from('photographer_portfolio_images')
+                    ->selectRaw('COUNT(*)')
+                    ->whereColumn('photographer_portfolio_images.album_id', 'portfolio_albums.id')
+                    ->where('photographer_portfolio_images.photographer_id', $user->id);
+            }, 'images_count')
             ->orderBy('display_order')
             ->orderBy('created_at', 'desc')
             ->get();
@@ -40,9 +46,22 @@ class PhotographerPortfolioController extends Controller
             ->orderBy('name')
             ->get();
 
-        return view('photographers.portfolio.index', [
+        $stats = [
+            ['label' => 'Galleries', 'value' => $galleries->count(), 'class' => 'text-purple-600'],
+            ['label' => 'Total Images', 'value' => $galleries->sum('images_count'), 'class' => 'text-yellow-600'],
+            ['label' => 'Public Images', 'value' => $galleries->where('is_public', true)->sum('images_count'), 'class' => 'text-green-600'],
+            ['label' => 'Featured Galleries', 'value' => $galleries->where('is_featured', true)->count(), 'class' => 'text-blue-600'],
+        ];
+
+        return view('galleries.index', [
+            'role' => 'photographer',
             'galleries' => $galleries,
-            'models' => $models,
+            'stats' => $stats,
+            'relatedEntities' => $models,
+            'relatedField' => 'model_id',
+            'relatedLabel' => 'Model in Photo (optional)',
+            'uploadGalleryRequired' => true,
+            'supportsPolaroids' => false,
         ]);
     }
 
@@ -89,14 +108,18 @@ class PhotographerPortfolioController extends Controller
             'is_featured' => ['boolean'],
             'category' => ['nullable', 'string', 'max:100'],
             'model_id' => ['nullable', 'exists:users,id'],
-            'gallery_id' => ['required', 'exists:photographer_galleries,id'],
+            'gallery_id' => ['required', 'exists:portfolio_albums,id'],
         ]);
 
+        $gallery = PortfolioAlbum::where('user_id', $user->id)
+            ->findOrFail($validated['gallery_id']);
+
         $uploadedCount = 0;
+        $firstUploadedImage = null;
         $userFolder = public_path("uploads/photographers/{$user->id}/portfolio");
 
-        // Create directories if they don't exist
-        $directories = ['original', 'full', 'medium', 'thumbnails'];
+        // Create directories if they don't exist.
+        $directories = ['resized', 'medium', 'thumbnails'];
         foreach ($directories as $dir) {
             $path = "{$userFolder}/{$dir}";
             if (!file_exists($path)) {
@@ -111,20 +134,16 @@ class PhotographerPortfolioController extends Controller
         foreach ($request->file('images') as $file) {
             $filename = uniqid() . '.' . $file->getClientOriginalExtension();
             
-            // Store original
-            $originalPath = "{$userFolder}/original/{$filename}";
-            $file->move("{$userFolder}/original", $filename);
-
-            // Process image
+            // Process image directly from uploaded file
             $manager = new ImageManager(new Driver());
-            $image = $manager->read($originalPath);
+            $image = $manager->read($file->getRealPath());
             
             // Get dimensions
             $width = $image->width();
             $height = $image->height();
             $longestEdge = max($width, $height);
 
-            // Resize if needed (max from settings)
+            // Resize to max size if needed (2100px on long edge from settings)
             if ($longestEdge > $maxSize) {
                 if ($width > $height) {
                     $image->scale(width: $maxSize);
@@ -133,26 +152,36 @@ class PhotographerPortfolioController extends Controller
                 }
             }
 
-            // Save full size
-            $fullPath = "{$userFolder}/full/{$filename}";
-            $image->save($fullPath, quality: 90);
+            // Save resized version (2100px on long edge)
+            $resizedPath = "{$userFolder}/resized/{$filename}";
+            $image->save($resizedPath, quality: 90);
 
-            // Create medium (800px)
-            $mediumImage = $manager->read($originalPath);
-            if ($longestEdge > 800) {
-                if ($width > $height) {
-                    $mediumImage->scale(width: 800);
+            // Create medium version to keep downstream views and database assumptions consistent.
+            $mediumImage = $manager->read($resizedPath);
+            $mediumWidth = $mediumImage->width();
+            $mediumHeight = $mediumImage->height();
+            $mediumLongestEdge = max($mediumWidth, $mediumHeight);
+            $mediumTargetSize = min((int) $maxSize, 1200);
+
+            if ($mediumLongestEdge > $mediumTargetSize) {
+                if ($mediumWidth > $mediumHeight) {
+                    $mediumImage->scale(width: $mediumTargetSize);
                 } else {
-                    $mediumImage->scale(height: 800);
+                    $mediumImage->scale(height: $mediumTargetSize);
                 }
             }
+
             $mediumPath = "{$userFolder}/medium/{$filename}";
             $mediumImage->save($mediumPath, quality: 85);
 
             // Create thumbnail (300px)
-            $thumbImage = $manager->read($originalPath);
-            if ($longestEdge > 300) {
-                if ($width > $height) {
+            $thumbImage = $manager->read($resizedPath);
+            $thumbWidth = $thumbImage->width();
+            $thumbHeight = $thumbImage->height();
+            $thumbLongestEdge = max($thumbWidth, $thumbHeight);
+            
+            if ($thumbLongestEdge > 300) {
+                if ($thumbWidth > $thumbHeight) {
                     $thumbImage->scale(width: 300);
                 } else {
                     $thumbImage->scale(height: 300);
@@ -169,10 +198,11 @@ class PhotographerPortfolioController extends Controller
             $imageRecord = PhotographerPortfolioImage::create([
                 'photographer_id' => $user->id,
                 'model_id' => $validated['model_id'] ?? null,
-                'original_path' => "uploads/photographers/{$user->id}/portfolio/original/{$filename}",
+                'album_id' => $gallery->id,
+                'original_path' => null, // No longer storing original
                 'thumbnail_path' => "uploads/photographers/{$user->id}/portfolio/thumbnails/{$filename}",
                 'medium_path' => "uploads/photographers/{$user->id}/portfolio/medium/{$filename}",
-                'full_path' => "uploads/photographers/{$user->id}/portfolio/full/{$filename}",
+                'full_path' => "uploads/photographers/{$user->id}/portfolio/resized/{$filename}", // Store resized version here
                 'contains_nudity' => $request->boolean('contains_nudity', false),
                 'is_public' => $request->boolean('is_public', true),
                 'is_featured' => $request->boolean('is_featured', false),
@@ -180,25 +210,21 @@ class PhotographerPortfolioController extends Controller
                 'display_order' => $displayOrder,
             ]);
 
-            // Associate with gallery (required)
-            $gallery = PhotographerGallery::find($validated['gallery_id']);
-            if ($gallery && $gallery->photographer_id === $user->id) {
-                // Get the next display order for this gallery from pivot table
-                $galleryDisplayOrder = DB::table('gallery_image')
-                    ->where('gallery_id', $gallery->id)
-                    ->max('display_order') ?? 0;
-                
-                $gallery->images()->attach($imageRecord->id, [
-                    'display_order' => $galleryDisplayOrder + 1
-                ]);
-            }
-
             $uploadedImages[] = [
                 'id' => $imageRecord->id,
+                'full_path' => $imageRecord->full_path,
                 'thumbnail_path' => $imageRecord->thumbnail_path,
             ];
 
+            if ($firstUploadedImage === null) {
+                $firstUploadedImage = $imageRecord;
+            }
+
             $uploadedCount++;
+        }
+
+        if ($firstUploadedImage && empty($gallery->cover_image_path)) {
+            $gallery->update(['cover_image_path' => $firstUploadedImage->full_path]);
         }
 
         // Return JSON for AJAX requests, redirect for form submissions
@@ -211,14 +237,14 @@ class PhotographerPortfolioController extends Controller
             ]);
         }
 
-        return redirect()->route('photographers.portfolio.index')
+        return redirect()->route('portfolio.index')
             ->with('status', "Successfully uploaded {$uploadedCount} image(s).");
     }
 
     /**
      * Show the form for editing the specified image.
      */
-    public function edit(string $id): View
+    public function edit(Request $request, string $id)
     {
         $image = PhotographerPortfolioImage::findOrFail($id);
         $user = Auth::user();
@@ -236,6 +262,8 @@ class PhotographerPortfolioController extends Controller
             ->orderBy('name')
             ->get();
 
+        // Return HTML view for both AJAX and regular requests
+        // The JavaScript will parse the HTML to extract form data
         return view('photographers.portfolio.edit', [
             'image' => $image,
             'models' => $models,
@@ -257,23 +285,71 @@ class PhotographerPortfolioController extends Controller
         $validated = $request->validate([
             'title' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['string', 'max:255'],
             'category' => ['nullable', 'string', 'max:100'],
             'model_id' => ['nullable', 'exists:users,id'],
+            'display_order' => ['nullable', 'integer', 'min:0'],
             'is_featured' => ['boolean'],
-            'contains_nudity' => ['boolean'],
             'is_public' => ['boolean'],
+            'contains_nudity' => ['boolean'],
+            'is_cover' => ['boolean'],
             'shot_date' => ['nullable', 'date'],
-            'display_order' => ['nullable', 'integer'],
         ]);
 
-        $image->update($validated);
+        $updateData = [
+            'title' => $validated['title'] ?? null,
+            'description' => $validated['description'] ?? null,
+            'tags' => $validated['tags'] ?? [],
+            'contains_nudity' => $validated['contains_nudity'] ?? false,
+            'shot_date' => $validated['shot_date'] ?? null,
+        ];
+
+        if ($request->exists('category')) {
+            $updateData['category'] = $validated['category'] ?? null;
+        }
+
+        if ($request->exists('model_id')) {
+            $updateData['model_id'] = $validated['model_id'] ?? null;
+        }
+
+        if ($request->exists('display_order')) {
+            $updateData['display_order'] = $validated['display_order'] ?? $image->display_order;
+        }
+
+        if ($request->exists('is_featured')) {
+            $updateData['is_featured'] = $request->boolean('is_featured');
+        }
+
+        if ($request->exists('is_public')) {
+            $updateData['is_public'] = $request->boolean('is_public');
+        }
+
+        $image->update($updateData);
+
+        // Handle cover image - need gallery_id from request
+        $galleryId = $request->input('gallery_id');
+        if ($galleryId) {
+            $gallery = PortfolioAlbum::where('user_id', $user->id)
+                ->find($galleryId);
+            
+            if ($gallery) {
+                if ($validated['is_cover'] ?? false) {
+                    $gallery->update(['cover_image_path' => $image->full_path]);
+                } else {
+                    if ($gallery->cover_image_path === $image->full_path) {
+                        $gallery->update(['cover_image_path' => null]);
+                    }
+                }
+            }
+        }
 
         // Return JSON for AJAX requests, redirect for form submissions
         if ($request->wantsJson() || $request->expectsJson()) {
             return response()->json(['success' => true, 'message' => 'Image updated successfully.']);
         }
 
-        return redirect()->route('photographers.portfolio.index')
+        return redirect()->route('portfolio.index')
             ->with('status', 'Image updated successfully.');
     }
 
@@ -290,20 +366,27 @@ class PhotographerPortfolioController extends Controller
             abort(403);
         }
 
-        // Delete files
+        PortfolioCleanupService::deleteImageReferences(PhotographerPortfolioImage::class, $image->id, $image->album_id);
+
+        // Delete files (only resized and thumbnail)
         $files = [
-            $image->original_path,
             $image->thumbnail_path,
             $image->medium_path,
             $image->full_path,
         ];
 
         foreach ($files as $file) {
-            $fullPath = public_path($file);
-            if (file_exists($fullPath)) {
-                unlink($fullPath);
+            if ($file) {
+                $fullPath = public_path($file);
+                if (file_exists($fullPath)) {
+                    unlink($fullPath);
+                }
             }
         }
+
+        PortfolioAlbum::where('user_id', $user->id)
+            ->where('cover_image_path', $image->full_path)
+            ->update(['cover_image_path' => null]);
 
         $image->delete();
 
@@ -312,7 +395,7 @@ class PhotographerPortfolioController extends Controller
             return response()->json(['success' => true, 'message' => 'Image deleted successfully.']);
         }
 
-        return redirect()->route('photographers.portfolio.index')
+        return redirect()->route('portfolio.index')
             ->with('status', 'Image deleted successfully.');
     }
 
@@ -362,20 +445,21 @@ class PhotographerPortfolioController extends Controller
         }
 
         $validated = $request->validate([
-            'order' => ['required', 'array'],
-            'order.*.id' => ['required', 'integer', 'exists:photographer_portfolio_images,id'],
-            'order.*.display_order' => ['required', 'integer', 'min:1'],
+            'gallery_id' => ['required', 'integer', 'exists:portfolio_albums,id'],
+            'image_ids' => ['required', 'array'],
+            'image_ids.*' => ['required', 'integer', 'exists:photographer_portfolio_images,id'],
         ]);
 
-        foreach ($validated['order'] as $item) {
-            $image = PhotographerPortfolioImage::find($item['id']);
-            if ($image && $image->photographer_id === $user->id) {
-                $image->display_order = $item['display_order'];
-                $image->save();
-            }
+        $gallery = PortfolioAlbum::where('user_id', $user->id)
+            ->findOrFail($validated['gallery_id']);
+
+        foreach ($validated['image_ids'] as $index => $imageId) {
+            PhotographerPortfolioImage::where('id', $imageId)
+                ->where('photographer_id', $user->id)
+                ->where('album_id', $gallery->id)
+                ->update(['display_order' => $index + 1]);
         }
 
         return response()->json(['success' => true, 'message' => 'Display order updated successfully.']);
     }
 }
-

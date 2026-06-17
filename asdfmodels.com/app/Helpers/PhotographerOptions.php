@@ -10,10 +10,10 @@ class PhotographerOptions
     /**
      * Get predefined photography specialties from database, with fallback to hardcoded values
      */
-    public static function specialties(): array
+    public static function specialties(?string $role = 'photographer'): array
     {
         try {
-            $specialties = PhotographerSpecialty::getOptions();
+            $specialties = PhotographerSpecialty::getOptions($role);
             if (!empty($specialties)) {
                 return $specialties;
             }
@@ -21,23 +21,42 @@ class PhotographerOptions
             // Table might not exist yet, fall back to hardcoded
         }
 
-        // Fallback to hardcoded values (focused on modeling/photographer networking)
-        return [
+        $shared = [
             'fashion' => 'Fashion',
-            'portrait' => 'Portrait',
             'commercial' => 'Commercial',
             'editorial' => 'Editorial',
             'beauty' => 'Beauty',
+            'lifestyle' => 'Lifestyle',
+            'portrait' => 'Portrait',
+            'fine-art' => 'Fine Art',
+        ];
+
+        $photographerOnly = [
             'boudoir' => 'Boudoir',
             'nude' => 'Nude',
-            'fine-art' => 'Fine Art',
             'product' => 'Product',
             'event' => 'Event',
             'headshot' => 'Headshot',
             'maternity' => 'Maternity',
-            'lifestyle' => 'Lifestyle',
             'underwater' => 'Underwater',
         ];
+
+        $modelOnly = [
+            'runway' => 'Runway',
+            'fitness' => 'Fitness',
+            'glamour' => 'Glamour',
+            'artistic' => 'Artistic',
+        ];
+
+        if ($role === 'model') {
+            return $shared + $modelOnly;
+        }
+
+        if ($role === 'photographer') {
+            return $shared + $photographerOnly;
+        }
+
+        return $shared + $photographerOnly + $modelOnly;
     }
 
     /**
@@ -123,4 +142,3 @@ class PhotographerOptions
         ];
     }
 }
-

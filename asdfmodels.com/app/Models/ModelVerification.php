@@ -12,6 +12,9 @@ class ModelVerification extends Model
         'verification_type',
         'id_document_path',
         'video_path',
+        'liveness_video_path',
+        'liveness_code',
+        'capture_method',
         'status',
         'reviewed_by',
         'reviewed_at',
@@ -38,4 +41,3 @@ class ModelVerification extends Model
         return $this->belongsTo(User::class, 'reviewed_by');
     }
 }
-

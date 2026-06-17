@@ -14,6 +14,8 @@ class PhotographerProfile extends Model
         'gender',
         'date_of_birth',
         'professional_name',
+        'display_name_format',
+        'show_company_on_profile',
         'location_city',
         'location_country',
         'location_geoname_id',
@@ -31,6 +33,7 @@ class PhotographerProfile extends Model
         'phone',
         'instagram',
         'portfolio_website',
+        'social_links',
         'facebook',
         'twitter',
         'profile_photo_path',
@@ -43,8 +46,10 @@ class PhotographerProfile extends Model
     protected $casts = [
         'specialties' => 'array',
         'equipment' => 'array',
+        'social_links' => 'array',
         'services_offered' => 'array',
         'available_for_travel' => 'boolean',
+        'show_company_on_profile' => 'boolean',
         'verified_at' => 'datetime',
         'is_public' => 'boolean',
         'contains_nudity' => 'boolean',
@@ -82,5 +87,48 @@ class PhotographerProfile extends Model
     {
         return $this->verified_at !== null;
     }
-}
 
+    public function getDisplayNameAttribute(): string
+    {
+        $format = $this->display_name_format ?: 'first_name_last_initial';
+        $professionalName = trim((string) $this->professional_name);
+        $firstName = trim((string) $this->user?->first_name);
+        $lastName = trim((string) $this->user?->last_name);
+
+        if ($firstName === '' && $this->user?->name) {
+            $parts = preg_split('/\s+/', trim($this->user->name)) ?: [];
+            $firstName = $parts[0] ?? '';
+            $lastName = count($parts) > 1 ? $parts[count($parts) - 1] : $lastName;
+        }
+
+        $fullName = trim($firstName . ' ' . $lastName);
+        $lastInitial = $lastName !== '' ? mb_substr($lastName, 0, 1) . '.' : '';
+        $initials = trim(
+            ($firstName !== '' ? mb_substr($firstName, 0, 1) . '.' : '') .
+            ($lastInitial !== '' ? $lastInitial : '')
+        );
+
+        if (in_array($format, ['full_name', 'professional_name'], true) && !$this->isVerified()) {
+            $format = 'first_name_last_initial';
+        }
+
+        $displayName = match ($format) {
+            'professional_name' => $professionalName,
+            'full_name' => $fullName,
+            'first_name' => $firstName,
+            'initials' => $initials,
+            'first_name_last_initial' => trim($firstName . ' ' . $lastInitial),
+            default => $professionalName ?: trim($firstName . ' ' . $lastInitial),
+        };
+
+        return $displayName ?: $fullName ?: $professionalName ?: $this->user?->email ?: 'Photographer';
+    }
+
+    public function shouldShowCompanyName(): bool
+    {
+        return $this->isVerified()
+            && $this->show_company_on_profile
+            && filled($this->professional_name)
+            && $this->display_name !== trim((string) $this->professional_name);
+    }
+}

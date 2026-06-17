@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PortfolioImage;
+use App\Services\PortfolioCleanupService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,20 +20,67 @@ class PortfolioImageController extends Controller
     public function index(): View
     {
         $user = Auth::user();
-        $images = PortfolioImage::where('model_id', $user->id)
-            ->orderBy('display_order')
-            ->orderBy('created_at', 'desc')
-            ->paginate(24);
+        $baseQuery = PortfolioImage::where('model_id', $user->id);
 
-        $polaroids = PortfolioImage::where('model_id', $user->id)
+        $polaroids = (clone $baseQuery)
             ->where('is_polaroid', true)
             ->orderBy('display_order')
             ->orderBy('created_at', 'desc')
             ->get();
 
-        return view('portfolio.index', [
-            'images' => $images,
+        $galleries = \App\Models\PortfolioAlbum::where('user_id', $user->id)
+            ->with('coverImage')
+            ->withCount('images')
+            ->orderBy('display_order')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $stats = [
+            'galleries' => $galleries->count(),
+            'images' => (clone $baseQuery)->count(),
+            'public_images' => (clone $baseQuery)->where('is_public', true)->count(),
+            'featured_images' => (clone $baseQuery)->where('is_featured', true)->count(),
+            'polaroids' => $polaroids->count(),
+        ];
+
+        $photographers = \App\Models\User::where('is_photographer', true)
+            ->orderBy('name')
+            ->get();
+
+        $selectedGalleryId = request()->integer('gallery');
+        if ($selectedGalleryId && !$galleries->contains('id', $selectedGalleryId)) {
+            $selectedGalleryId = null;
+        }
+
+        return view('galleries.index', [
+            'role' => 'model',
+            'galleries' => $galleries,
             'polaroids' => $polaroids,
+            'stats' => [
+                ['label' => 'Galleries', 'value' => $stats['galleries'], 'class' => 'text-purple-600'],
+                ['label' => 'Total Images', 'value' => $stats['images'], 'class' => 'text-yellow-600'],
+                ['label' => 'Public Images', 'value' => $stats['public_images'], 'class' => 'text-green-600'],
+                ['label' => 'Featured Images', 'value' => $stats['featured_images'], 'class' => 'text-blue-600'],
+                ['label' => 'Polaroids', 'value' => $stats['polaroids'], 'class' => 'text-amber-600'],
+            ],
+            'relatedEntities' => $photographers,
+            'relatedField' => 'photographer_id',
+            'relatedLabel' => 'Photographer (optional)',
+            'uploadGalleryRequired' => true,
+            'supportsPolaroids' => true,
+            'polaroidCount' => $stats['polaroids'],
+            'polaroidLabelOptions' => [
+                'front' => 'Front',
+                'left_side' => 'Left Side',
+                'right_side' => 'Right Side',
+                'back' => 'Back',
+                'full_body' => 'Full Body',
+                'three_quarter' => 'Three Quarter',
+                'close_up' => 'Close Up',
+                'profile' => 'Profile',
+            ],
+            'initialUploadIntent' => request()->query('upload'),
+            'selectedGalleryId' => $selectedGalleryId,
         ]);
     }
 
@@ -41,13 +89,32 @@ class PortfolioImageController extends Controller
      */
     public function create(): View
     {
-        return view('portfolio.upload');
+        $user = Auth::user();
+        $galleries = \App\Models\PortfolioAlbum::where('user_id', $user->id)
+            ->orderBy('display_order')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $selectedGalleryId = request()->integer('gallery');
+        if ($selectedGalleryId && !$galleries->contains('id', $selectedGalleryId)) {
+            $selectedGalleryId = null;
+        }
+
+        $photographers = \App\Models\User::where('is_photographer', true)
+            ->orderBy('name')
+            ->get();
+
+        return view('portfolio.upload', [
+            'galleries' => $galleries,
+            'selectedGalleryId' => $selectedGalleryId,
+            'photographers' => $photographers,
+        ]);
     }
 
     /**
      * Store newly uploaded images.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request)
     {
         $user = Auth::user();
         $maxSize = 2100; // Default, should be configurable from settings
@@ -59,9 +126,27 @@ class PortfolioImageController extends Controller
             'is_public' => ['boolean'],
             'category' => ['nullable', 'string', 'max:100'],
             'photographer_id' => ['nullable', 'exists:users,id'],
+            'album_id' => ['nullable', 'exists:portfolio_albums,id'],
         ]);
 
+        $isPolaroidUpload = $request->boolean('is_polaroid', false);
+
+        if ($isPolaroidUpload) {
+            $validated['album_id'] = null;
+            $validated['category'] = null;
+            $validated['photographer_id'] = null;
+            $validated['is_public'] = true;
+        }
+
+        if (!empty($validated['album_id'])) {
+            $album = \App\Models\PortfolioAlbum::findOrFail($validated['album_id']);
+            if ($album->user_id !== $user->id) {
+                return back()->withErrors(['album_id' => 'Gallery must be yours.'])->withInput();
+            }
+        }
+
         $uploadedCount = 0;
+        $firstUploadedImage = null;
         $userFolder = public_path("uploads/models/{$user->id}/portfolio");
 
         // Create directories if they don't exist
@@ -133,16 +218,21 @@ class PortfolioImageController extends Controller
             $image = PortfolioImage::create([
                 'model_id' => $user->id,
                 'photographer_id' => $validated['photographer_id'] ?? null,
+                'album_id' => $validated['album_id'] ?? null,
                 'original_path' => "uploads/models/{$user->id}/portfolio/original/{$filename}",
                 'thumbnail_path' => "uploads/models/{$user->id}/portfolio/thumbnails/{$filename}",
                 'medium_path' => "uploads/models/{$user->id}/portfolio/medium/{$filename}",
                 'full_path' => "uploads/models/{$user->id}/portfolio/full/{$filename}",
-                'is_polaroid' => $request->boolean('is_polaroid', false),
-                'contains_nudity' => $request->boolean('contains_nudity', false),
-                'is_public' => $request->boolean('is_public', true),
+                'is_polaroid' => $isPolaroidUpload,
+                'contains_nudity' => $isPolaroidUpload ? false : $request->boolean('contains_nudity', false),
+                'is_public' => $isPolaroidUpload ? true : $request->boolean('is_public', true),
                 'category' => $validated['category'] ?? null,
                 'display_order' => PortfolioImage::where('model_id', $user->id)->max('display_order') + 1,
             ]);
+
+            if ($firstUploadedImage === null) {
+                $firstUploadedImage = $image;
+            }
 
             // Create photographer tag if photographer_id provided
             if ($validated['photographer_id'] ?? null) {
@@ -155,6 +245,35 @@ class PortfolioImageController extends Controller
             }
 
             $uploadedCount++;
+        }
+
+        if (!empty($validated['album_id']) && $firstUploadedImage && empty($album->cover_image_id)) {
+            $album->update(['cover_image_id' => $firstUploadedImage->id]);
+        }
+
+        if ($request->wantsJson() || $request->expectsJson()) {
+            $uploadedImages = PortfolioImage::where('model_id', $user->id)
+                ->latest('id')
+                ->take($uploadedCount)
+                ->get()
+                ->map(fn ($image) => [
+                    'id' => $image->id,
+                    'full_path' => $image->full_path,
+                    'thumbnail_path' => $image->thumbnail_path,
+                ])
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully uploaded {$uploadedCount} image(s).",
+                'count' => $uploadedCount,
+                'images' => $uploadedImages,
+            ]);
+        }
+
+        if (!empty($validated['album_id'])) {
+            return redirect()->route('portfolio.galleries.show', $validated['album_id'])
+                ->with('status', "Successfully uploaded {$uploadedCount} image(s) to your gallery.");
         }
 
         return redirect()->route('portfolio.index')
@@ -186,7 +305,7 @@ class PortfolioImageController extends Controller
     /**
      * Update the specified image.
      */
-    public function update(Request $request, string $id): RedirectResponse
+    public function update(Request $request, string $id)
     {
         $image = PortfolioImage::findOrFail($id);
         $user = Auth::user();
@@ -201,22 +320,43 @@ class PortfolioImageController extends Controller
             'category' => ['nullable', 'string', 'max:100'],
             'album_id' => ['nullable', 'exists:portfolio_albums,id'],
             'photographer_id' => ['nullable', 'exists:users,id'],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['string', 'max:100'],
             'is_featured' => ['boolean'],
             'is_polaroid' => ['boolean'],
             'contains_nudity' => ['boolean'],
             'is_public' => ['boolean'],
+            'is_cover' => ['boolean'],
             'shot_date' => ['nullable', 'date'],
         ]);
 
         // Verify album belongs to user
-        if ($validated['album_id']) {
+        if (!empty($validated['album_id'])) {
             $album = \App\Models\PortfolioAlbum::findOrFail($validated['album_id']);
             if ($album->user_id !== $user->id) {
                 return back()->withErrors(['album_id' => 'Album must be yours.']);
             }
         }
 
-        $image->update($validated);
+        $updateData = collect($validated)->except('is_cover')->all();
+        if ($request->exists('is_polaroid') && $request->boolean('is_polaroid')) {
+            $updateData['is_public'] = true;
+            $updateData['contains_nudity'] = false;
+        }
+        $image->update($updateData);
+
+        if (!empty($validated['album_id']) && $request->exists('is_cover')) {
+            $album = \App\Models\PortfolioAlbum::where('user_id', $user->id)
+                ->find($validated['album_id']);
+
+            if ($album) {
+                if ($request->boolean('is_cover')) {
+                    $album->update(['cover_image_id' => $image->id]);
+                } elseif ((int) $album->cover_image_id === (int) $image->id) {
+                    $album->update(['cover_image_id' => null]);
+                }
+            }
+        }
 
         // Update photographer tag
         if ($validated['photographer_id'] ?? null) {
@@ -235,14 +375,65 @@ class PortfolioImageController extends Controller
             $image->save();
         }
 
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Image updated successfully.']);
+        }
+
         return redirect()->route('portfolio.index')
             ->with('status', 'Image updated successfully.');
+    }
+
+    public function updatePolaroidLabels(Request $request)
+    {
+        $user = Auth::user();
+
+        if ($user->is_photographer) {
+            abort(404);
+        }
+
+        $validated = $request->validate([
+            'labels' => ['required', 'array'],
+            'labels.*' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $allowedLabels = [
+            'front',
+            'left_side',
+            'right_side',
+            'back',
+            'full_body',
+            'three_quarter',
+            'close_up',
+            'profile',
+        ];
+
+        $ids = collect(array_keys($validated['labels']))
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->values();
+
+        $images = PortfolioImage::where('model_id', $user->id)
+            ->where('is_polaroid', true)
+            ->whereIn('id', $ids)
+            ->get();
+
+        foreach ($images as $image) {
+            $value = $validated['labels'][$image->id] ?? '';
+            $image->tags = in_array($value, $allowedLabels, true) ? [$value] : [];
+            $image->save();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Polaroid labels saved.',
+            'updated' => $images->count(),
+        ]);
     }
 
     /**
      * Remove the specified image.
      */
-    public function destroy(string $id): RedirectResponse
+    public function destroy(string $id)
     {
         $image = PortfolioImage::findOrFail($id);
         $user = Auth::user();
@@ -251,6 +442,8 @@ class PortfolioImageController extends Controller
         if ($image->model_id !== $user->id) {
             abort(403);
         }
+
+        PortfolioCleanupService::deleteImageReferences(PortfolioImage::class, $image->id, $image->album_id);
 
         // Delete files
         $files = [
@@ -267,10 +460,43 @@ class PortfolioImageController extends Controller
             }
         }
 
+        \App\Models\PortfolioAlbum::where('user_id', $user->id)
+            ->where('cover_image_id', $image->id)
+            ->update(['cover_image_id' => null]);
+
         $image->delete();
+
+        if (request()->wantsJson() || request()->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Image deleted successfully.']);
+        }
 
         return redirect()->route('portfolio.index')
             ->with('status', 'Image deleted successfully.');
     }
-}
 
+    /**
+     * Reorder images within a gallery.
+     */
+    public function reorder(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'gallery_id' => ['required', 'integer', 'exists:portfolio_albums,id'],
+            'image_ids' => ['required', 'array'],
+            'image_ids.*' => ['required', 'integer', 'exists:portfolio_images,id'],
+        ]);
+
+        $gallery = \App\Models\PortfolioAlbum::where('user_id', $user->id)
+            ->findOrFail($validated['gallery_id']);
+
+        foreach ($validated['image_ids'] as $index => $imageId) {
+            PortfolioImage::where('id', $imageId)
+                ->where('model_id', $user->id)
+                ->where('album_id', $gallery->id)
+                ->update(['display_order' => $index + 1]);
+        }
+
+        return response()->json(['success' => true, 'message' => 'Display order updated successfully.']);
+    }
+}

@@ -10,12 +10,6 @@
         <!-- FontAwesome -->
         <link rel="stylesheet" href="{{ asset('assets/fontawesome/css/all.min.css') }}">
 
-        <!-- Tailwind CSS -->
-        <script src="https://cdn.tailwindcss.com"></script>
-        
-        <!-- Custom CSS -->
-        <link rel="stylesheet" href="{{ asset('css/app.css') }}">
-        
         @stack('styles')
         
         @stack('scripts')
@@ -23,8 +17,8 @@
         <!-- Alpine.js -->
         <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
         
-        <!-- Scripts -->
-        <script src="{{ asset('js/app.js') }}" defer></script>
+        <!-- App Assets -->
+        @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="font-sans antialiased">
         <div class="min-h-screen bg-white flex flex-col">
@@ -46,6 +40,10 @@
 
             <x-footer />
         </div>
+
+        @auth
+            <x-floating-messenger />
+        @endauth
 
         <x-cookie-consent />
     </body>

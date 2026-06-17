@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class PhotographerPortfolioImage extends Model
 {
@@ -54,16 +54,19 @@ class PhotographerPortfolioImage extends Model
         return $this->belongsTo(User::class, 'model_id');
     }
 
-    /**
-     * Get the galleries this image belongs to.
-     */
-    public function galleries(): BelongsToMany
+    public function album(): BelongsTo
     {
-        return $this->belongsToMany(PhotographerGallery::class, 'gallery_image', 'image_id', 'gallery_id')
-            ->withPivot('display_order')
-            ->withTimestamps()
-            ->orderBy('gallery_image.display_order')
-            ->orderBy('gallery_image.created_at');
+        return $this->belongsTo(PortfolioAlbum::class, 'album_id');
+    }
+
+    public function credits(): MorphMany
+    {
+        return $this->morphMany(PortfolioCredit::class, 'creditable');
+    }
+
+    public function comments(): MorphMany
+    {
+        return $this->morphMany(PortfolioImageComment::class, 'imageable');
     }
 
     /**
@@ -90,4 +93,3 @@ class PhotographerPortfolioImage extends Model
         return asset($this->full_path);
     }
 }
-

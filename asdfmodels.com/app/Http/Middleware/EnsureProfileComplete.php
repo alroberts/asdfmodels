@@ -46,7 +46,7 @@ class EnsureProfileComplete
                     ->with('status', 'Please complete your photographer profile to continue.');
             }
         } else {
-            if (!$user->modelProfile) {
+            if (!$user->hasCompletedModelProfile()) {
                 return redirect()->route('profile.model.edit')
                     ->with('status', 'Please complete your model profile to continue.');
             }
@@ -55,4 +55,3 @@ class EnsureProfileComplete
         return $next($request);
     }
 }
-
